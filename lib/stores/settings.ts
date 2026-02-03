@@ -12,6 +12,8 @@ export interface QualityRange {
     maxSourceQuality: SourceQuality | "any";
 }
 
+export type VideoPreviewEngine = "legacy" | "v10";
+
 export type QualityProfileId = "max-quality" | "high-quality" | "balanced" | "data-saver" | "low-bandwidth" | "custom";
 
 export interface QualityProfile {
@@ -111,6 +113,7 @@ type SettingsConfig = {
     smartOrder: SettingConfig<boolean>;
     hideTrash: SettingConfig<boolean>;
     mediaPlayer: SettingConfig<MediaPlayer>;
+    videoPreviewEngine: SettingConfig<VideoPreviewEngine>;
     downloadLinkMaxAge: SettingConfig<number>;
     streaming: SettingConfig<StreamingSettings>;
 };
@@ -121,6 +124,13 @@ const settingsConfig: SettingsConfig = {
     },
     hideTrash: {
         defaultValue: false,
+    },
+    videoPreviewEngine: {
+        defaultValue: "legacy" as VideoPreviewEngine,
+        presets: [
+            { value: "legacy" as VideoPreviewEngine, label: "Legacy", description: "Native browser player (current, stable)" },
+            { value: "v10" as VideoPreviewEngine, label: "Video.js v10", description: "Video.js v10 alpha (modern player, experimental)" },
+        ],
     },
     mediaPlayer: {
         defaultValue: MediaPlayer.BROWSER,
@@ -218,6 +228,7 @@ const getDefaultSettings = (): SettingsData => {
         smartOrder: settingsConfig.smartOrder.defaultValue,
         hideTrash: settingsConfig.hideTrash.defaultValue,
         mediaPlayer: settingsConfig.mediaPlayer.defaultValue,
+        videoPreviewEngine: settingsConfig.videoPreviewEngine.defaultValue,
         downloadLinkMaxAge: settingsConfig.downloadLinkMaxAge.defaultValue,
         streaming: settingsConfig.streaming.defaultValue,
     };

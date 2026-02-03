@@ -1,83 +1,67 @@
 "use client";
 
-import { useState } from "react";
-import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { AlertCircle } from "lucide-react";
+import { Component, type ReactNode } from "react";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { getProxyUrl, isNonMP4Video } from "@/lib/utils";
-import { VideoCodecWarning } from "../video-codec-warning";
+import type { VideoPreviewEngine } from "@/lib/stores/settings";
+import { LegacyVideoPreview } from "./legacy-video-preview";
+import { VideoJsV10Preview } from "./video-js-v10-preview";
 import type { AddonSubtitle } from "@/lib/addons/types";
+import { DebridFileNode } from "@/lib/types";
 
 interface VideoPreviewProps {
     file: DebridFileNode;
     downloadUrl: string;
-    /** Optional subtitle tracks (e.g. from Stremio addons) */
     subtitles?: AddonSubtitle[];
     onLoad?: () => void;
     onError?: (error: Error) => void;
 }
 
+/** Error boundary: on error renders fallback instead of crashing. */
+class VideoPreviewErrorBoundary extends Component<
+    { fallback: ReactNode; children: ReactNode },
+    { hasError: boolean }
+> {
+    state = { hasError: false };
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback;
+        }
+        return this.props.children;
+    }
+}
+
+/** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
 export function VideoPreview({ file, downloadUrl, subtitles, onLoad, onError }: VideoPreviewProps) {
-    const [error, setError] = useState(false);
-    const [showCodecWarning, setShowCodecWarning] = useState(true);
-    const { set } = useSettingsStore();
+    const engine = useSettingsStore((s) => s.get("videoPreviewEngine")) as VideoPreviewEngine;
 
-    const hasCodecIssue = isNonMP4Video(file.name);
+    const legacy = (
+        <LegacyVideoPreview
+            file={file}
+            downloadUrl={downloadUrl}
+            subtitles={subtitles}
+            onLoad={onLoad}
+            onError={onError}
+        />
+    );
 
-    const handleLoad = () => {
-        onLoad?.();
-    };
-
-    const handleError = () => {
-        setError(true);
-        onError?.(new Error("Failed to load video"));
-    };
-
-    const switchToPlayer = (player: MediaPlayer) => {
-        set("mediaPlayer", player);
-        setShowCodecWarning(false);
-        // Reload the page to apply the new setting
-        window.location.reload();
-    };
+    if (engine === "legacy") {
+        return legacy;
+    }
 
     return (
-        <div className="relative w-full h-full flex flex-col bg-black">
-            {error ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-white">
-                    <AlertCircle className="h-12 w-12 mb-2" />
-                    <p className="text-sm">Failed to load video</p>
-                    <p className="text-xs text-white/70 mt-1">{file.name}</p>
-                </div>
-            ) : (
-                <div className="flex-1 flex items-center justify-center overflow-hidden">
-                    <video
-                        src={downloadUrl}
-                        controls
-                        autoPlay
-                        className="w-full h-full object-contain"
-                        onLoadedData={handleLoad}
-                        onError={handleError}>
-                        {/* External subs (addon SRT/VTT) via proxy to avoid CORS. Embedded tracks from the file are exposed automatically by the browser when the container supports them (e.g. some MP4). */}
-                        {subtitles?.map((sub, i) => (
-                            <track
-                                key={`${sub.lang}-${sub.url}-${i}`}
-                                kind="subtitles"
-                                src={getProxyUrl(sub.url)}
-                                srcLang={sub.lang}
-                                label={sub.name ?? sub.lang}
-                                default={i === 0}
-                            />
-                        ))}
-                    </video>
-                </div>
-            )}
-
-            {/* Codec Warning Banner for Non-MP4 Videos */}
-            <VideoCodecWarning
-                show={hasCodecIssue && showCodecWarning}
-                onClose={() => setShowCodecWarning(false)}
-                onSwitchPlayer={switchToPlayer}
+        <VideoPreviewErrorBoundary fallback={legacy}>
+            <VideoJsV10Preview
+                file={file}
+                downloadUrl={downloadUrl}
+                subtitles={subtitles}
+                onLoad={onLoad}
+                onError={onError}
             />
-        </div>
+        </VideoPreviewErrorBoundary>
     );
 }

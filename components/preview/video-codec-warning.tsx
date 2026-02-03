@@ -8,13 +8,13 @@ import { MediaPlayer } from "@/lib/types";
 interface VideoCodecWarningProps {
     show: boolean;
     onClose: () => void;
-    onSwitchPlayer: (player: MediaPlayer) => void;
+    onOpenInPlayer: (player: MediaPlayer) => void;
 }
 
 export const VideoCodecWarning = memo(function VideoCodecWarning({
     show,
     onClose,
-    onSwitchPlayer,
+    onOpenInPlayer,
 }: VideoCodecWarningProps) {
     if (!show) return null;
 
@@ -24,30 +24,30 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">This video format may have audio/codec issues in browser</p>
                 <p className="text-xs mt-0.5">
-                    Non-MP4 formats (MKV, AVI, etc.) may use codecs not supported in browsers. Switch to an external
-                    player for best experience:
+                    Non-MP4 formats (MKV, AVI, etc.) may use codecs not supported in browsers. Open in an external
+                    player (web player stays default):
                 </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                     <Button
                         size="sm"
                         variant="secondary"
                         className="text-xs"
-                        onClick={() => onSwitchPlayer(MediaPlayer.VLC)}>
-                        Use VLC
+                        onClick={() => onOpenInPlayer(MediaPlayer.VLC)}>
+                        Open in VLC
                     </Button>
                     <Button
                         size="sm"
                         variant="secondary"
                         className="text-xs"
-                        onClick={() => onSwitchPlayer(MediaPlayer.MPV)}>
-                        Use MPV
+                        onClick={() => onOpenInPlayer(MediaPlayer.MPV)}>
+                        Open in MPV
                     </Button>
                     <Button
                         size="sm"
                         variant="secondary"
                         className="text-xs"
-                        onClick={() => onSwitchPlayer(MediaPlayer.IINA)}>
-                        Use IINA
+                        onClick={() => onOpenInPlayer(MediaPlayer.IINA)}>
+                        Open in IINA
                     </Button>
                 </div>
             </div>
