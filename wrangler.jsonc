@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "debridui",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-02-02",
+  // Use only one: nodejs_compat enables node:fs and Node APIs (v2 is enabled automatically for compat_date 2024-09-23+).
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Custom Domain: Cloudflare manages DNS and certs; use this if the zone "indevs.in" is on your account.
+  // If deploy still fails with zone error, remove "routes" and add the domain in Dashboard: Workers & Pages > debridui > Settings > Domains & Routes > Custom Domain.
+  // Public variables (safe to commit)
+  "vars": {
+    "APP_URL": "https://debrid.indevs.in",
+    "NEXT_PUBLIC_APP_URL": "https://debrid.indevs.in",
+    "NEXT_PUBLIC_CORS_PROXY_URL": "https://debridui-cors-proxy.vanshbh7102-619.workers.dev/?url=",
+    "NEXT_PUBLIC_TRAKT_CLIENT_ID": "79ee7788bc9c0db05db539da4aa19b8f76dd54a8aa0c4742a3228c7dd9cef71e",
+    "NEXT_PUBLIC_GOOGLE_CLIENT_ID": "288435954110-kujstgfc385mj1nan6a9da8ikm3mccnp.apps.googleusercontent.com"
+  },
+  // SECRETS - These must be set via `wrangler secret put <NAME>`:
+  // - DATABASE_URL
+  // - BETTER_AUTH_SECRET  
+  // - GOOGLE_CLIENT_SECRET
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,164 @@
+import { MediaPlayer, Platform } from "../types";
+import { useSettingsStore } from "../stores/settings";
+import { toast } from "sonner";
+
+export interface ParsedUserAgent {
+    browser: string;
+    os: string;
+    device: string;
+    platform: Platform;
+    /** e.g. "Chrome on macOS" */
+    summary: string;
+}
+
+const BROWSER_PATTERNS: [RegExp, string][] = [
+    [/Edg(?:e|A|iOS)?\/[\d.]+/i, "Edge"],
+    [/OPR\/[\d.]+|Opera\/[\d.]+/i, "Opera"],
+    [/Brave\/[\d.]+/i, "Brave"],
+    [/Vivaldi\/[\d.]+/i, "Vivaldi"],
+    [/SamsungBrowser\/[\d.]+/i, "Samsung Internet"],
+    [/Firefox\/[\d.]+/i, "Firefox"],
+    [/CriOS\/[\d.]+/i, "Chrome"],
+    [/FxiOS\/[\d.]+/i, "Firefox"],
+    [/Chrome\/[\d.]+/i, "Chrome"],
+    [/Safari\/[\d.]+/i, "Safari"],
+];
+
+const OS_PATTERNS: [RegExp, string, Platform][] = [
+    [/Android\s?[\d.]*/i, "Android", Platform.ANDROID],
+    [/iPhone|iPad|iPod/i, "iOS", Platform.IOS],
+    [/Mac OS X[\s_][\d._]+|Macintosh/i, "macOS", Platform.MACOS],
+    [/Windows NT\s?[\d.]*/i, "Windows", Platform.WINDOWS],
+    [/CrOS/i, "Chrome OS", Platform.LINUX],
+    [/Linux/i, "Linux", Platform.LINUX],
+];
+
+const DEVICE_PATTERNS: [RegExp, string][] = [
+    [/iPad/i, "Tablet"],
+    [/iPhone/i, "Phone"],
+    [/iPod/i, "Phone"],
+    [/Android.*Mobile/i, "Phone"],
+    [/Android/i, "Tablet"],
+    [/Mobile/i, "Phone"],
+];
+
+const UNKNOWN_UA: ParsedUserAgent = {
+    browser: "Unknown",
+    os: "Unknown",
+    device: "Desktop",
+    platform: Platform.UNKNOWN,
+    summary: "Unknown device",
+};
+
+export const parseUserAgent = (ua: string | null | undefined): ParsedUserAgent => {
+    if (!ua) return UNKNOWN_UA;
+
+    const browser = BROWSER_PATTERNS.find(([re]) => re.test(ua))?.[1] ?? "Unknown";
+    const osMatch = OS_PATTERNS.find(([re]) => re.test(ua));
+    const os = osMatch?.[1] ?? "Unknown";
+    const platform = osMatch?.[2] ?? Platform.UNKNOWN;
+    const device = DEVICE_PATTERNS.find(([re]) => re.test(ua))?.[1] ?? "Desktop";
+
+    const summary =
+        browser !== "Unknown" && os !== "Unknown"
+            ? `${browser} on ${os}`
+            : browser !== "Unknown"
+              ? browser
+              : os !== "Unknown"
+                ? os
+                : "Unknown device";
+
+    return { browser, os, device, platform, summary };
+};
+
+let cachedPlatform: ParsedUserAgent | null = null;
+
+/** Detect the current browser's platform (cached after first call) */
+export const detectPlatform = (): Platform => {
+    if (cachedPlatform !== null) return cachedPlatform.platform;
+
+    cachedPlatform = typeof navigator !== "undefined" ? parseUserAgent(navigator.userAgent) : UNKNOWN_UA;
+
+    return cachedPlatform.platform;
+};
+
+export const isMobileOrTablet = (): boolean => {
+    const platform = detectPlatform();
+    return platform === Platform.ANDROID || platform === Platform.IOS;
+};
+
+export const PLAYER_PLATFORM_SUPPORT: Record<MediaPlayer, Platform[]> = {
+    [MediaPlayer.BROWSER]: [Platform.ANDROID, Platform.IOS, Platform.MACOS, Platform.WINDOWS, Platform.LINUX],
+    [MediaPlayer.IINA]: [Platform.MACOS],
+    [MediaPlayer.INFUSE]: [Platform.IOS, Platform.MACOS],
+    [MediaPlayer.VLC]: [Platform.ANDROID, Platform.IOS, Platform.MACOS, Platform.WINDOWS, Platform.LINUX],
+    [MediaPlayer.MPV]: [Platform.MACOS, Platform.WINDOWS, Platform.LINUX],
+    [MediaPlayer.POTPLAYER]: [Platform.WINDOWS],
+    [MediaPlayer.KODI]: [Platform.ANDROID, Platform.IOS, Platform.MACOS, Platform.WINDOWS, Platform.LINUX],
+    [MediaPlayer.MX_PLAYER]: [Platform.ANDROID],
+    [MediaPlayer.MX_PLAYER_PRO]: [Platform.ANDROID],
+};
+
+export const isSupportedPlayer = (player: MediaPlayer, platform?: Platform): boolean => {
+    const currentPlatform = platform || detectPlatform();
+    const supportedPlatforms = PLAYER_PLATFORM_SUPPORT[player];
+    return supportedPlatforms.includes(currentPlatform);
+};
+
+/** Normalize URL so protocol has a colon (fixes https// -> https://). */
+const normalizeUrl = (url: string): string => {
+    const trimmed = url.trim();
+    if (/^https?\/\//i.test(trimmed)) {
+        return trimmed.replace(/^(https?)\/\//i, "$1://");
+    }
+    return trimmed;
+};
+
+const generateVlcUrl = (url: string, fileName: string): string => {
+    const normalized = normalizeUrl(url);
+    if (isMobileOrTablet()) {
+        const encodedTitle = encodeURIComponent(fileName);
+        const cleanUrl = normalized.replace("https://", "");
+        return `intent://${cleanUrl}#Intent;scheme=https;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle};end`;
+    }
+    // Encode URL so Windows protocol handler doesn't mangle colons (e.g. https:// -> https//) when passing to a .bat. The .bat must decode before passing to VLC.
+    return `vlc://${encodeURIComponent(normalized)}`;
+};
+
+const generateMxPlayerUrl = (url: string, packageName: string, fileName: string): string => {
+    const encodedTitle = encodeURIComponent(fileName);
+    return `intent:${url}#Intent;type=video/*;package=${packageName};S.title=${encodedTitle};end`;
+};
+
+type PlayerUrlGenerator = (url: string, fileName: string) => string;
+
+const PLAYER_URLS: Record<Exclude<MediaPlayer, MediaPlayer.BROWSER>, PlayerUrlGenerator> = {
+    [MediaPlayer.IINA]: (url) => `iina://weblink?url=${encodeURIComponent(url)}`,
+    [MediaPlayer.INFUSE]: (url) => `infuse://x-callback-url/play?url=${encodeURIComponent(url)}`,
+    [MediaPlayer.VLC]: (url, fileName) => generateVlcUrl(url, fileName),
+    [MediaPlayer.MPV]: (url) => `mpv://${encodeURIComponent(url)}`,
+    [MediaPlayer.POTPLAYER]: (url) => `potplayer://${encodeURIComponent(url)}`,
+    [MediaPlayer.KODI]: (url) => `kodi://${encodeURIComponent(url)}`,
+    [MediaPlayer.MX_PLAYER]: (url, fileName) => generateMxPlayerUrl(url, "com.mxtech.videoplayer.ad", fileName),
+    [MediaPlayer.MX_PLAYER_PRO]: (url, fileName) => generateMxPlayerUrl(url, "com.mxtech.videoplayer.pro", fileName),
+};
+
+export const openInPlayer = ({
+    url,
+    fileName,
+    player,
+}: {
+    url: string;
+    fileName: string;
+    player?: MediaPlayer;
+}): void => {
+    const selectedPlayer = player || useSettingsStore.getState().get("mediaPlayer");
+
+    if (selectedPlayer === MediaPlayer.BROWSER) {
+        toast.error("Browser preview is not supported for this file. Please select a different player.");
+        return;
+    }
+
+    const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName);
+    window.open(playerUrl, "_self");
+};
