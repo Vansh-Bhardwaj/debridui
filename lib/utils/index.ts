@@ -8,7 +8,6 @@ import { del } from "idb-keyval";
 import { queryClient } from "../query-client";
 import { toast } from "sonner";
 
-export * from "./color";
 export * from "./media-player";
 
 /**

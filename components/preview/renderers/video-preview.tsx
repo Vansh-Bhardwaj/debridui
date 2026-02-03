@@ -1,12 +1,18 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { useSettingsStore } from "@/lib/stores/settings";
 import type { VideoPreviewEngine } from "@/lib/stores/settings";
 import { LegacyVideoPreview } from "./legacy-video-preview";
-import { VideoJsV10Preview } from "./video-js-v10-preview";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { DebridFileNode } from "@/lib/types";
+
+/** Loaded only on client to keep @videojs/* out of the server/Worker bundle (Cloudflare 3 MiB limit). */
+const VideoJsV10Preview = dynamic(
+    () => import("./video-js-v10-preview").then((m) => m.VideoJsV10Preview),
+    { ssr: false }
+);
 
 interface VideoPreviewProps {
     file: DebridFileNode;
