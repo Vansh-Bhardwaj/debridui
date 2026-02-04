@@ -1,3 +1,4 @@
+import "@/lib/polyfills";
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
