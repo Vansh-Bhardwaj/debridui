@@ -1,5 +1,6 @@
 import "@/lib/polyfills";
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Providers from "./providers";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,21 @@ export default function RootLayout({
         <html lang="en" suppressHydrationWarning>
             <head />
             <body className={cn("font-sans antialiased")}>
+                <Script id="polyfill-name" strategy="beforeInteractive">
+                    {`
+                    (function() {
+                        var g = typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : {};
+                        if (typeof g.__name === "undefined") {
+                            g.__name = function(fn, name) {
+                                try {
+                                    Object.defineProperty(fn, "name", { value: name, configurable: true });
+                                } catch (e) {}
+                                return fn;
+                            };
+                        }
+                    })();
+                    `}
+                </Script>
                 <Providers>{children}</Providers>
                 <Analytics />
             </body>
