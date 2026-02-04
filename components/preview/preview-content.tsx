@@ -9,6 +9,7 @@ import type { AddonSubtitle } from "@/lib/addons/types";
 interface PreviewContentProps {
     file: DebridFileNode;
     downloadUrl: string;
+    streamingLinks?: Record<string, string>;
     /** Override auto-detected file type */
     fileType?: FileType;
     /** Optional subtitle tracks (browser video only) */
@@ -18,6 +19,7 @@ interface PreviewContentProps {
 export function PreviewContent({
     file,
     downloadUrl,
+    streamingLinks,
     fileType: explicitFileType,
     subtitles,
 }: PreviewContentProps) {
@@ -40,6 +42,7 @@ export function PreviewContent({
             key={file.id}
             file={file}
             downloadUrl={downloadUrl}
+            streamingLinks={streamingLinks}
             {...(subtitles && subtitles.length > 0 ? { subtitles } : {})}
         />
     );

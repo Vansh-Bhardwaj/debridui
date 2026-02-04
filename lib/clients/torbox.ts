@@ -317,7 +317,23 @@ export default class TorBoxClient extends BaseClient {
             link: downloadUrl,
             name: fileNode.name,
             size: fileNode.size || 0,
+            streamingLinks: await this.getStreamingLinks(fileNode.id, fileNode),
         };
+    }
+
+    async getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>> {
+        try {
+            const [torrentId, targetFileId] = (fileNode?.id || id).split(":");
+            if (!torrentId || !targetFileId) return {};
+
+            // TorBox's requestdl with redirect=false returns the direct streaming-friendly link
+            const link = await this.getResolvedDownloadLink(torrentId, targetFileId);
+            return {
+                native: link,
+            };
+        } catch {
+            return {};
+        }
     }
 
     private async getResolvedDownloadLink(torrentId: string, targetFileId: string): Promise<string> {
@@ -624,14 +640,14 @@ export default class TorBoxClient extends BaseClient {
         // Map files if they exist in the torrent response
         const files: DebridFileNode[] | undefined = torrent.files
             ? torrent.files.map(
-                  (file): DebridFileNode => ({
-                      id: `${torrent.id}:${file.id}`,
-                      name: file.short_name || file.name,
-                      size: file.size,
-                      type: "file",
-                      children: [],
-                  })
-              )
+                (file): DebridFileNode => ({
+                    id: `${torrent.id}:${file.id}`,
+                    name: file.short_name || file.name,
+                    size: file.size,
+                    type: "file",
+                    children: [],
+                })
+            )
             : undefined;
 
         return {

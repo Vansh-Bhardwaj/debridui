@@ -270,6 +270,13 @@ export default class AllDebridClient extends BaseClient {
             link: response.link,
             name: response.filename || fileNode.name,
             size: response.filesize || fileNode.size || 0,
+            streamingLinks: await this.getStreamingLinks(response.link),
+        };
+    }
+
+    async getStreamingLinks(link: string): Promise<Record<string, string>> {
+        return {
+            native: link,
         };
     }
 

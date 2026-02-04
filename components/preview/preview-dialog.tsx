@@ -161,6 +161,7 @@ export function PreviewDialog() {
                         <PreviewContent
                             file={activeFile}
                             downloadUrl={activeUrl}
+                            streamingLinks={linkInfo?.streamingLinks}
                             fileType={activeFileType}
                             subtitles={isSingleMode ? directSubtitles : undefined}
                         />

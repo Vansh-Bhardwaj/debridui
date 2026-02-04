@@ -94,6 +94,13 @@ interface RDAddTorrentResponse {
     uri: string;
 }
 
+interface RDStreamingLinks {
+    apple?: { full: string };
+    dash?: { full: string };
+    liveMP4?: { full: string };
+    h264WebM?: { full: string };
+}
+
 interface RDApiError {
     error: string;
     error_code?: number;
@@ -295,7 +302,24 @@ export default class RealDebridClient extends BaseClient {
             link: result.download,
             name: result.filename || fileNode.name,
             size: result.filesize || fileNode.size || 0,
+            streamingLinks: result.id ? await this.getStreamingLinks(result.id) : undefined,
         };
+    }
+
+    async getStreamingLinks(id: string): Promise<Record<string, string>> {
+        try {
+            const data = await this.makeRequest<RDStreamingLinks>(`streaming/transcode/${id}`);
+            const links: Record<string, string> = {};
+
+            if (data.apple?.full) links.apple = data.apple.full;
+            if (data.dash?.full) links.dash = data.dash.full;
+            if (data.liveMP4?.full) links.liveMP4 = data.liveMP4.full;
+            if (data.h264WebM?.full) links.h264WebM = data.h264WebM.full;
+
+            return links;
+        } catch {
+            return {};
+        }
     }
 
     async getTorrentFiles(torrentId: string): Promise<DebridNode[]> {

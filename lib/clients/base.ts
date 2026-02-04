@@ -19,7 +19,7 @@ export class RateLimiter {
     constructor(
         private readonly maxRequests: number,
         private readonly intervalMs: number
-    ) {}
+    ) { }
 
     acquire(): Promise<void> {
         this.pending = this.pending.then(
@@ -128,8 +128,12 @@ export default abstract class BaseClient {
     abstract addMagnetLinks(magnetUris: string[]): Promise<Record<string, DebridFileAddStatus>>;
     abstract uploadTorrentFiles(files: File[]): Promise<Record<string, DebridFileAddStatus>>;
     abstract findTorrents(searchQuery: string): Promise<DebridFile[]>;
-    abstract findTorrentById?(torrentId: string): Promise<DebridFile | null>;
     abstract getDownloadLink(params: { fileNode: DebridFileNode; resolve?: boolean }): Promise<DebridLinkInfo>;
+    /**
+     * Get stream-specific links (e.g. HLS/apple, dash) for a file.
+     * Some providers (RD) use a distinct ID for transcoding, others (TorBox) may use torrentId:fileId.
+     */
+    abstract getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>>;
 
     // Web download methods
     abstract addWebDownloads(links: string[]): Promise<WebDownloadAddResult[]>;

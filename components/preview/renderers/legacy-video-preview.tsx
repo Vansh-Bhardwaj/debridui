@@ -67,6 +67,7 @@ function getLanguageDisplayName(rawLang: string): string {
 export interface LegacyVideoPreviewProps {
     file: DebridFileNode;
     downloadUrl: string;
+    streamingLinks?: Record<string, string>;
     subtitles?: AddonSubtitle[];
     onLoad?: () => void;
     onError?: (error: Error) => void;
@@ -75,7 +76,7 @@ export interface LegacyVideoPreviewProps {
 const LOADING_HINT_AFTER_MS = 12000;
 
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
-export function LegacyVideoPreview({ file, downloadUrl, subtitles, onLoad, onError }: LegacyVideoPreviewProps) {
+export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, onLoad, onError }: LegacyVideoPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const [error, setError] = useState(false);
@@ -102,6 +103,14 @@ export function LegacyVideoPreview({ file, downloadUrl, subtitles, onLoad, onErr
     const hasCodecIssue = isNonMP4Video(file.name);
     const hasShownToastRef = useRef(false);
 
+    // Prioritize Apple-native streaming link on iOS (usually HLS/m3u8)
+    const effectiveUrl = (ios && streamingLinks)
+        ? (streamingLinks.apple || streamingLinks.native || downloadUrl)
+        : downloadUrl;
+
+    // Suppress warning if we have a native streaming link that handles the codec
+    const shouldShowWarning = hasCodecIssue && (!ios || !streamingLinks?.apple);
+
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
             videoRef.current?.pause();
@@ -114,7 +123,7 @@ export function LegacyVideoPreview({ file, downloadUrl, subtitles, onLoad, onErr
 
     // One-time codec warning toast
     useEffect(() => {
-        if (hasCodecIssue && showCodecWarning && !hasShownToastRef.current) {
+        if (shouldShowWarning && showCodecWarning && !hasShownToastRef.current) {
             hasShownToastRef.current = true;
             toast.warning("Audio/Codec issues detected in browser", {
                 description: "This non-MP4 file (MKV, AVI, etc.) may not play correctly. Open in an external player for full support.",
@@ -127,7 +136,7 @@ export function LegacyVideoPreview({ file, downloadUrl, subtitles, onLoad, onErr
                 onDismiss: () => setShowCodecWarning(false),
             });
         }
-    }, [hasCodecIssue, showCodecWarning, openInExternalPlayer]);
+    }, [shouldShowWarning, showCodecWarning, openInExternalPlayer]);
 
     const [iosDidStartPlayback, setIosDidStartPlayback] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -625,7 +634,7 @@ export function LegacyVideoPreview({ file, downloadUrl, subtitles, onLoad, onErr
                 <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative">
                     <video
                         ref={videoRef}
-                        src={canStartPlayback ? downloadUrl : undefined}
+                        src={canStartPlayback ? effectiveUrl : undefined}
                         controls={ios}
                         autoPlay={!ios && canStartPlayback}
                         playsInline

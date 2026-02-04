@@ -8,6 +8,7 @@ import { DebridFileNode } from "@/lib/types";
 interface VideoPreviewProps {
     file: DebridFileNode;
     downloadUrl: string;
+    streamingLinks?: Record<string, string>;
     subtitles?: AddonSubtitle[];
     onLoad?: () => void;
     onError?: (error: Error) => void;
@@ -33,11 +34,12 @@ class VideoPreviewErrorBoundary extends Component<
 }
 
 /** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
-export function VideoPreview({ file, downloadUrl, subtitles, onLoad, onError }: VideoPreviewProps) {
+export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, onLoad, onError }: VideoPreviewProps) {
     const legacy = (
         <LegacyVideoPreview
             file={file}
             downloadUrl={downloadUrl}
+            streamingLinks={streamingLinks}
             subtitles={subtitles}
             onLoad={onLoad}
             onError={onError}

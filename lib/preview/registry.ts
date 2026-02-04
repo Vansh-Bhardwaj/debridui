@@ -1,9 +1,12 @@
 import { FileType, DebridFileNode } from "../types";
 import { getFileType } from "../utils";
+import { AddonSubtitle } from "../addons/types";
 
 export type PreviewRendererComponent = React.ComponentType<{
     file: DebridFileNode;
     downloadUrl: string;
+    streamingLinks?: Record<string, string>;
+    subtitles?: AddonSubtitle[];
     onLoad?: () => void;
     onError?: (error: Error) => void;
 }>;

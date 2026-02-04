@@ -112,6 +112,8 @@ export type DebridLinkInfo = {
     link: string;
     name: string;
     size: number;
+    /** Stream-specific links (e.g. HLS for iOS, dash, liveMP4) mapping key (label) -> url */
+    streamingLinks?: Record<string, string>;
 };
 
 export type OperationResult = {
