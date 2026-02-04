@@ -10,6 +10,7 @@ import {
     DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
+    DropdownMenuPortal,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -64,62 +65,64 @@ export function NavUser() {
                             <ChevronsUpDown className="ml-auto size-4" />
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
-                        side={isMobile ? "bottom" : "right"}
-                        align="end"
-                        sideOffset={4}>
-                        <DropdownMenuLabel className="p-0 font-normal">
-                            <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                <Avatar className="h-8 w-8 rounded-sm border border-border/50">
-                                    <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
-                                </Avatar>
-                                <div className="grid flex-1 text-left text-sm leading-tight">
-                                    <span className="truncate font-light">{user.name}</span>
-                                    <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                    <DropdownMenuPortal>
+                        <DropdownMenuContent
+                            className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+                            side={isMobile ? "bottom" : "right"}
+                            align="end"
+                            sideOffset={4}>
+                            <DropdownMenuLabel className="p-0 font-normal">
+                                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                                    <Avatar className="h-8 w-8 rounded-sm border border-border/50">
+                                        <AvatarImage src={user.avatar} alt={user.name} />
+                                        <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="grid flex-1 text-left text-sm leading-tight">
+                                        <span className="truncate font-light">{user.name}</span>
+                                        <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                                    </div>
                                 </div>
-                            </div>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem asChild>
-                                <Link href="/settings/account" onClick={handleNavigation}>
-                                    <UserIcon />
-                                    Account
-                                </Link>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/settings/account" onClick={handleNavigation}>
+                                        <UserIcon />
+                                        Account
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/settings" onClick={handleNavigation}>
+                                        <Settings />
+                                        Settings
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/help" onClick={handleNavigation}>
+                                        <HelpCircle />
+                                        Help
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/status" onClick={handleNavigation}>
+                                        <Activity />
+                                        Status
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setDropdownOpen(false);
+                                    setShowLogoutDialog(true);
+                                }}
+                                disabled={isLoggingOut}
+                                className="text-destructive focus:text-destructive">
+                                <LogOut />
+                                {isLoggingOut ? "Logging out..." : "Log out"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/settings" onClick={handleNavigation}>
-                                    <Settings />
-                                    Settings
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/help" onClick={handleNavigation}>
-                                    <HelpCircle />
-                                    Help
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/status" onClick={handleNavigation}>
-                                    <Activity />
-                                    Status
-                                </Link>
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => {
-                                setDropdownOpen(false);
-                                setShowLogoutDialog(true);
-                            }}
-                            disabled={isLoggingOut}
-                            className="text-destructive focus:text-destructive">
-                            <LogOut />
-                            {isLoggingOut ? "Logging out..." : "Log out"}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
+                        </DropdownMenuContent>
+                    </DropdownMenuPortal>
                 </DropdownMenu>
             </SidebarMenuItem>
 

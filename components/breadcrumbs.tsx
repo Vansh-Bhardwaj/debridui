@@ -13,6 +13,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuPortal,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
@@ -118,13 +119,15 @@ export const Breadcrumbs = memo(function Breadcrumbs() {
                                 <DropdownMenuTrigger className="flex items-center gap-1" aria-label="Toggle menu">
                                     <BreadcrumbEllipsis className="size-4" />
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    {hiddenItems.map((item, index) => (
-                                        <DropdownMenuItem key={index} asChild>
-                                            <Link href={item.href ?? "#"}>{item.label}</Link>
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
+                                <DropdownMenuPortal>
+                                    <DropdownMenuContent align="start">
+                                        {hiddenItems.map((item, index) => (
+                                            <DropdownMenuItem key={index} asChild>
+                                                <Link href={item.href ?? "#"}>{item.label}</Link>
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenuPortal>
                             </DropdownMenu>
                         </BreadcrumbItem>
                         <BreadcrumbSeparator />
