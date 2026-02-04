@@ -36,10 +36,10 @@ export interface AddonManifest {
     resources: Array<
         | string
         | {
-              name: string;
-              types: string[];
-              idPrefixes?: string[];
-          }
+            name: string;
+            types: string[];
+            idPrefixes?: string[];
+        }
     >;
     types: string[];
     catalogs?: Array<{
@@ -96,6 +96,7 @@ export interface AddonSource {
     peers?: string;
     magnet?: string;
     url?: string;
+    fileIdx?: number;
     isCached?: boolean;
     addonId: string;
     addonName: string;

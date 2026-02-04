@@ -1,7 +1,6 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 
 /**
  * Set password for users who don't have one (OAuth users)
@@ -9,18 +8,13 @@ import { headers } from "next/headers";
  */
 export async function setPassword(newPassword: string) {
     try {
-        const result = await auth.api.setPassword({
-            body: {
-                newPassword,
-            },
-            headers: await headers(),
-            query: {
-                disableCookieCache: true,
-            },
+        const { error } = await auth.changePassword({
+            newPassword,
+            currentPassword: "", // Better Auth allows empty currentPassword when setting for the first time
         });
 
-        if (!result) {
-            return { success: false, error: "Failed to set password" };
+        if (error) {
+            return { success: false, error: error.message };
         }
 
         return { success: true };

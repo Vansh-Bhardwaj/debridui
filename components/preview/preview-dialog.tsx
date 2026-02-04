@@ -2,6 +2,9 @@
 
 import { useEffect, useCallback, useRef, useMemo } from "react";
 import { usePreviewStore } from "@/lib/stores/preview";
+import { useStreamingStore } from "@/lib/stores/streaming";
+import { useUserAddons } from "@/hooks/use-addons";
+import { type Addon } from "@/lib/addons/types";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useQuery } from "@tanstack/react-query";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -24,6 +27,14 @@ export function PreviewDialog() {
     const nextButtonRef = useRef<HTMLButtonElement>(null);
 
     const {
+        episodeContext,
+        playNextEpisode,
+        playPreviousEpisode,
+        preloadNextEpisode
+    } = useStreamingStore();
+    const { data: addons = [] } = useUserAddons();
+
+    const {
         isOpen,
         mode,
         currentFile,
@@ -36,6 +47,7 @@ export function PreviewDialog() {
         closePreview,
         navigateNext,
         navigatePrevious,
+        progressKey,
     } = usePreviewStore();
 
     const isSingleMode = mode === "single";
@@ -54,6 +66,40 @@ export function PreviewDialog() {
         gcTime: downloadLinkMaxAge,
     });
 
+    const handleNext = useCallback(() => {
+        if (!isSingleMode) {
+            navigateNext();
+        } else if (episodeContext) {
+            const enabledAddons = addons
+                .filter((a: Addon) => a.enabled)
+                .sort((a: Addon, b: Addon) => a.order - b.order)
+                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+            playNextEpisode(enabledAddons);
+        }
+    }, [isSingleMode, navigateNext, episodeContext, addons, playNextEpisode]);
+
+    const handlePrev = useCallback(() => {
+        if (!isSingleMode) {
+            navigatePrevious();
+        } else if (episodeContext) {
+            const enabledAddons = addons
+                .filter((a: Addon) => a.enabled)
+                .sort((a: Addon, b: Addon) => a.order - b.order)
+                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+            playPreviousEpisode(enabledAddons);
+        }
+    }, [isSingleMode, navigatePrevious, episodeContext, addons, playPreviousEpisode]);
+
+    const handlePreload = useCallback(() => {
+        if (isSingleMode && episodeContext) {
+            const enabledAddons = addons
+                .filter((a: Addon) => a.enabled)
+                .sort((a: Addon, b: Addon) => a.order - b.order)
+                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+            preloadNextEpisode(enabledAddons);
+        }
+    }, [isSingleMode, episodeContext, addons, preloadNextEpisode]);
+
     // Keyboard navigation
     useEffect(() => {
         if (!isOpen) return;
@@ -61,16 +107,17 @@ export function PreviewDialog() {
         const handleKeyDown = (e: KeyboardEvent) => {
             switch (e.key) {
                 case "ArrowLeft":
-                    if (!isSingleMode) {
+                    // Only intercept if we have prev ability (gallery or series)
+                    if (!isSingleMode || episodeContext) {
                         e.preventDefault();
-                        navigatePrevious();
+                        handlePrev();
                         previousButtonRef.current?.focus();
                     }
                     break;
                 case "ArrowRight":
-                    if (!isSingleMode) {
+                    if (!isSingleMode || episodeContext) {
                         e.preventDefault();
-                        navigateNext();
+                        handleNext();
                         nextButtonRef.current?.focus();
                     }
                     break;
@@ -83,7 +130,7 @@ export function PreviewDialog() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, isSingleMode, navigateNext, navigatePrevious, closePreview]);
+    }, [isOpen, isSingleMode, episodeContext, handleNext, handlePrev, closePreview]);
 
     const handleDownload = useCallback(() => {
         if (linkInfo) {
@@ -98,8 +145,10 @@ export function PreviewDialog() {
 
     if (!activeFile) return null;
 
-    const hasMultipleFiles = !isSingleMode && previewableFiles.length > 1;
-    const position = `${currentIndex + 1} / ${previewableFiles.length}`;
+    const hasNav = (!isSingleMode && previewableFiles.length > 1) || (isSingleMode && !!episodeContext);
+    const position = isSingleMode && episodeContext
+        ? `S${episodeContext.season} E${episodeContext.episode}`
+        : `${currentIndex + 1} / ${previewableFiles.length}`;
 
     return (
         <Dialog open={isOpen} onOpenChange={closePreview}>
@@ -112,19 +161,20 @@ export function PreviewDialog() {
                 <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
                     <div className="flex-1 min-w-0 mr-4">
                         <h2 className="text-lg font-semibold truncate">{activeTitle}</h2>
-                        {!isSingleMode && activeFile.size && (
-                            <div className="flex items-center gap-2 mt-1">
+                        {/* Meta info: size, position */}
+                        <div className="flex items-center gap-2 mt-1">
+                            {!isSingleMode && activeFile.size && (
                                 <span className="text-sm text-muted-foreground">{formatSize(activeFile.size)}</span>
-                                {hasMultipleFiles && (
-                                    <>
-                                        <Separator orientation="vertical" className="h-4" />
-                                        <Badge variant="outline" className="text-xs">
-                                            {position}
-                                        </Badge>
-                                    </>
-                                )}
-                            </div>
-                        )}
+                            )}
+                            {hasNav && (
+                                <>
+                                    {!isSingleMode && activeFile.size && <Separator orientation="vertical" className="h-4" />}
+                                    <Badge variant="outline" className="text-xs">
+                                        {position}
+                                    </Badge>
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -165,6 +215,10 @@ export function PreviewDialog() {
                             streamingLinks={linkInfo?.streamingLinks}
                             fileType={activeFileType}
                             subtitles={isSingleMode ? directSubtitles : undefined}
+                            onNext={hasNav ? handleNext : undefined}
+                            onPrev={hasNav ? handlePrev : undefined}
+                            onPreload={handlePreload}
+                            progressKey={progressKey ?? undefined}
                         />
                     ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -172,15 +226,15 @@ export function PreviewDialog() {
                         </div>
                     )}
 
-                    {/* Navigation Arrows */}
-                    {hasMultipleFiles && (
+                    {/* Navigation Arrows (Dialog Overlay) */}
+                    {hasNav && (
                         <>
                             <Button
                                 ref={previousButtonRef}
                                 variant="ghost"
                                 size="icon"
                                 className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white h-10 w-10 z-30"
-                                onClick={navigatePrevious}
+                                onClick={handlePrev}
                                 title="Previous (←)"
                                 aria-label="Previous file (Left arrow)">
                                 <ChevronLeft className="h-6 w-6" />
@@ -190,7 +244,7 @@ export function PreviewDialog() {
                                 variant="ghost"
                                 size="icon"
                                 className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white h-10 w-10 z-30"
-                                onClick={navigateNext}
+                                onClick={handleNext}
                                 title="Next (→)"
                                 aria-label="Next file (Right arrow)">
                                 <ChevronRight className="h-6 w-6" />

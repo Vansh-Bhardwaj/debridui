@@ -1,56 +1,136 @@
-# Improvement ideas and roadmap
+# Player & streaming improvements roadmap
 
-Collected from a deep pass over the codebase and Stremio addon alignment. Not all items are planned; use as a backlog.
-
----
-
-## Done in this pass
-
-### Subtitles from addons (Stremio protocol)
-- **Addon types**: `AddonSubtitle`, `AddonSubtitlesResponse` in `lib/addons/types.ts`.
-- **Addon client**: `fetchSubtitles(imdbId, mediaType, tvParams?)` — calls `/subtitles/movie/{id}.json` or `/subtitles/series/{id}:s:e.json`.
-- **Hook**: `useAddonSubtitles({ imdbId, mediaType, tvParams })` — only queries addons that declare `resources` containing `"subtitles"`.
-- **UI**: When you click **Play** from the Sources panel (movie/show detail), subtitles from addons are fetched and passed to the browser video preview; the native `<video>` element gets `<track kind="subtitles">` entries so the user can pick a track in the player.
-- **Limitation**: Subtitles are only attached when playing from the **Sources** component (we have imdbId + type + tvParams there). Auto-play / toast “Play” path does not yet pass subtitles (would require fetching subtitles in the streaming store when resolving the best source).
+Concrete, code‑driven improvements for our current HTML5 player + addons setup. iOS is explicitly out of scope for now.
 
 ---
 
-## Addon / Stremio alignment
+## Phase 1 – Player UX polish (browser only)
 
-- **Meta resource**: Stremio addons can expose a `meta` resource (movie/series metadata: title, poster, cast, etc.). We currently use Trakt for metadata; addons could be an optional or fallback source for meta.
-- **Catalog resource**: Addons can expose `catalog` (lists of items). We don’t use catalog today; could support “discover via addon” later.
-- **Manifest `resources`**: We only check for `subtitles` in manifest `resources`. Other resources (stream, meta, catalog, etc.) are implied by our usage; no need to change unless we add meta/catalog.
-- **Subtitles CORS**: Subtitle URLs from addons may be on other origins. If the browser blocks them, we may need to proxy subtitle URLs through our CORS proxy or serve them from our backend.
+- **Unified play / pause / loading state**
+  - Keep the current big center button + bottom-left play button as the single source of truth for state:
+    - Loading: spinner on both.
+    - Playing: pause icon.
+    - Paused: play icon.
+  - No separate loading overlays except when subtitles are being prepared before the first frame.
 
----
+- **Keyboard & mouse parity with YouTube**
+  - Confirm and document:
+    - Space / K: play / pause.
+    - Arrow left/right: ±5s seek.
+    - Arrow up/down: volume.
+    - F: fullscreen.
+    - C: cycle subtitles.
+  - Add:
+    - J / L: ±10s seek.
+    - `,` / `.`: small ±0.5s seek when paused.
+  - Double‑click anywhere on the video toggles fullscreen (already partly implemented, keep as spec).
 
-## UX / product
-
-- **Subtitle picker in UI**: Show a small “Subtitles” dropdown in the video preview (or near the Play button) that lists addon-provided tracks and passes the selected one to the video (or pre-select “first”).
-- **Subtitles on toast/auto-play**: In `streaming.play()`, after selecting the best source, fetch subtitles (imdbId + type + tvParams from `activeRequest`) and pass them into `playSource(..., { subtitles })` so browser preview gets tracks for auto-play too.
-- **Catalog from addons**: Optional “Browse addon catalog” in addition to Trakt-based discovery.
-- **Streaming quality preference**: Persist “prefer cached” / “prefer resolution” in settings and surface in source selector and UI.
-
----
-
-## Video playback (iOS / Safari)
-
-- **iOS “keeps loading”**: Safari on iOS requires (1) **user gesture** to start playback (no autoplay with sound), and (2) the **stream URL must support HTTP Range requests** (`Accept-Ranges: bytes`, 206 Partial Content). Debrid CDN links may or may not support Range; we can’t change the server. **What we do**: On iOS, legacy player uses **tap-to-play** (no autoplay, `preload="none"` until tap) so the first load runs in a user gesture. If loading runs longer than ~12s we show a “Video taking too long? Open in VLC/MPV” hint.
-- **References**: [WebKit video policies](https://webkit.org/blog/6784/new-video-policies-for-ios), [iOS Range request requirement](https://stackoverflow.com/questions/3397241/does-iphone-ipad-safari-require-accept-ranges-header-for-video).
-
----
-
-## Technical / codebase
-
-- **Preview registry typing**: `PreviewRendererComponent` could extend to an optional `subtitles?: AddonSubtitle[]` prop so only video (and future) renderers declare it.
-- **Error boundaries**: Add error boundaries around major sections (sidebar, main content, preview dialog) to avoid full-app crash and show a fallback.
-- **Health check on status page**: Optionally call `/api/health` from the status page with a timeout and show “fetch error” if the request fails (we already show raw JSON; could add a “last fetch failed” state).
-- **Addon timeout**: Addon client has a 3‑minute timeout; consider a lower default for stream/subtitles (e.g. 15–30s) and keep 3m for manifest if needed.
+- **Codec warning UX**
+  - Keep existing codec warning component but ensure it never blocks playback UI and can be dismissed per‑session.
 
 ---
 
-## References
+## Phase 2 – Continue watching & progress tracking
 
-- [Stremio addon protocol](https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/protocol.md)
-- [Stremio addon guide](https://stremio.github.io/stremio-addon-guide/)
-- Subtitle response: addon returns `{ subtitles: [{ url, lang, name? }] }` for `/subtitles/{type}/{id}.json`.
+- **DB model**
+  - Add a `user_progress` table (per logged‑in user) with:
+    - `userId` (FK to `user`).
+    - `imdbId`, `type` (`movie` | `show`), optional `season`/`episode`.
+    - `progressSeconds`, `durationSeconds`, `updatedAt`.
+  - One row per user + per logical item (movie or episode).
+
+- **Writing progress**
+  - Extend `legacy-video-preview` to accept an optional `progressKey` object (`{ imdbId, type, season?, episode? }`).
+  - On `timeupdate`, throttle and POST the latest `currentTime` + `duration` to an API route backed by `user_progress`.
+
+- **Continue watching UI**
+  - Home/dashboard: add a **“Continue watching”** row above existing recommendations.
+    - For each progress row where `progressSeconds / durationSeconds` is between, e.g., 5% and 90%, show a card:
+      - Poster from Trakt.
+      - Progress bar based on stored ratio.
+  - Clicking a card:
+    - Calls the same `WatchButton` flow, but with a `startFromSeconds` hint passed through to the player so it seeks immediately after first frame.
+  - As an earlier, low-effort step, we can also offer device-local resume using `localStorage` with the same key shape, without waiting for the DB layer.
+  - When adding DB-backed progress, keep writes cheap for Neon/Cloudflare:
+    - Upsert on **coarse intervals** only (e.g. every 30–60 seconds or on pause/end), and avoid per-second updates.
+
+---
+
+## Phase 3 – Smarter auto stream selection & in‑player source switch
+
+- **Source selector (in player)**
+  - In the player UI, add a compact **“Source”** menu instead of listing every stream:
+    - Show **current** stream (resolution, quality, addon).
+    - Offer **1–3 alternative picks** per our existing `selectBestSource` logic:
+      - Prefer original audio language, then user quality profile, then cached.
+    - Avoid dumping the full raw addon list.
+  - Implementation:
+    - Extend `playSource` to optionally receive the full `AddonSource[]` list that was used for selection.
+    - Use `selectBestSource` with different `allowUncached` / quality preferences to produce “Best”, “Next best”, etc., and display only those IDs in the menu.
+    - Prefer streams from the same addon whose subtitles we are using when multiple options are otherwise equivalent.
+
+- **Language‑aware best pick**
+  - Enhance `selectBestSource` scoring to:
+    - Prefer streams whose detected audio language matches:
+      - First: original show/movie language from Trakt.
+      - Then: user’s preferred audio language from settings (when added).
+    - Only then apply resolution / quality rules (existing `StreamingSettings` and `getActiveRange`).
+
+---
+
+## Phase 4 – Episode navigation & collections
+
+- **Episode context**
+  - Extend `WatchButton` and `StreamingRequest` to optionally include:
+    - `season`, `episode`, and information about the **current file collection** (if we know the torrent contained multiple episodes).
+
+- **Next / previous episode detection**
+  - When the current playback completes:
+    - If we have a file collection for the original torrent:
+      - Use filename patterns + episode numbers to find the next/previous episode in that same collection.
+      - Skip any obviously non‑episode extras.
+    - If not:
+      - Use existing addons + `selectBestSource` to resolve the best stream for the next/previous episode by Trakt metadata (season/episode list).
+
+- **In‑player navigation**
+  - Add “Next episode” / “Previous episode” buttons to the player bar when we have resolvable neighbors.
+  - Show a small “Next episode starting in 10… Skip / Cancel” overlay near the end of the current episode.
+
+---
+
+## Phase 5 – Settings surface for these features
+
+- **New settings stored in `user_settings`**
+  - `playback`:
+    - Default playback speed.
+    - Default subtitle size.
+    - “Resume from last position when available”.
+  - `streaming`:
+    - Preferred audio language.
+    - Whether to prefer cached sources over best quality.
+     - Whether to auto-play when a suitable source is found.
+
+- **Sync with existing stores**
+  - Wire these into `useSettingsStore` so they auto‑persist via the existing JSONB `user_settings` row and hydrate into the player and streaming store.
+
+---
+
+## Phase 6 – Account & security essentials
+
+- **Forgot / reset password**
+  - Add a “Forgot password?” flow for email/password users (not required for Google login).
+  - API + UI:
+    - Request reset: user enters email → we send a one‑time, short‑lived token link.
+    - Reset page: token + new password → verify token, update password, invalidate token.
+
+- **OTP verification for signup & sensitive actions**
+  - On email signup (non‑Google):
+    - Send a numeric OTP to the user’s email.
+    - Require OTP verification before activating the account.
+  - On password change:
+    - Require either current password **or** a fresh OTP to confirm the change.
+  - Google login users skip OTP for signup (Google already handles identity), but may still use OTP for password‑based actions if they later add a local password.
+
+These auth features are independent of the player work but necessary for a production‑ready app and can be implemented alongside the phases above.
+
+These phases only use capabilities we already have (HTML5 player, Trakt metadata, addons, logged‑in users, PostgreSQL via Drizzle) and avoid large external player rewrites.***

@@ -12,6 +12,7 @@ import { SplashErrorScreen } from "@/components/splash-error-screen";
 import { useRouter, usePathname } from "next/navigation";
 import { clearAppCache } from "@/lib/utils";
 import { toast } from "sonner";
+import { syncUser } from "@/lib/actions/auth";
 
 interface AuthContextType {
     session: ReturnType<typeof authClient.useSession>["data"];
@@ -100,6 +101,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Mutation for removing accounts (used in error recovery)
     const { mutate: removeAccount } = useRemoveUserAccount();
+
+    // Sync user with database when session is detected
+    // This ensures that foreign keys (like user_accounts.user_id) work
+    useEffect(() => {
+        if (session) {
+            syncUser();
+        }
+    }, [session]);
 
     // Centralized redirect logic - single source of truth for all auth redirects
     useEffect(() => {

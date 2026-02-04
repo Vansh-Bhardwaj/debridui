@@ -15,17 +15,16 @@ const getStatusFromList = (statuses: CheckStatus[]): CheckStatus => {
 const buildEnvCheck = (): EnvCheck => {
     const appUrl = getAppUrl();
     const hasDb = !!getEnv("DATABASE_URL");
-    const hasAuthSecret = !!getEnv("BETTER_AUTH_SECRET");
-    const hasGoogleClientId = !!getEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID");
-    const hasGoogleClientSecret = !!getEnv("GOOGLE_CLIENT_SECRET");
-    const googleOAuthEnabled = hasGoogleClientId && hasGoogleClientSecret;
+    const hasAuthUrl = !!getEnv("NEXT_PUBLIC_NEON_AUTH_URL");
+    const hasAuthSecret = !!getEnv("NEON_AUTH_COOKIE_SECRET");
+    const googleOAuthEnabled = true; // Handled by Neon Console
 
     const missing: string[] = [];
     if (!hasDb) missing.push("DATABASE_URL");
-    if (!hasAuthSecret) missing.push("BETTER_AUTH_SECRET");
+    if (!hasAuthUrl) missing.push("NEXT_PUBLIC_NEON_AUTH_URL");
+    if (!hasAuthSecret) missing.push("NEON_AUTH_COOKIE_SECRET");
 
     const warnings: string[] = [];
-    if (!googleOAuthEnabled) warnings.push("Google OAuth is disabled");
     if (process.env.NODE_ENV === "production" && appUrl.includes("localhost")) {
         warnings.push("APP_URL/NEXT_PUBLIC_APP_URL points to localhost");
     }
@@ -43,18 +42,16 @@ const buildEnvCheck = (): EnvCheck => {
 };
 
 const buildAuthCheck = (): AuthCheck => {
-    const baseUrl = getAppUrl();
-    const hasAuthSecret = !!getEnv("BETTER_AUTH_SECRET");
-    const hasGoogleClientId = !!getEnv("NEXT_PUBLIC_GOOGLE_CLIENT_ID");
-    const hasGoogleClientSecret = !!getEnv("GOOGLE_CLIENT_SECRET");
-    const googleOAuthEnabled = hasGoogleClientId && hasGoogleClientSecret;
+    const baseUrl = getEnv("NEXT_PUBLIC_NEON_AUTH_URL") || "Not set";
+    const hasAuthSecret = !!getEnv("NEON_AUTH_COOKIE_SECRET");
+    const googleOAuthEnabled = true; // Handled by Neon Console
 
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    if (!hasAuthSecret) errors.push("BETTER_AUTH_SECRET missing");
+    if (!hasAuthSecret) errors.push("NEON_AUTH_COOKIE_SECRET missing");
     if (process.env.NODE_ENV === "production" && baseUrl.includes("localhost")) {
-        warnings.push("Base URL is localhost in production");
+        warnings.push("Auth Base URL is localhost in production");
     }
 
     const status: CheckStatus = errors.length > 0 ? "error" : warnings.length > 0 ? "degraded" : "ok";
@@ -63,7 +60,7 @@ const buildAuthCheck = (): AuthCheck => {
         status,
         ok: status === "ok",
         baseUrl,
-        cookiePrefix: "debridui",
+        cookiePrefix: "neon-auth",
         googleOAuthEnabled,
         warnings,
         errors,

@@ -8,12 +8,14 @@ import { cn } from "@/lib/utils";
 
 interface VideoCodecWarningProps {
     show: boolean;
+    isPlaying?: boolean;
     onClose: () => void;
     onOpenInPlayer: (player: MediaPlayer) => void;
 }
 
 export const VideoCodecWarning = memo(function VideoCodecWarning({
     show,
+    isPlaying,
     onClose,
     onOpenInPlayer,
 }: VideoCodecWarningProps) {
@@ -22,6 +24,13 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
     useEffect(() => {
         if (show) {
             setIsVisible(true);
+            // Auto-dismiss when video starts playing
+            if (isPlaying) {
+                setIsVisible(false);
+                setTimeout(onClose, 300);
+                return;
+            }
+            // Fallback: auto-dismiss after 8 seconds if not playing
             const timer = setTimeout(() => {
                 setIsVisible(false);
                 setTimeout(onClose, 300); // Wait for exit animation
@@ -30,7 +39,7 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
         } else {
             setIsVisible(false);
         }
-    }, [show, onClose]);
+    }, [show, isPlaying, onClose]);
 
     if (!show && !isVisible) return null;
 

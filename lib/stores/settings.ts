@@ -84,6 +84,27 @@ export interface StreamingSettings {
     customRange: QualityRange;
     allowUncached: boolean;
     autoPlay: boolean;
+    /** Preferred audio language (ISO 639-1/2 code, e.g. 'en', 'spanish') */
+    preferredLanguage: string;
+    /** Prefer cached sources even if lower quality */
+    preferCached: boolean;
+}
+
+export interface PlaybackSettings {
+    /** Default playback speed (0.5 - 2.0) */
+    playbackSpeed: number;
+    /** Subtitle text size in pixels (16 - 48) */
+    subtitleSize: number;
+    /** Subtitle position from bottom in pixels */
+    subtitlePosition: number;
+    /** Auto-resume from saved position */
+    autoResume: boolean;
+    /** Skip intro/outro seconds (0 = disabled) */
+    skipIntro: number;
+    /** Auto-play next episode */
+    autoNextEpisode: boolean;
+    /** Seconds before end to show "next episode" overlay */
+    nextEpisodePromptSeconds: number;
 }
 
 export function getActiveRange(settings: StreamingSettings): QualityRange {
@@ -94,7 +115,7 @@ export function getActiveRange(settings: StreamingSettings): QualityRange {
     return profile?.range ?? QUALITY_PROFILES[2].range; // fallback to balanced
 }
 
-type SettingValue = string | number | boolean | MediaPlayer | StreamingSettings;
+type SettingValue = string | number | boolean | MediaPlayer | StreamingSettings | PlaybackSettings;
 
 type SettingPreset<T extends SettingValue> = {
     value: T;
@@ -113,6 +134,7 @@ type SettingsConfig = {
     mediaPlayer: SettingConfig<MediaPlayer>;
     downloadLinkMaxAge: SettingConfig<number>;
     streaming: SettingConfig<StreamingSettings>;
+    playback: SettingConfig<PlaybackSettings>;
 };
 
 const settingsConfig: SettingsConfig = {
@@ -194,6 +216,19 @@ const settingsConfig: SettingsConfig = {
             },
             allowUncached: false,
             autoPlay: true,
+            preferredLanguage: "english",
+            preferCached: true,
+        },
+    },
+    playback: {
+        defaultValue: {
+            playbackSpeed: 1.0,
+            subtitleSize: 24,
+            subtitlePosition: 64,
+            autoResume: true,
+            skipIntro: 0,
+            autoNextEpisode: true,
+            nextEpisodePromptSeconds: 30,
         },
     },
 };
@@ -220,6 +255,7 @@ const getDefaultSettings = (): SettingsData => {
         mediaPlayer: settingsConfig.mediaPlayer.defaultValue,
         downloadLinkMaxAge: settingsConfig.downloadLinkMaxAge.defaultValue,
         streaming: settingsConfig.streaming.defaultValue,
+        playback: settingsConfig.playback.defaultValue,
     };
 };
 

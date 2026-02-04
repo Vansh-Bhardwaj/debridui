@@ -1,14 +1,5 @@
-import "./polyfills";
-import { createAuthClient } from "better-auth/react";
+"use client";
 
-export const authClient = createAuthClient({
-    fetchOptions: {
-        onError(context) {
-            console.error("Better Auth Error:", context.error);
-        },
-    },
-    // Disable automatic refetching of session, to prevent unnecessary network requests
-    sessionOptions: {
-        refetchOnWindowFocus: false,
-    },
-});
+import { createAuthClient } from "@neondatabase/auth/next";
+
+export const authClient = createAuthClient();

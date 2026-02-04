@@ -14,8 +14,9 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { GOOGLE_CLIENT_ID, DISABLE_EMAIL_SIGNUP } from "@/lib/constants";
+import { DISABLE_EMAIL_SIGNUP, NEON_AUTH_URL } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 
 const signupSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -25,12 +26,14 @@ const signupSchema = z.object({
 
 export default function SignupForm() {
     const router = useRouter();
-    const [isRedirecting, setIsRedirecting] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [emailForVerification, setEmailForVerification] = useState("");
+    const [otpCode, setOtpCode] = useState("");
+    const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
-    // Runtime comparisons for Docker env injection support
-    // Placeholder strings are replaced at container startup, so comparisons must happen here
-    const isGoogleOAuthEnabled = !!GOOGLE_CLIENT_ID;
-    const isEmailSignupDisabled = DISABLE_EMAIL_SIGNUP === "true";
+    // Use values directly to be extremely safe against module scope issues
+    const isGoogleOAuthEnabled = !!(process.env.NEXT_PUBLIC_NEON_AUTH_URL || NEON_AUTH_URL);
+    const isEmailSignupDisabled = (process.env.NEXT_PUBLIC_DISABLE_EMAIL_SIGNUP || DISABLE_EMAIL_SIGNUP) === "true";
 
     const form = useForm<z.infer<typeof signupSchema>>({
         resolver: zodResolver(signupSchema),
@@ -55,16 +58,96 @@ export default function SignupForm() {
             }
 
             if (data) {
-                setIsRedirecting(true);
-                toast.success("Account created successfully");
-                router.push("/onboarding");
+                setEmailForVerification(values.email);
+                setIsVerifying(true);
+                toast.success("Verification code sent to your email");
             }
         } catch {
             toast.error("An unexpected error occurred");
         }
     }
 
-    const isDisabled = form.formState.isSubmitting || isRedirecting;
+    async function handleVerifyOtp() {
+        if (otpCode.length !== 6) {
+            toast.error("Please enter a valid 6-digit code");
+            return;
+        }
+
+        setIsVerifyingOtp(true);
+        try {
+            const { error } = await authClient.emailOtp.verifyEmail({
+                email: emailForVerification,
+                otp: otpCode,
+            });
+
+            if (error) {
+                toast.error(error.message || "Invalid or expired code");
+            } else {
+                toast.success("Email verified successfully");
+                router.push("/onboarding");
+            }
+        } catch (err) {
+            console.error("Verification error:", err);
+            toast.error("Failed to verify code");
+        } finally {
+            setIsVerifyingOtp(false);
+        }
+    }
+
+    const isDisabled = form.formState.isSubmitting || isVerifyingOtp;
+
+    if (isVerifying) {
+        return (
+            <div className="bg-background grid grid-rows-[1fr_auto] min-h-svh p-6 md:p-10">
+                <div className="flex items-center justify-center">
+                    <div className="w-full max-w-sm">
+                        <div className="flex flex-col items-center gap-2 mb-6">
+                            <Link href="/" className="flex flex-col items-center gap-2 font-medium">
+                                <div className="flex size-12 items-center justify-center">
+                                    <Image
+                                        src="/icon.svg"
+                                        alt="DebridUI"
+                                        width={48}
+                                        height={48}
+                                        className="invert dark:invert-0"
+                                    />
+                                </div>
+                                <span className="sr-only">DebridUI</span>
+                            </Link>
+                            <h1 className="text-xl font-bold">Verify Your Email</h1>
+                            <p className="text-sm text-muted-foreground text-center">
+                                We sent a 6-digit code to <span className="font-medium text-foreground">{emailForVerification}</span>
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                            <div className="space-y-2">
+                                <Label>Verification Code</Label>
+                                <Input
+                                    type="text"
+                                    placeholder="000000"
+                                    maxLength={6}
+                                    value={otpCode}
+                                    onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
+                                    className="text-center text-2xl tracking-[0.5em] font-mono h-12"
+                                />
+                            </div>
+                            <Button className="w-full" onClick={handleVerifyOtp} disabled={isVerifyingOtp}>
+                                {isVerifyingOtp ? "Verifying..." : "Verify Email"}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                className="w-full text-xs"
+                                onClick={() => setIsVerifying(false)}
+                                disabled={isVerifyingOtp}>
+                                Back to Sign Up
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-background grid grid-rows-[1fr_auto] min-h-svh p-6 md:p-10">
@@ -91,7 +174,7 @@ export default function SignupForm() {
                         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
                             <GoogleSignInButton callbackURL="/dashboard" disabled={isDisabled} />
 
-                            {!isEmailSignupDisabled && isGoogleOAuthEnabled && (
+                            {isGoogleOAuthEnabled && !isEmailSignupDisabled && (
                                 <div className="relative">
                                     <div className="absolute inset-0 flex items-center">
                                         <Separator />

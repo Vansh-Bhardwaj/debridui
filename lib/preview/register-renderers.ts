@@ -3,6 +3,7 @@ import { FileType } from "../types";
 import { ImagePreview } from "@/components/preview/renderers/image-preview";
 import { VideoPreview } from "@/components/preview/renderers/video-preview";
 import { TextPreview } from "@/components/preview/renderers/text-preview";
+import { YouTubePreview } from "@/components/preview/renderers/youtube-preview";
 
 // Register image preview renderer
 registerPreviewRenderer({
@@ -26,4 +27,12 @@ registerPreviewRenderer({
     fileTypes: [FileType.TEXT],
     component: TextPreview,
     canPreview: (type) => type === FileType.TEXT,
+});
+
+// Register YouTube trailer renderer
+registerPreviewRenderer({
+    id: "youtube",
+    fileTypes: [FileType.TRAILER],
+    component: YouTubePreview,
+    canPreview: (type) => type === FileType.TRAILER,
 });

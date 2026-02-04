@@ -34,13 +34,17 @@ class VideoPreviewErrorBoundary extends Component<
 }
 
 /** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
-export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, onLoad, onError }: VideoPreviewProps) {
+export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev, onPreload, onLoad, onError }: VideoPreviewProps & { onNext?: () => void; onPrev?: () => void; onPreload?: () => void; progressKey?: any }) {
     const legacy = (
         <LegacyVideoPreview
             file={file}
             downloadUrl={downloadUrl}
             streamingLinks={streamingLinks}
             subtitles={subtitles}
+            progressKey={progressKey}
+            onNext={onNext}
+            onPrev={onPrev}
+            onPreload={onPreload}
             onLoad={onLoad}
             onError={onError}
         />

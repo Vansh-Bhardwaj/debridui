@@ -117,10 +117,14 @@ export const SourceRow = memo(function SourceRow({
     source,
     mediaTitle,
     subtitles,
+    tvParams,
+    imdbId,
 }: {
     source: AddonSource;
     mediaTitle: string;
     subtitles?: { url: string; lang: string; name?: string }[];
+    tvParams?: TvSearchParams;
+    imdbId?: string;
 }) {
     // Build metadata string with editorial separators
     const metaParts: string[] = [];
@@ -128,6 +132,26 @@ export const SourceRow = memo(function SourceRow({
     if (source.quality) metaParts.push(source.quality);
     if (source.size) metaParts.push(source.size);
     metaParts.push(source.addonName);
+
+    const handlePlay = () => {
+        let title = mediaTitle;
+        if (tvParams) {
+            const s = String(tvParams.season).padStart(2, "0");
+            const e = String(tvParams.episode).padStart(2, "0");
+            title = `${mediaTitle} S${s}E${e}`;
+
+            // Set context for navigation
+            if (imdbId) {
+                useStreamingStore.getState().setEpisodeContext({
+                    imdbId,
+                    title: mediaTitle, // Store RAW title for context
+                    season: tvParams.season,
+                    episode: tvParams.episode,
+                });
+            }
+        }
+        useStreamingStore.getState().playSource(source, title, { subtitles });
+    };
 
     return (
         <div className="flex flex-col gap-2 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
@@ -165,9 +189,7 @@ export const SourceRow = memo(function SourceRow({
                         {source.url && (
                             <Button
                                 size="sm"
-                                onClick={() =>
-                                    useStreamingStore.getState().playSource(source, mediaTitle, { subtitles })
-                                }>
+                                onClick={handlePlay}>
                                 <PlayIcon className="size-4 fill-current" />
                                 Play
                             </Button>
@@ -207,6 +229,8 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     source={source}
                     mediaTitle={mediaTitle}
                     subtitles={subtitles}
+                    tvParams={tvParams}
+                    imdbId={imdbId}
                 />
             ))}
 

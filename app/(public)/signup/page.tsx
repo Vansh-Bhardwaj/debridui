@@ -1,12 +1,9 @@
 import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import SignupForm from "./signup-form";
 
 export default async function SignupPage() {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (session) {
         redirect("/dashboard");

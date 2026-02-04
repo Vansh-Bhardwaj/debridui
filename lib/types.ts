@@ -11,6 +11,7 @@ export enum FileType {
     DOCUMENT = "document",
     ARCHIVE = "archive",
     TEXT = "text",
+    TRAILER = "trailer",
     OTHER = "other",
 }
 

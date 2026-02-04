@@ -1,12 +1,16 @@
 import { FileType, DebridFileNode } from "../types";
 import { getFileType } from "../utils";
 import { AddonSubtitle } from "../addons/types";
+import { type ProgressKey } from "@/hooks/use-progress";
 
 export type PreviewRendererComponent = React.ComponentType<{
     file: DebridFileNode;
     downloadUrl: string;
     streamingLinks?: Record<string, string>;
     subtitles?: AddonSubtitle[];
+    onNext?: () => void;
+    onPrev?: () => void;
+    progressKey?: ProgressKey;
     onLoad?: () => void;
     onError?: (error: Error) => void;
 }>;

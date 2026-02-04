@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { DebridFileNode, FileType } from "../types";
 import { filterPreviewableFiles } from "../preview/registry";
 import type { AddonSubtitle } from "../addons/types";
+import type { ProgressKey } from "@/hooks/use-progress";
 
 type PreviewMode = "gallery" | "single";
 
@@ -11,6 +12,8 @@ interface SinglePreviewOptions {
     fileType?: FileType;
     /** Optional subtitle tracks (e.g. from addons) for browser playback */
     subtitles?: AddonSubtitle[];
+    /** Progress tracking key for continue watching feature */
+    progressKey?: ProgressKey;
 }
 
 interface PreviewState {
@@ -26,6 +29,7 @@ interface PreviewState {
     directTitle: string | null;
     fileType: FileType | null;
     directSubtitles: AddonSubtitle[];
+    progressKey: ProgressKey | null;
 
     // Actions
     openPreview: (file: DebridFileNode, allFiles: DebridFileNode[], fileId: string) => void;
@@ -47,6 +51,7 @@ const initialState = {
     directTitle: null,
     fileType: null,
     directSubtitles: [],
+    progressKey: null,
 };
 
 export const usePreviewStore = create<PreviewState>()((set, get) => ({
@@ -67,10 +72,11 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
             directUrl: null,
             directTitle: null,
             fileType: null,
+            progressKey: null,
         });
     },
 
-    openSinglePreview: ({ url, title, fileType, subtitles }) => {
+    openSinglePreview: ({ url, title, fileType, subtitles, progressKey }) => {
         set({
             isOpen: true,
             mode: "single",
@@ -78,6 +84,7 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
             directTitle: title,
             fileType: fileType ?? null,
             directSubtitles: subtitles ?? [],
+            progressKey: progressKey ?? null,
             currentFile: null,
             currentIndex: 0,
             previewableFiles: [],

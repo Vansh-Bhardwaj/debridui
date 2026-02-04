@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -15,9 +14,7 @@ import { v7 as uuidv7 } from "uuid";
  * `server-serialization` - Returns minimal data (no sensitive info in client bundle)
  */
 export async function getUserAccounts() {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
@@ -34,13 +31,14 @@ export async function getUserAccounts() {
  * Note: Validation is done on the frontend before calling this
  */
 export async function addUserAccount(data: { apiKey: string; type: AccountType; name: string }) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
     }
+
+    const { apiKey, type, name } = data;
+    const userId = session.user.id;
 
     // Check if account already exists
     const existing = await db
@@ -48,9 +46,9 @@ export async function addUserAccount(data: { apiKey: string; type: AccountType; 
         .from(userAccounts)
         .where(
             and(
-                eq(userAccounts.userId, session.user.id),
-                eq(userAccounts.apiKey, data.apiKey),
-                eq(userAccounts.type, data.type)
+                eq(userAccounts.userId, userId),
+                eq(userAccounts.apiKey, apiKey),
+                eq(userAccounts.type, type)
             )
         );
 
@@ -58,29 +56,32 @@ export async function addUserAccount(data: { apiKey: string; type: AccountType; 
         return existing[0];
     }
 
-    // Add account to database
-    const [account] = await db
-        .insert(userAccounts)
-        .values({
-            id: uuidv7(),
-            userId: session.user.id,
-            apiKey: data.apiKey,
-            type: data.type,
-            name: data.name,
-        })
-        .returning();
+    try {
+        // Add account to database
+        const [account] = await db
+            .insert(userAccounts)
+            .values({
+                id: uuidv7(),
+                userId,
+                apiKey,
+                type,
+                name,
+            })
+            .returning();
 
-    revalidatePath("/", "layout");
-    return account;
+        revalidatePath("/", "layout");
+        return account;
+    } catch (error) {
+        console.error("[addUserAccount] Database error:", error);
+        throw error;
+    }
 }
 
 /**
  * Remove a user account (only if owned by current user)
  */
 export async function removeUserAccount(accountId: string) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");

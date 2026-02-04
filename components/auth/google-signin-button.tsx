@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { GOOGLE_CLIENT_ID } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -14,12 +13,6 @@ interface GoogleSignInButtonProps {
 
 export function GoogleSignInButton({ callbackURL = "/dashboard", disabled }: GoogleSignInButtonProps) {
     const [isLoading, setIsLoading] = useState(false);
-
-    // Runtime comparison for Docker env injection support
-    // Placeholder strings are replaced at container startup, so comparison must happen here
-    if (!GOOGLE_CLIENT_ID) {
-        return null;
-    }
 
     async function handleGoogleSignIn() {
         setIsLoading(true);

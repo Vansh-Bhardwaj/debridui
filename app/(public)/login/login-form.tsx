@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { GOOGLE_CLIENT_ID } from "@/lib/constants";
+import { NEON_AUTH_URL } from "@/lib/constants";
 
 const loginSchema = z.object({
     email: z.email("Invalid email address"),
@@ -24,6 +24,8 @@ const loginSchema = z.object({
 export default function LoginForm() {
     const router = useRouter();
     const [isRedirecting, setIsRedirecting] = useState(false);
+
+    const isGoogleOAuthEnabled = !!(process.env.NEXT_PUBLIC_NEON_AUTH_URL || NEON_AUTH_URL);
 
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
@@ -82,7 +84,7 @@ export default function LoginForm() {
                         <GoogleSignInButton callbackURL="/dashboard" disabled={isDisabled} />
 
                         {/* Runtime comparison for Docker env injection support */}
-                        {!!GOOGLE_CLIENT_ID && (
+                        {isGoogleOAuthEnabled && (
                             <div className="relative">
                                 <div className="absolute inset-0 flex items-center">
                                     <Separator />
@@ -115,7 +117,14 @@ export default function LoginForm() {
                                 name="password"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Password</FormLabel>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel>Password</FormLabel>
+                                            <Link
+                                                href="/forgot-password"
+                                                className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                                Forgot password?
+                                            </Link>
+                                        </div>
                                         <FormControl>
                                             <Input type="password" placeholder="Enter your password" {...field} />
                                         </FormControl>

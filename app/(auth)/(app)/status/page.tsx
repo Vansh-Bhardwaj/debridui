@@ -203,7 +203,7 @@ export default function StatusPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Auth</CardTitle>
-                            <CardDescription>Better Auth configuration</CardDescription>
+                            <CardDescription>Neon Auth configuration</CardDescription>
                             <CardAction>
                                 {data ? <StatusBadge status={data.checks.auth.status} /> : null}
                             </CardAction>
@@ -245,7 +245,7 @@ export default function StatusPage() {
                     </CardHeader>
                     <CardContent>
                         <pre className="max-h-80 overflow-auto rounded-sm border border-border/50 bg-muted/30 p-4 text-xs">
-{rawJson || "Loading..."}
+                            {rawJson || "Loading..."}
                         </pre>
                     </CardContent>
                 </Card>

@@ -7,6 +7,8 @@ import { memo } from "react";
 import { getPosterUrl, getBackdropUrl } from "@/lib/utils/trakt";
 import { ArrowUpRightIcon, Play, Star } from "lucide-react";
 import { WatchButton } from "@/components/common/watch-button";
+import { usePreviewStore } from "@/lib/stores/preview";
+import { FileType } from "@/lib/types";
 
 interface MediaHeaderProps {
     media: TraktMedia;
@@ -15,6 +17,7 @@ interface MediaHeaderProps {
 }
 
 export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeaderProps) {
+    const openSinglePreview = usePreviewStore((s) => s.openSinglePreview);
     const posterUrl =
         getPosterUrl(media.images) ||
         `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(media.title)}`;
@@ -79,11 +82,18 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                 </WatchButton>
                             )}
                             {media.trailer && (
-                                <Button asChild variant="outline" size="lg" className="w-full">
-                                    <Link href={media.trailer} target="_blank" rel="noopener">
-                                        Watch Trailer
-                                        <ArrowUpRightIcon className="size-4 ml-1.5 opacity-50" />
-                                    </Link>
+                                <Button
+                                    variant="outline"
+                                    size="lg"
+                                    className="w-full"
+                                    onClick={() =>
+                                        openSinglePreview({
+                                            url: media.trailer!,
+                                            title: `${media.title} - Trailer`,
+                                            fileType: FileType.TRAILER,
+                                        })
+                                    }>
+                                    Watch Trailer
                                 </Button>
                             )}
                         </div>
@@ -225,11 +235,16 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                 </WatchButton>
                             )}
                             {media.trailer && (
-                                <Button asChild variant="outline">
-                                    <Link href={media.trailer} target="_blank" rel="noopener">
-                                        Trailer
-                                        <ArrowUpRightIcon className="size-4 ml-1 opacity-50" />
-                                    </Link>
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        openSinglePreview({
+                                            url: media.trailer!,
+                                            title: `${media.title} - Trailer`,
+                                            fileType: FileType.TRAILER,
+                                        })
+                                    }>
+                                    Trailer
                                 </Button>
                             )}
                         </div>

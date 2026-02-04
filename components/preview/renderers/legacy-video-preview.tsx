@@ -1,22 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer } from "@/lib/utils";
 import type { AddonSubtitle } from "@/lib/addons/types";
+import { getLanguageDisplayName } from "@/lib/utils/subtitles";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuPortal,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { LegacyPlayerSubtitleStyle } from "@/components/preview/legacy-player-subtitle-style";
 import { VideoCodecWarning } from "@/components/preview/video-codec-warning";
+import { useProgress, type ProgressKey } from "@/hooks/use-progress";
+import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
+import { traktClient } from "@/lib/trakt";
 
 /** Parsed subtitle cue for manual rendering */
 interface SubtitleCue {
@@ -31,12 +35,11 @@ function isIOS(): boolean {
     return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
-function getLanguageDisplayName(rawLang: string): string {
-    const lang = rawLang.trim();
-    if (!lang) return "";
-    if (!/^[a-z]{2,3}(-[a-z0-9]+)?$/i.test(lang)) return lang;
+function normalizeLangCode(code?: string | null): string | null {
+    if (!code) return null;
+    const lower = code.trim().toLowerCase();
+    if (!lower) return null;
 
-    const base = lang.split("-")[0]!.toLowerCase();
     const iso639_2_to_1: Record<string, string> = {
         eng: "en",
         spa: "es",
@@ -55,21 +58,45 @@ function getLanguageDisplayName(rawLang: string): string {
         ara: "ar",
         tur: "tr",
         ukr: "uk",
+        pol: "pl",
+        nld: "nl",
+        dut: "nl",
+        swe: "sv",
+        nor: "no",
+        dan: "da",
+        fin: "fi",
+        ces: "cs",
+        cze: "cs",
+        ron: "ro",
+        rum: "ro",
+        ell: "el",
+        gre: "el",
+        heb: "he",
+        tha: "th",
+        vie: "vi",
+        ind: "id",
     };
-    const bcp47 = base.length === 3 ? iso639_2_to_1[base] ?? base : base;
-    try {
-        const dn = new Intl.DisplayNames(["en"], { type: "language" });
-        return dn.of(bcp47) ?? rawLang;
-    } catch {
-        return rawLang;
+
+    if (lower.length === 3) {
+        return iso639_2_to_1[lower] ?? lower;
     }
+
+    return lower;
 }
+
 
 export interface LegacyVideoPreviewProps {
     file: DebridFileNode;
     downloadUrl: string;
     streamingLinks?: Record<string, string>;
     subtitles?: AddonSubtitle[];
+    /** Progress tracking key for continue watching feature */
+    progressKey?: ProgressKey;
+    /** Initial seek position in seconds (from progress restore) */
+    startFromSeconds?: number;
+    onNext?: () => void;
+    onPrev?: () => void;
+    onPreload?: () => void;
     onLoad?: () => void;
     onError?: (error: Error) => void;
 }
@@ -77,9 +104,10 @@ export interface LegacyVideoPreviewProps {
 const LOADING_HINT_AFTER_MS = 12000;
 
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
-export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, onLoad, onError }: LegacyVideoPreviewProps) {
+export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, startFromSeconds, onNext, onPrev, onPreload, onLoad, onError }: LegacyVideoPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
+    const hasPreloaded = useRef(false);
     const [error, setError] = useState(false);
     const [showCodecWarning, setShowCodecWarning] = useState(true);
     const ios = isIOS();
@@ -92,6 +120,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [subtitleSize, setSubtitleSize] = useState(24);
     const [subtitlePosition, setSubtitlePosition] = useState(64);
     const [playbackRate, setPlaybackRate] = useState(1);
+    const [isLoading, setIsLoading] = useState(true);
 
     // Manual subtitle rendering (bypasses Windows OS caption override)
     const [parsedCues, setParsedCues] = useState<SubtitleCue[][]>([]);
@@ -102,7 +131,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const hasCodecIssue = isNonMP4Video(file.name);
-    const hasShownToastRef = useRef(false);
 
     // Prioritize Apple-native streaming link on iOS (usually HLS/m3u8)
     const effectiveUrl = (ios && streamingLinks)
@@ -124,13 +152,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         [downloadUrl, file.name]
     );
 
-    // Clean up toast logic - moving to inline warning component
-    useEffect(() => {
-        if (shouldShowWarning && showCodecWarning) {
-            // No-op: we now render VideoCodecWarning inline
-        }
-    }, [shouldShowWarning, showCodecWarning]);
-
     const [iosDidStartPlayback, setIosDidStartPlayback] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
@@ -138,17 +159,79 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [isMuted, setIsMuted] = useState(false);
     const [volume, setVolume] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number | -1>(-1); // Default to off, but will auto-enable
+
+    // Progress tracking for continue watching
+    const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
+    const lastProgressUpdateRef = useRef<number>(0);
+    const hasSeenkedToInitialRef = useRef(false);
+    const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
+
+    // Original language from Trakt metadata (e.g. "en", "ja")
+    const { data: originalLanguageCode } = useQuery({
+        queryKey: ["trakt", "original-language", progressKey?.imdbId, progressKey?.type],
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
+        queryFn: async () => {
+            if (!progressKey) return null;
+            if (progressKey.type === "movie") {
+                const media = await traktClient.getMovie(progressKey.imdbId);
+                return media.language ?? null;
+            }
+            const media = await traktClient.getShow(progressKey.imdbId);
+            return media.language ?? null;
+        },
+        enabled: !!progressKey?.imdbId,
+        staleTime: 24 * 60 * 60 * 1000,
+    });
 
     const handleLoad = useCallback(() => {
+        setIsLoading(false);
         if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
             loadingTimeoutRef.current = null;
         }
         setShowLoadingHint(false);
+
+        // Seek to saved progress on first load
+        const video = videoRef.current;
+        if (video && !hasSeenkedToInitialRef.current) {
+            hasSeenkedToInitialRef.current = true;
+            const seekTo = startFromSeconds ?? initialProgress;
+            if (seekTo && seekTo > 0 && Number.isFinite(video.duration)) {
+                // Only seek if within valid range (not at the end)
+                if (seekTo < video.duration - 5) {
+                    video.currentTime = seekTo;
+                }
+            }
+        }
+
+        // Auto-enable first subtitle track if available (prefer English)
+        if (!ios && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1) {
+            const englishIndex = subtitles.findIndex((s) => s.lang.toLowerCase() === "eng" || s.lang.toLowerCase() === "en");
+            const firstAddonSub = englishIndex !== -1 ? englishIndex : subtitles.findIndex((s) => s.url);
+
+            if (firstAddonSub !== -1) {
+                setActiveSubtitleIndex(firstAddonSub);
+            }
+        }
+
         onLoad?.();
-    }, [onLoad]);
+    }, [onLoad, startFromSeconds, initialProgress, subtitles, ios, activeSubtitleIndex]);
+
+    // Watch for subtitles arriving later (e.g. from async fetch)
+    useEffect(() => {
+        if (!ios && subtitles?.length && activeSubtitleIndex === -1 && !isLoading) {
+            const englishIndex = subtitles.findIndex((s) => s.lang.toLowerCase() === "eng" || s.lang.toLowerCase() === "en");
+            const firstAddonSub = englishIndex !== -1 ? englishIndex : subtitles.findIndex((s) => s.url);
+
+            if (firstAddonSub !== -1) {
+                setActiveSubtitleIndex(firstAddonSub);
+            }
+        }
+    }, [ios, subtitles, activeSubtitleIndex, isLoading]);
 
     const handleError = useCallback(() => {
+        setIsLoading(false);
         if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
             loadingTimeoutRef.current = null;
@@ -163,17 +246,131 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         onError?.(new Error(errorMessage));
     }, [onError]);
 
+    const handleTimeUpdate = useCallback(() => {
+        const el = videoRef.current;
+        if (!el) return;
+
+        const now = el.currentTime;
+        const total = el.duration;
+        setCurrentTime(now);
+
+        // Preload next episode at 90%
+        if (total > 0 && now / total > 0.9 && !hasPreloaded.current) {
+            hasPreloaded.current = true;
+            onPreload?.();
+        }
+
+        // Update progress (throttled)
+        if (now - lastProgressUpdateRef.current > 5 || (total > 0 && now / total > 0.95)) {
+            updateProgress(now, total);
+            lastProgressUpdateRef.current = now;
+
+            if (total > 0 && now / total > 0.95) {
+                markCompleted();
+            }
+        }
+    }, [updateProgress, markCompleted, onPreload]);
+
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
         }) | null;
-        if (el?.audioTracks) setAudioTrackCount(el.audioTracks.length);
+        if (el?.audioTracks) {
+            setAudioTrackCount(el.audioTracks.length);
+
+            const tracks = el.audioTracks;
+            let chosenIndex = 0;
+
+            // First, try to match Trakt original language (e.g. "en")
+            const targetLang = normalizeLangCode(originalLanguageCode);
+            if (targetLang && tracks.length > 0) {
+                for (let i = 0; i < tracks.length; i++) {
+                    const trackLang = normalizeLangCode(tracks[i]?.language);
+                    if (trackLang && trackLang === targetLang) {
+                        chosenIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // If no explicit language match, fall back to browser default / "original" labels
+            if (chosenIndex === 0 && tracks.length > 1) {
+                let originalIndex = 0;
+
+                // Browser default (already enabled)
+                for (let i = 0; i < tracks.length; i++) {
+                    if (tracks[i]?.enabled) {
+                        originalIndex = i;
+                        break;
+                    }
+                }
+
+                // If no enabled track found, look for "original" or "default" in label
+                if (!tracks[originalIndex]?.enabled) {
+                    const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
+                    if (!labelLower.includes("original") && !labelLower.includes("default")) {
+                        for (let i = 0; i < tracks.length; i++) {
+                            const trackLabel = (tracks[i]?.label ?? "").toLowerCase();
+                            if (trackLabel.includes("original") || trackLabel.includes("default")) {
+                                originalIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                chosenIndex = originalIndex;
+            }
+
+            setSelectedAudioIndex(chosenIndex);
+        }
         if (el) {
             setDuration(el.duration || 0);
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
-    }, []);
+    }, [originalLanguageCode]);
+
+
+
+    // Auto-select original audio track when tracks become available (fallback for async loading)
+    useEffect(() => {
+        const el = videoRef.current as (HTMLVideoElement & {
+            audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
+        }) | null;
+        if (!el?.audioTracks || el.audioTracks.length <= 1 || selectedAudioIndex !== 0) return;
+        
+        // Only run if we're still on default (index 0) and tracks are now available
+        const tracks = el.audioTracks;
+        let originalIndex = 0;
+        
+        // Check if any track is already enabled (browser default)
+        for (let i = 0; i < tracks.length; i++) {
+            if (tracks[i]?.enabled) {
+                originalIndex = i;
+                break;
+            }
+        }
+        
+        // If no enabled track found, look for "original" or "default" in label
+        if (!tracks[originalIndex]?.enabled) {
+            const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
+            if (!labelLower.includes("original") && !labelLower.includes("default")) {
+                for (let i = 0; i < tracks.length; i++) {
+                    const trackLabel = (tracks[i]?.label ?? "").toLowerCase();
+                    if (trackLabel.includes("original") || trackLabel.includes("default")) {
+                        originalIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Only update if different from current selection
+        if (originalIndex !== 0) {
+            setSelectedAudioIndex(originalIndex);
+        }
+    }, [audioTrackCount, selectedAudioIndex]);
 
     useEffect(() => {
         const el = videoRef.current as (HTMLVideoElement & {
@@ -191,32 +388,68 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const video = videoRef.current;
         if (!video || ios) return;
 
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
+        const onPlay = () => {
+            setIsPlaying(true);
+            setIsLoading(false);
+        };
+        const onPause = () => {
+            setIsPlaying(false);
+            // Sync progress to DB on pause
+            forceSync();
+        };
         const onTimeUpdate = () => {
-            setCurrentTime(video.currentTime || 0);
-            if (!duration && Number.isFinite(video.duration)) setDuration(video.duration);
+            const time = video.currentTime || 0;
+            const dur = video.duration || 0;
+            setCurrentTime(time);
+            if (!duration && Number.isFinite(dur)) setDuration(dur);
+
+            // Update progress in localStorage (throttled)
+            const now = Date.now();
+            if (progressKey && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
+                lastProgressUpdateRef.current = now;
+                updateProgress(time, dur);
+            }
+        };
+        const onWaiting = () => setIsLoading(true);
+        const onPlaying = () => {
+            setIsLoading(false);
+            setIsPlaying(true);
         };
         const onDurationChange = () => setDuration(video.duration || 0);
         const onVolumeChange = () => {
             setVolume(video.volume);
             setIsMuted(video.muted || video.volume === 0);
         };
+        const onEnded = () => {
+            // Mark as completed when video ends (> 95% watched)
+            if (progressKey) {
+                markCompleted();
+            }
+            // Auto-next if available
+            if (onNext) onNext();
+        };
 
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
         video.addEventListener("timeupdate", onTimeUpdate);
+        video.addEventListener("waiting", onWaiting);
+        video.addEventListener("playing", onPlaying);
         video.addEventListener("durationchange", onDurationChange);
         video.addEventListener("volumechange", onVolumeChange);
+        video.addEventListener("ended", onEnded);
 
         return () => {
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("timeupdate", onTimeUpdate);
+            video.removeEventListener("waiting", onWaiting);
+            video.removeEventListener("playing", onPlaying);
             video.removeEventListener("durationchange", onDurationChange);
             video.removeEventListener("volumechange", onVolumeChange);
+            video.removeEventListener("ended", onEnded);
         };
-    }, [ios, duration]);
+    }, [ios, duration, progressKey, updateProgress, forceSync, markCompleted, onNext]);
+
 
     // Keep fullscreen state in sync
     useEffect(() => {
@@ -242,7 +475,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const resetControlsTimeout = useCallback(() => {
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         setShowControls(true);
-        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+        controlsTimeoutRef.current = setTimeout(() => {
+            if (videoRef.current && !videoRef.current.paused) {
+                setShowControls(false);
+            }
+        }, 3000);
     }, []);
 
     useEffect(() => {
@@ -325,7 +562,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, []);
 
-    const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number | -1>(0);
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "external" | "settings" | null>(null);
 
     // When subtitle selection changes (non-iOS), toggle textTracks modes (also disables embedded tracks).
@@ -363,7 +599,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const s = total % 60;
         const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
         const ss = String(s).padStart(2, "0");
-        return h > 0 ? `${h}:${mm}:${ss} ` : `${mm}:${ss} `;
+        return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
     };
 
     // iOS: start loading timeout when video starts loading; show hint if it never reaches canplay
@@ -394,7 +630,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         videoRef.current?.play();
     }, []);
 
-    // Keyboard shortcuts (non-iOS): play/pause, seek, volume, mute, fullscreen, subtitles.
+    // Keyboard shortcuts (non-iOS) - YouTube-style controls:
+    // Space/K: play/pause | Arrow Left/Right: ±5s | J/L: ±10s | ,/.: ±0.5s frame-step (paused)
+    // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles
     useEffect(() => {
         if (ios) return;
 
@@ -423,6 +661,32 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "ArrowRight":
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 5);
+                    break;
+                case "j":
+                case "J":
+                    event.preventDefault();
+                    seekTo((videoRef.current?.currentTime ?? 0) - 10);
+                    break;
+                case "l":
+                case "L":
+                    event.preventDefault();
+                    seekTo((videoRef.current?.currentTime ?? 0) + 10);
+                    break;
+                case ",":
+                case "<":
+                    // Frame step backward (when paused)
+                    if (videoRef.current?.paused) {
+                        event.preventDefault();
+                        seekTo((videoRef.current?.currentTime ?? 0) - 0.5);
+                    }
+                    break;
+                case ".":
+                case ">":
+                    // Frame step forward (when paused)
+                    if (videoRef.current?.paused) {
+                        event.preventDefault();
+                        seekTo((videoRef.current?.currentTime ?? 0) + 0.5);
+                    }
                     break;
                 case "ArrowUp":
                 case "ArrowDown": {
@@ -615,7 +879,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     return (
         <div
             ref={containerRef}
-            className="relative w-full h-full flex flex-col bg-black debridui-legacy-player">
+            className="relative w-full h-full flex flex-col bg-black debridui-legacy-player group"
+            onClick={(e) => {
+                if (e.target === containerRef.current || (e.target as HTMLElement).tagName === "VIDEO") {
+                    togglePlay();
+                }
+            }}>
             <LegacyPlayerSubtitleStyle />
             {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-white">
@@ -636,12 +905,42 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         className="w-full h-full object-contain bg-black"
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
+                        onTimeUpdate={handleTimeUpdate}
                         onLoadedData={handleLoad}
                         onError={handleError}
                     />
 
+                    {/* Centered Loading Spinner */}
+                    {isLoading && !error && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-30">
+                            <Loader2 className="h-12 w-12 text-white animate-spin drop-shadow-lg" />
+                        </div>
+                    )}
+
+                    {/* Big Center Play/Pause Overlay */}
+                    {!ios && !isLoading && (
+                        <div
+                            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 z-25 pointer-events-none ${(!isPlaying || showControls) ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}
+                        >
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePlay();
+                                }}
+                                className="pointer-events-auto flex h-20 w-20 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-95 border border-white/10"
+                            >
+                                {isPlaying ? (
+                                    <Pause className="h-10 w-10 fill-current" />
+                                ) : (
+                                    <Play className="h-10 w-10 fill-current ml-1" />
+                                )}
+                            </button>
+                        </div>
+                    )}
+
                     <VideoCodecWarning
                         show={shouldShowWarning && showCodecWarning}
+                        isPlaying={isPlaying}
                         onClose={() => setShowCodecWarning(false)}
                         onOpenInPlayer={openInExternalPlayer}
                     />
@@ -670,10 +969,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Custom control bar (non-iOS) */}
                     {!ios && (
                         <div
-                            className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
-                            <div className="pointer-events-auto bg-gradient-to-t from-black/80 via-black/60 to-transparent px-4 pb-3 pt-6">
+                            className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
+                            <div className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
                                 {/* Seek bar */}
-                                <div className="flex items-center gap-3">
+                                <div className="group/seekbar relative flex items-center gap-3">
                                     <input
                                         type="range"
                                         min={0}
@@ -681,39 +980,73 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         step={0.1}
                                         value={Number.isFinite(currentTime) ? currentTime : 0}
                                         onChange={handleSeekChange}
-                                        className="w-full accent-primary"
+                                        style={{
+                                            background: `linear-gradient(to right, var(--primary) ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%, rgba(255, 255, 255, 0.3) ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%)`
+                                        }}
+                                        className="h-1 w-full cursor-pointer appearance-none rounded-full accent-primary transition-all group-hover/seekbar:h-1.5"
                                     />
                                 </div>
 
                                 {/* Controls row */}
-                                <div className="mt-2 flex items-center gap-3 text-xs text-white">
-                                    <div className="flex items-center gap-2">
+                                <div className="mt-4 flex items-center gap-2 text-xs text-white">
+                                    <div className="flex items-center gap-1">
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-white hover:bg-white/10"
+                                            className="h-9 w-9 text-white hover:bg-white/20"
                                             onClick={togglePlay}
+                                            disabled={isLoading}
                                             aria-label={isPlaying ? "Pause" : "Play"}>
-                                            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                            {isLoading ? (
+                                                <Loader2 className="h-5 w-5 animate-spin text-white/50" />
+                                            ) : isPlaying ? (
+                                                <Pause className="h-5 w-5 fill-current" />
+                                            ) : (
+                                                <Play className="h-5 w-5 fill-current" />
+                                            )}
                                         </Button>
-                                        <span className="text-xs tabular-nums">
+
+                                        {/* Next/Prev Buttons */}
+                                        <div className="flex items-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9 text-white hover:bg-white/20 disabled:opacity-30"
+                                                onClick={(e) => { e.stopPropagation(); onPrev?.(); }}
+                                                disabled={!onPrev}
+                                                title="Previous episode">
+                                                <SkipBack className="h-5 w-5 fill-current" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9 text-white hover:bg-white/20 disabled:opacity-30"
+                                                onClick={(e) => { e.stopPropagation(); onNext?.(); }}
+                                                disabled={!onNext}
+                                                title="Next episode">
+                                                <SkipForward className="h-5 w-5 fill-current" />
+                                            </Button>
+                                        </div>
+
+                                        <span className="text-sm font-medium tabular-nums ml-2">
                                             {formatTime(currentTime)}{" "}
-                                            <span className="text-white/50">/ {formatTime(duration)}</span>
+                                            <span className="text-white/40 mx-1">/</span>
+                                            <span className="text-white/60">{formatTime(duration)}</span>
                                         </span>
                                     </div>
 
                                     {/* Volume */}
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 group/volume ml-2">
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-white hover:bg-white/10"
+                                            className="h-9 w-9 text-white hover:bg-white/20"
                                             onClick={toggleMute}
                                             aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}>
                                             {isMuted || volume === 0 ? (
-                                                <VolumeX className="h-4 w-4" />
+                                                <VolumeX className="h-5 w-5" />
                                             ) : (
-                                                <Volume2 className="h-4 w-4" />
+                                                <Volume2 className="h-5 w-5" />
                                             )}
                                         </Button>
                                         <input
@@ -723,11 +1056,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             step={0.05}
                                             value={isMuted ? 0 : volume}
                                             onChange={handleVolumeChange}
-                                            className="w-24 accent-primary"
+                                            className="w-0 overflow-hidden accent-primary transition-all duration-300 group-hover/volume:w-24 group-hover/volume:ml-2"
                                         />
                                     </div>
 
-                                    <div className="ml-auto flex items-center gap-2">
+                                    <div className="ml-auto flex items-center gap-3">
                                         {/* Subtitles menu (track selection only) */}
                                         {subtitles && subtitles.length > 0 && (
                                             <DropdownMenu
@@ -739,23 +1072,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-8 px-2 text-xs text-white hover:bg-white/10">
+                                                        className="h-9 px-3 text-xs font-bold text-white hover:bg-white/20 rounded-md border border-white/10">
                                                         CC
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                     <DropdownMenuContent
                                                         align="end"
-                                                        className="min-w-[160px] z-50">
-                                                        <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground">
+                                                        className="min-w-[160px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
                                                             Subtitles
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuItem
                                                             onClick={() => setActiveSubtitleIndex(-1)}
                                                             className={
                                                                 activeSubtitleIndex === -1
-                                                                    ? "bg-accent text-accent-foreground"
-                                                                    : ""
+                                                                    ? "bg-primary text-primary-foreground"
+                                                                    : "focus:bg-white/10 focus:text-white"
                                                             }>
                                                             Off
                                                         </DropdownMenuItem>
@@ -765,10 +1098,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                 onClick={() => setActiveSubtitleIndex(i)}
                                                                 className={
                                                                     activeSubtitleIndex === i
-                                                                        ? "bg-accent text-accent-foreground"
-                                                                        : ""
+                                                                        ? "bg-primary text-primary-foreground"
+                                                                        : "focus:bg-white/10 focus:text-white"
                                                                 }>
-                                                                {sub.name ?? sub.lang}
+                                                                {sub.name ?? getLanguageDisplayName(sub.lang)}
                                                             </DropdownMenuItem>
                                                         ))}
                                                     </DropdownMenuContent>
@@ -786,72 +1119,73 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-8 w-8 text-white hover:bg-white/10">
-                                                    <Settings className="h-4 w-4" />
+                                                    className="h-9 w-9 text-white hover:bg-white/20">
+                                                    <Settings className="h-5 w-5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
                                                     align="end"
-                                                    className="min-w-[180px] z-50">
+                                                    className="min-w-[200px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-2">
                                                     {/* Playback speed */}
-                                                    <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground">
-                                                        Speed
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                        Playback Speed
                                                     </DropdownMenuLabel>
-                                                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                                                        <DropdownMenuItem
-                                                            key={rate}
-                                                            onClick={() => setPlaybackRate(rate)}
-                                                            className={
-                                                                playbackRate === rate
-                                                                    ? "bg-accent text-accent-foreground"
-                                                                    : ""
-                                                            }>
-                                                            {rate === 1 ? "Normal" : `${rate} x`}
-                                                        </DropdownMenuItem>
-                                                    ))}
+                                                    <div className="grid grid-cols-3 gap-1 px-1 pb-2">
+                                                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                                                            <button
+                                                                key={rate}
+                                                                onClick={() => setPlaybackRate(rate)}
+                                                                className={`rounded px-1 py-1.5 text-[10px] font-medium transition-colors ${playbackRate === rate ? "bg-primary text-primary-foreground" : "hover:bg-white/10"}`}
+                                                            >
+                                                                {rate === 1 ? "Normal" : `${rate}x`}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="h-px bg-white/10 my-2" />
 
                                                     {/* Subtitle size +/− */}
-                                                    <DropdownMenuLabel className="mt-2 text-xs tracking-widest uppercase text-muted-foreground">
-                                                        Subtitle size ({subtitleSize}px)
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                        Subtitle Size
                                                     </DropdownMenuLabel>
-                                                    <div className="flex items-center justify-between px-2 py-1.5">
+                                                    <div className="flex items-center justify-between px-2 pb-2">
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
                                                             onClick={() => setSubtitleSize((s) => Math.max(12, s - 2))}>
-                                                            <Minus className="h-3 w-3" />
+                                                            <Minus className="h-4 w-4" />
                                                         </Button>
-                                                        <span className="text-xs">{subtitleSize}px</span>
+                                                        <span className="text-xs font-mono">{subtitleSize}px</span>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
                                                             onClick={() => setSubtitleSize((s) => Math.min(64, s + 2))}>
-                                                            <Plus className="h-3 w-3" />
+                                                            <Plus className="h-4 w-4" />
                                                         </Button>
                                                     </div>
 
                                                     {/* Subtitle position +/− */}
-                                                    <DropdownMenuLabel className="mt-2 text-xs tracking-widest uppercase text-muted-foreground">
-                                                        Subtitle position ({subtitlePosition}px)
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                        Subtitle Position
                                                     </DropdownMenuLabel>
-                                                    <div className="flex items-center justify-between px-2 py-1.5">
+                                                    <div className="flex items-center justify-between px-2 pb-2">
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
                                                             onClick={() => setSubtitlePosition((s) => Math.max(20, s - 4))}>
-                                                            <Minus className="h-3 w-3" />
+                                                            <Minus className="h-4 w-4" />
                                                         </Button>
-                                                        <span className="text-xs">{subtitlePosition}px</span>
+                                                        <span className="text-xs font-mono">{subtitlePosition}px</span>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
                                                             onClick={() => setSubtitlePosition((s) => Math.min(400, s + 4))}>
-                                                            <Plus className="h-3 w-3" />
+                                                            <Plus className="h-4 w-4" />
                                                         </Button>
                                                     </div>
                                                 </DropdownMenuContent>
@@ -869,16 +1203,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-8 px-2 text-xs text-white hover:bg-white/10">
+                                                        className="h-9 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-md border border-white/10">
                                                         Audio
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                     <DropdownMenuContent
                                                         align="end"
-                                                        className="min-w-[180px] z-50">
-                                                        <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground">
-                                                            Audio track
+                                                        className="min-w-[180px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                                                            Audio Tracks
                                                         </DropdownMenuLabel>
                                                         {Array.from({ length: audioTrackCount }, (_, i) => {
                                                             const el = videoRef.current as (HTMLVideoElement & {
@@ -898,15 +1232,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             const base = (t?.label ?? "").trim();
                                                             const label =
                                                                 [langLabel, base].filter(Boolean).join(" · ") ||
-                                                                `Track ${i + 1} `;
+                                                                `Track ${i + 1}`;
                                                             return (
                                                                 <DropdownMenuItem
                                                                     key={i}
                                                                     onClick={() => setSelectedAudioIndex(i)}
                                                                     className={
                                                                         selectedAudioIndex === i
-                                                                            ? "bg-accent text-accent-foreground"
-                                                                            : ""
+                                                                            ? "bg-primary text-primary-foreground"
+                                                                            : "focus:bg-white/10 focus:text-white"
                                                                     }>
                                                                     {label}
                                                                 </DropdownMenuItem>
@@ -927,27 +1261,33 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-8 w-8 text-white hover:bg-white/10">
-                                                    <ExternalLink className="h-4 w-4" />
+                                                    className="h-9 w-9 text-white hover:bg-white/20">
+                                                    <ExternalLink className="h-5 w-5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
                                                     align="end"
-                                                    className="min-w-[160px] z-50">
-                                                    <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground">
-                                                        Open in player
+                                                    className="min-w-[160px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                                                        External Player
                                                     </DropdownMenuLabel>
                                                     <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.VLC)}>
+                                                        onClick={() => openInExternalPlayer(MediaPlayer.VLC)}
+                                                        className="focus:bg-white/10 focus:text-white"
+                                                    >
                                                         VLC
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.MPV)}>
+                                                        onClick={() => openInExternalPlayer(MediaPlayer.MPV)}
+                                                        className="focus:bg-white/10 focus:text-white"
+                                                    >
                                                         MPV
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.IINA)}>
+                                                        onClick={() => openInExternalPlayer(MediaPlayer.IINA)}
+                                                        className="focus:bg-white/10 focus:text-white"
+                                                    >
                                                         IINA
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
@@ -958,13 +1298,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-white hover:bg-white/10"
-                                            onClick={toggleFullscreen}
+                                            className="h-9 w-9 text-white hover:bg-white/20"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleFullscreen();
+                                            }}
                                             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
                                             {isFullscreen ? (
-                                                <Minimize2 className="h-4 w-4" />
+                                                <Minimize2 className="h-5 w-5" />
                                             ) : (
-                                                <Maximize2 className="h-4 w-4" />
+                                                <Maximize2 className="h-5 w-5" />
                                             )}
                                         </Button>
                                     </div>
@@ -978,28 +1321,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <button
                             type="button"
                             onClick={handleIosTapToPlay}
-                            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white z-10">
-                            <Play className="h-16 w-16" fill="currentColor" />
+                            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white z-50">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-md">
+                                <Play className="h-10 w-10 fill-current ml-1" />
+                            </div>
                             <span className="text-sm font-medium">Tap to play</span>
                         </button>
                     )}
 
                     {/* iOS: if loading takes too long, stream may not support Range requests */}
                     {ios && showLoadingHint && (
-                        <div className="absolute bottom-14 left-0 right-0 px-4 py-2 bg-black/80 text-white text-center text-xs z-10">
-                            <p className="mb-2">Video taking too long? The stream may not work in Safari.</p>
-                            <div className="flex flex-wrap justify-center gap-2">
+                        <div className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
+                            <p className="mb-3 font-medium">Video taking too long? The stream may not work in Safari.</p>
+                            <div className="flex flex-wrap justify-center gap-4">
                                 <button
                                     type="button"
-                                    className="underline hover:no-underline"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                     onClick={() => openInExternalPlayer(MediaPlayer.VLC)}>
+                                    <ExternalLink className="h-3 w-3" />
                                     Open in VLC
                                 </button>
-                                <span className="text-white/50">·</span>
                                 <button
                                     type="button"
-                                    className="underline hover:no-underline"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                                     onClick={() => openInExternalPlayer(MediaPlayer.MPV)}>
+                                    <ExternalLink className="h-3 w-3" />
                                     Open in MPV
                                 </button>
                             </div>
@@ -1007,6 +1353,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
                 </div>
             )}
-        </div >
+        </div>
     );
 }

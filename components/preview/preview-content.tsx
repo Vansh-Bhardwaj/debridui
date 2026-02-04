@@ -5,6 +5,7 @@ import { getFileType } from "@/lib/utils";
 import { getPreviewRenderer } from "@/lib/preview/registry";
 import { AlertCircle } from "lucide-react";
 import type { AddonSubtitle } from "@/lib/addons/types";
+import { type ProgressKey } from "@/hooks/use-progress";
 
 interface PreviewContentProps {
     file: DebridFileNode;
@@ -14,6 +15,10 @@ interface PreviewContentProps {
     fileType?: FileType;
     /** Optional subtitle tracks (browser video only) */
     subtitles?: AddonSubtitle[];
+    onNext?: () => void;
+    onPrev?: () => void;
+    onPreload?: () => void;
+    progressKey?: ProgressKey;
 }
 
 export function PreviewContent({
@@ -22,6 +27,10 @@ export function PreviewContent({
     streamingLinks,
     fileType: explicitFileType,
     subtitles,
+    onNext,
+    onPrev,
+    onPreload,
+    progressKey,
 }: PreviewContentProps) {
     const fileType = explicitFileType ?? getFileType(file.name);
     const renderer = getPreviewRenderer(fileType);
@@ -36,7 +45,7 @@ export function PreviewContent({
         );
     }
 
-    const RendererComponent = renderer.component;
+    const RendererComponent = renderer.component as any;
     return (
         <RendererComponent
             key={file.id}
@@ -44,6 +53,10 @@ export function PreviewContent({
             downloadUrl={downloadUrl}
             streamingLinks={streamingLinks}
             {...(subtitles && subtitles.length > 0 ? { subtitles } : {})}
+            onNext={onNext}
+            onPrev={onPrev}
+            onPreload={onPreload}
+            progressKey={progressKey}
         />
     );
 }

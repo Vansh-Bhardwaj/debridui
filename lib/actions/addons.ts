@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -14,9 +13,7 @@ import { type Addon } from "@/lib/addons/types";
  * Get all user addons from database
  */
 export async function getUserAddons() {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
@@ -31,9 +28,7 @@ export async function getUserAddons() {
  * Add a new addon
  */
 export async function addAddon(addon: Omit<Addon, "id" | "order">) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
@@ -72,9 +67,7 @@ export async function addAddon(addon: Omit<Addon, "id" | "order">) {
  * Remove an addon
  */
 export async function removeAddon(addonId: string) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
@@ -90,9 +83,7 @@ export async function removeAddon(addonId: string) {
  * Toggle addon enabled status
  */
 export async function toggleAddon(addonId: string, enabled: boolean) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
@@ -113,9 +104,7 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
  * unique (userId, order) constraint violations: move to temp negative orders, then to final.
  */
 export async function updateAddonOrders(updates: { id: string; order: number }[]) {
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+    const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");

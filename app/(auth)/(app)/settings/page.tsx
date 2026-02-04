@@ -5,13 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
     type StreamingResolution,
     type QualityProfileId,
     type QualityRange,
+    type PlaybackSettings,
     QUALITY_PROFILES,
 } from "@/lib/stores/settings";
 import { RESOLUTIONS, SOURCE_QUALITIES } from "@/lib/addons/parser";
@@ -54,6 +55,7 @@ export default function SettingsPage() {
     const downloadLinkMaxAge = get("downloadLinkMaxAge");
     const downloadLinkMaxAgePresets = getPresets("downloadLinkMaxAge") || [];
     const streaming = get("streaming");
+    const playback = get("playback");
 
     const updateStreaming = (updates: Partial<StreamingSettings>) => {
         set("streaming", { ...streaming, ...updates });
@@ -63,6 +65,10 @@ export default function SettingsPage() {
         updateStreaming({
             customRange: { ...streaming.customRange, ...updates },
         });
+    };
+
+    const updatePlayback = (updates: Partial<PlaybackSettings>) => {
+        set("playback", { ...playback, ...updates });
     };
 
     const selectProfile = (profileId: QualityProfileId) => {
@@ -382,6 +388,164 @@ export default function SettingsPage() {
                             className="shrink-0"
                             checked={streaming.autoPlay}
                             onCheckedChange={(checked) => updateStreaming({ autoPlay: checked })}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Zap className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="prefer-cached" className="text-sm">
+                                    Prefer Cached Sources
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Prioritize cached sources even if lower quality is available
+                            </p>
+                        </div>
+                        <Switch
+                            id="prefer-cached"
+                            className="shrink-0"
+                            checked={streaming.preferCached}
+                            onCheckedChange={(checked) => updateStreaming({ preferCached: checked })}
+                        />
+                    </div>
+
+                    {/* Preferred Language */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Languages className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="preferred-language" className="text-sm">
+                                    Preferred Language
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Prioritize sources matching this audio language
+                            </p>
+                        </div>
+                        <Select
+                            value={streaming.preferredLanguage}
+                            onValueChange={(value) => updateStreaming({ preferredLanguage: value })}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="english">English</SelectItem>
+                                <SelectItem value="spanish">Spanish</SelectItem>
+                                <SelectItem value="french">French</SelectItem>
+                                <SelectItem value="german">German</SelectItem>
+                                <SelectItem value="italian">Italian</SelectItem>
+                                <SelectItem value="portuguese">Portuguese</SelectItem>
+                                <SelectItem value="russian">Russian</SelectItem>
+                                <SelectItem value="japanese">Japanese</SelectItem>
+                                <SelectItem value="korean">Korean</SelectItem>
+                                <SelectItem value="hindi">Hindi</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+            </section>
+
+            {/* Playback Section */}
+            <section className="space-y-4">
+                <SectionDivider label="Playback" />
+
+                <div className="space-y-4">
+                    {/* Playback Speed */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <FastForward className="size-4 text-muted-foreground shrink-0" />
+                                <Label className="text-sm">Playback Speed</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Default video playback speed
+                            </p>
+                        </div>
+                        <Select
+                            value={String(playback.playbackSpeed)}
+                            onValueChange={(v) => updatePlayback({ playbackSpeed: parseFloat(v) })}>
+                            <SelectTrigger className="w-24">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="0.5">0.5x</SelectItem>
+                                <SelectItem value="0.75">0.75x</SelectItem>
+                                <SelectItem value="1">1.0x</SelectItem>
+                                <SelectItem value="1.25">1.25x</SelectItem>
+                                <SelectItem value="1.5">1.5x</SelectItem>
+                                <SelectItem value="1.75">1.75x</SelectItem>
+                                <SelectItem value="2">2.0x</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Subtitle Size */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Type className="size-4 text-muted-foreground shrink-0" />
+                                <Label className="text-sm">Subtitle Size</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Text size for subtitles
+                            </p>
+                        </div>
+                        <Select
+                            value={String(playback.subtitleSize)}
+                            onValueChange={(v) => updatePlayback({ subtitleSize: parseInt(v) })}>
+                            <SelectTrigger className="w-24">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="16">Small</SelectItem>
+                                <SelectItem value="20">Medium</SelectItem>
+                                <SelectItem value="24">Default</SelectItem>
+                                <SelectItem value="32">Large</SelectItem>
+                                <SelectItem value="40">X-Large</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Toggle Settings */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Play className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="auto-resume" className="text-sm">
+                                    Auto-Resume
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Resume playback from where you left off
+                            </p>
+                        </div>
+                        <Switch
+                            id="auto-resume"
+                            className="shrink-0"
+                            checked={playback.autoResume}
+                            onCheckedChange={(checked) => updatePlayback({ autoResume: checked })}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <SkipForward className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="auto-next-episode" className="text-sm">
+                                    Auto-Play Next Episode
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Automatically play the next episode when current one ends
+                            </p>
+                        </div>
+                        <Switch
+                            id="auto-next-episode"
+                            className="shrink-0"
+                            checked={playback.autoNextEpisode}
+                            onCheckedChange={(checked) => updatePlayback({ autoNextEpisode: checked })}
                         />
                     </div>
                 </div>
