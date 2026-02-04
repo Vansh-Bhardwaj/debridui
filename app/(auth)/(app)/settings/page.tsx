@@ -12,7 +12,6 @@ import {
     type StreamingResolution,
     type QualityProfileId,
     type QualityRange,
-    type VideoPreviewEngine,
     QUALITY_PROFILES,
 } from "@/lib/stores/settings";
 import { RESOLUTIONS, SOURCE_QUALITIES } from "@/lib/addons/parser";
@@ -52,8 +51,6 @@ export default function SettingsPage() {
     const { get, set, getPresets } = useSettingsStore();
     const mediaPlayer = get("mediaPlayer");
     const mediaPlayerPresets = getPresets("mediaPlayer") || [];
-    const videoPreviewEngine = get("videoPreviewEngine");
-    const videoPreviewEnginePresets = getPresets("videoPreviewEngine") || [];
     const downloadLinkMaxAge = get("downloadLinkMaxAge");
     const downloadLinkMaxAgePresets = getPresets("downloadLinkMaxAge") || [];
     const streaming = get("streaming");
@@ -146,35 +143,6 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground">
                             Select your preferred color scheme for the interface
                         </p>
-                    </div>
-
-                    {/* In-app video preview engine */}
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <Monitor className="size-4 text-muted-foreground" />
-                            <Label htmlFor="video-preview-engine" className="text-sm">
-                                In-app video player
-                            </Label>
-                        </div>
-                        <Select
-                            value={videoPreviewEngine}
-                            onValueChange={(value) => set("videoPreviewEngine", value as VideoPreviewEngine)}>
-                            <SelectTrigger id="video-preview-engine" className="w-full">
-                                <SelectValue>
-                                    {videoPreviewEnginePresets.find((p) => p.value === videoPreviewEngine)?.label}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {videoPreviewEnginePresets.map((preset) => (
-                                    <SelectItem key={preset.value} value={preset.value}>
-                                        <div className="flex flex-col gap-0.5">
-                                            <span>{preset.label}</span>
-                                            <span className="text-xs text-muted-foreground">{preset.description}</span>
-                                        </div>
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
                     </div>
 
                     {/* Media Player (external) */}

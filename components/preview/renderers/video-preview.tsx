@@ -1,18 +1,9 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
-import dynamic from "next/dynamic";
-import { useSettingsStore } from "@/lib/stores/settings";
-import type { VideoPreviewEngine } from "@/lib/stores/settings";
 import { LegacyVideoPreview } from "./legacy-video-preview";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { DebridFileNode } from "@/lib/types";
-
-/** Loaded only on client to keep @videojs/* out of the server/Worker bundle (Cloudflare 3 MiB limit). */
-const VideoJsV10Preview = dynamic(
-    () => import("./video-js-v10-preview").then((m) => m.VideoJsV10Preview),
-    { ssr: false }
-);
 
 interface VideoPreviewProps {
     file: DebridFileNode;
@@ -43,8 +34,6 @@ class VideoPreviewErrorBoundary extends Component<
 
 /** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
 export function VideoPreview({ file, downloadUrl, subtitles, onLoad, onError }: VideoPreviewProps) {
-    const engine = useSettingsStore((s) => s.get("videoPreviewEngine")) as VideoPreviewEngine;
-
     const legacy = (
         <LegacyVideoPreview
             file={file}
@@ -55,19 +44,5 @@ export function VideoPreview({ file, downloadUrl, subtitles, onLoad, onError }: 
         />
     );
 
-    if (engine === "legacy") {
-        return legacy;
-    }
-
-    return (
-        <VideoPreviewErrorBoundary fallback={legacy}>
-            <VideoJsV10Preview
-                file={file}
-                downloadUrl={downloadUrl}
-                subtitles={subtitles}
-                onLoad={onLoad}
-                onError={onError}
-            />
-        </VideoPreviewErrorBoundary>
-    );
+    return <VideoPreviewErrorBoundary fallback={legacy}>{legacy}</VideoPreviewErrorBoundary>;
 }

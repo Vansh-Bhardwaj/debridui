@@ -6,6 +6,8 @@ import { getEnv } from "@/lib/env";
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
+type DbType = ReturnType<typeof drizzle>;
+
 export function getDb() {
     if (dbInstance) return dbInstance;
 
@@ -38,8 +40,9 @@ export function getDb() {
 }
 
 // Support existing imports
-export const db = new Proxy({} as any, {
-    get(_, prop) {
-        return (getDb() as any)[prop as any];
+export const db = new Proxy({} as unknown as DbType, {
+    get(_target, prop: keyof DbType) {
+        const instance = getDb() as DbType;
+        return instance[prop];
     }
 });

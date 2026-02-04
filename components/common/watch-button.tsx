@@ -4,7 +4,7 @@ import { memo, useCallback, type ReactElement } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { useUserAddons } from "@/hooks/use-addons";
-import { type TvSearchParams } from "@/lib/addons/types";
+import { type Addon, type TvSearchParams } from "@/lib/addons/types";
 
 interface WatchButtonProps {
     imdbId: string;
@@ -37,9 +37,9 @@ export const WatchButton = memo(function WatchButton({
             e.stopPropagation();
             if (useStreamingStore.getState().activeRequest) return;
             const enabledAddons = addons
-                .filter((a: any) => a.enabled)
-                .sort((a: any, b: any) => a.order - b.order)
-                .map((a: any) => ({ id: a.id, url: a.url, name: a.name }));
+                .filter((a: Addon) => a.enabled)
+                .sort((a: Addon, b: Addon) => a.order - b.order)
+                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
             play({ imdbId, type: mediaType, title, tvParams }, enabledAddons);
         },
         [play, imdbId, mediaType, title, tvParams, addons]

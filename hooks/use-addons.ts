@@ -255,8 +255,87 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
 }
 
 /** Check if addon manifest declares subtitles resource (Stremio protocol) */
-export function addonSupportsSubtitles(manifest: { resources?: Array<{ name: string }> }): boolean {
-    return manifest?.resources?.some((r) => r.name === "subtitles") ?? false;
+export function addonSupportsSubtitles(manifest: { resources?: Array<string | { name?: string }> }): boolean {
+    return (
+        manifest?.resources?.some((r) => (typeof r === "string" ? r === "subtitles" : r?.name === "subtitles")) ?? false
+    );
+}
+
+function getLanguageDisplayName(rawLang: string): string {
+    const lang = rawLang.trim();
+    // Stremio behavior: if it's not a valid ISO 639-2 code, treat it as display text.
+    if (!/^[a-z]{2,3}(-[a-z0-9]+)?$/i.test(lang)) return lang;
+
+    const base = lang.split("-")[0]!.toLowerCase();
+    // Common Stremio/community codes that aren't standard ISO language tags.
+    if (base === "pob") {
+        try {
+            const dn = new Intl.DisplayNames(["en"], { type: "language" });
+            return dn.of("pt-BR") ?? "Portuguese (Brazil)";
+        } catch {
+            return "Portuguese (Brazil)";
+        }
+    }
+    const iso639_2_to_1: Record<string, string> = {
+        eng: "en",
+        spa: "es",
+        fra: "fr",
+        fre: "fr",
+        deu: "de",
+        ger: "de",
+        ita: "it",
+        por: "pt",
+        rus: "ru",
+        hin: "hi",
+        jpn: "ja",
+        kor: "ko",
+        zho: "zh",
+        chi: "zh",
+        ara: "ar",
+        tur: "tr",
+        ukr: "uk",
+        pol: "pl",
+        nld: "nl",
+        dut: "nl",
+        swe: "sv",
+        nor: "no",
+        dan: "da",
+        fin: "fi",
+        ces: "cs",
+        cze: "cs",
+        ron: "ro",
+        rum: "ro",
+        ell: "el",
+        gre: "el",
+        heb: "he",
+        tha: "th",
+        vie: "vi",
+        ind: "id",
+    };
+
+    const bcp47 = base.length === 3 ? iso639_2_to_1[base] ?? base : base;
+
+    try {
+        // Intl.DisplayNames is the closest to how Stremio ends up showing language names in UI.
+        // If not available, fall back to the code.
+        const dn = new Intl.DisplayNames(["en"], { type: "language" });
+        return dn.of(bcp47) ?? rawLang;
+    } catch {
+        return rawLang;
+    }
+}
+
+function getSubtitleLabel(sub: AddonSubtitle, addonName?: string): string {
+    const hasCustomName = !!sub.name && sub.name.trim().toLowerCase() !== sub.lang.trim().toLowerCase();
+    const baseLabel = hasCustomName ? sub.name!.trim() : getLanguageDisplayName(sub.lang);
+    return addonName ? `${baseLabel} (${addonName})` : baseLabel;
+}
+
+function isEnglishSubtitle(sub: AddonSubtitle): boolean {
+    const lang = sub.lang.trim().toLowerCase();
+    if (lang === "en" || lang === "eng" || lang.startsWith("en-")) return true;
+    const name = (sub.name ?? "").trim().toLowerCase();
+    return name.includes("english");
 }
 
 interface UseAddonSubtitlesOptions {
@@ -316,11 +395,13 @@ export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubti
             const addonName = data.addonName;
             for (const sub of data.subtitles) {
                 if (!sub.url || !sub.lang) continue;
+                // Only keep English subtitles to reduce track loads and proxy conversions.
+                if (!isEnglishSubtitle(sub)) continue;
                 const key = `${sub.lang}:${sub.url}`;
                 if (!byKey.has(key)) {
                     byKey.set(key, {
                         ...sub,
-                        name: sub.name || (addonName ? `${sub.lang} (${addonName})` : sub.lang),
+                        name: getSubtitleLabel(sub, addonName),
                     });
                 }
             }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, memo } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
 import { DebridNode, DebridFileNode, DebridLinkInfo } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";

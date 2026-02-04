@@ -29,11 +29,18 @@ export interface AddonManifest {
     version: string;
     description: string;
     logo?: string;
-    resources: Array<{
-        name: string;
-        types: string[];
-        idPrefixes?: string[];
-    }>;
+    /**
+     * Stremio manifests may declare resources as strings (e.g. "subtitles") or as objects
+     * (e.g. { name: "subtitles", types: ["movie", "series"] }).
+     */
+    resources: Array<
+        | string
+        | {
+              name: string;
+              types: string[];
+              idPrefixes?: string[];
+          }
+    >;
     types: string[];
     catalogs?: Array<{
         type: string;

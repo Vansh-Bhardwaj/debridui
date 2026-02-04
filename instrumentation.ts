@@ -1,7 +1,9 @@
 // Polyfill __name IMMEDIATELY at module evaluation (before any imports)
 // Required for better-auth's Rolldown bundler in Cloudflare Workers
-if (typeof (globalThis as any).__name === "undefined") {
-    (globalThis as any).__name = <T extends (...args: any[]) => any>(fn: T, name: string): T => {
+type NamePolyfill = <T extends (...args: unknown[]) => unknown>(fn: T, name: string) => T;
+const g = globalThis as typeof globalThis & { __name?: NamePolyfill };
+if (typeof g.__name === "undefined") {
+    g.__name = <T extends (...args: unknown[]) => unknown>(fn: T, name: string): T => {
         Object.defineProperty(fn, "name", { value: name, configurable: true });
         return fn;
     };

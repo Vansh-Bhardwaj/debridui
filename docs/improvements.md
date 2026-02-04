@@ -33,6 +33,13 @@ Collected from a deep pass over the codebase and Stremio addon alignment. Not al
 
 ---
 
+## Video playback (iOS / Safari)
+
+- **iOS “keeps loading”**: Safari on iOS requires (1) **user gesture** to start playback (no autoplay with sound), and (2) the **stream URL must support HTTP Range requests** (`Accept-Ranges: bytes`, 206 Partial Content). Debrid CDN links may or may not support Range; we can’t change the server. **What we do**: On iOS, legacy player uses **tap-to-play** (no autoplay, `preload="none"` until tap) so the first load runs in a user gesture. If loading runs longer than ~12s we show a “Video taking too long? Open in VLC/MPV” hint.
+- **References**: [WebKit video policies](https://webkit.org/blog/6784/new-video-policies-for-ios), [iOS Range request requirement](https://stackoverflow.com/questions/3397241/does-iphone-ipad-safari-require-accept-ranges-header-for-video).
+
+---
+
 ## Technical / codebase
 
 - **Preview registry typing**: `PreviewRendererComponent` could extend to an optional `subtitles?: AddonSubtitle[]` prop so only video (and future) renderers declare it.

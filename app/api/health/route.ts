@@ -99,7 +99,7 @@ const buildDbCheck = async (): Promise<DbCheck> => {
         const parsed = new URL(databaseUrl);
         host = parsed.hostname;
         port = parsed.port || "5432";
-    } catch (error) {
+    } catch {
         return {
             status: "error",
             ok: false,

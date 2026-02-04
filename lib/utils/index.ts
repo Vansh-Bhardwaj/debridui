@@ -3,7 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { AccountType } from "../schemas";
 import { formatDistanceToNow, differenceInYears } from "date-fns";
 import { DebridLinkInfo, FileType } from "../types";
-import { ACCOUNT_TYPE_LABELS, CORS_PROXY_URL, EXTENSION_TO_FILE_TYPE } from "../constants";
+import { ACCOUNT_TYPE_LABELS, EXTENSION_TO_FILE_TYPE } from "../constants";
 import { del } from "idb-keyval";
 import { queryClient } from "../query-client";
 import { toast } from "sonner";
@@ -203,5 +203,7 @@ export const encodeAccountData = (data: { type: string; apiKey: string }): strin
  * Get proxied URL using CORS proxy
  */
 export const getProxyUrl = (url: string): string => {
-    return `${CORS_PROXY_URL}${encodeURIComponent(url)}`;
+    // Same-origin proxy to avoid browser/track restrictions across environments.
+    // (Third-party CORS proxies can fail in some browsers and can trigger "unsafe attempt" errors.)
+    return `/api/subtitles/proxy?url=${encodeURIComponent(url)}`;
 };
