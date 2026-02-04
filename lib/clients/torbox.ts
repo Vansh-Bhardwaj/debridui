@@ -127,7 +127,7 @@ interface TorBoxWebDownload {
 }
 
 export default class TorBoxClient extends BaseClient {
-    private readonly baseUrl = getProxyUrl("https://api.torbox.app/v1/api");
+    private readonly baseUrl = "https://api.torbox.app/v1/api";
     private readonly apiBaseUrl = "https://api.torbox.app/v1/api";
 
     // TorBox downloads on server, needs refresh for progress
@@ -174,7 +174,7 @@ export default class TorBoxClient extends BaseClient {
     }
 
     static async getUser(apiKey: string): Promise<User> {
-        const response = await fetch(getProxyUrl("https://api.torbox.app/v1/api/user/me"), {
+        const response = await fetch("https://api.torbox.app/v1/api/user/me", {
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 "User-Agent": USER_AGENT,
@@ -545,7 +545,7 @@ export default class TorBoxClient extends BaseClient {
 
     async searchTorrents(query: string): Promise<TorBoxSearchResult[]> {
         // Use different base URL for search API (search-api.torbox.app vs api.torbox.app)
-        const searchApiUrl = getProxyUrl(`https://search-api.torbox.app/torrents/search/${encodeURIComponent(query)}`);
+        const searchApiUrl = `https://search-api.torbox.app/torrents/search/${encodeURIComponent(query)}`;
 
         const params = new URLSearchParams({
             check_cache: "true",
