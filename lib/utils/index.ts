@@ -203,7 +203,10 @@ export const encodeAccountData = (data: { type: string; apiKey: string }): strin
  * Get proxied URL using CORS proxy
  */
 export const getProxyUrl = (url: string): string => {
-    // Same-origin proxy to avoid browser/track restrictions across environments.
-    // (Third-party CORS proxies can fail in some browsers and can trigger "unsafe attempt" errors.)
+    const proxyBase = process.env.NEXT_PUBLIC_CORS_PROXY_URL;
+    if (proxyBase) {
+        return `${proxyBase}${encodeURIComponent(url)}`;
+    }
+    // Fallback to internal subtitle proxy if no external proxy defined
     return `/api/subtitles/proxy?url=${encodeURIComponent(url)}`;
 };
