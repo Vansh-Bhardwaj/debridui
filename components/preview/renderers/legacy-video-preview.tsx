@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { LegacyPlayerSubtitleStyle } from "@/components/preview/legacy-player-subtitle-style";
+import { VideoCodecWarning } from "@/components/preview/video-codec-warning";
 
 /** Parsed subtitle cue for manual rendering */
 interface SubtitleCue {
@@ -109,7 +110,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         : downloadUrl;
 
     // Suppress warning if we have a native streaming link that handles the codec
-    const shouldShowWarning = hasCodecIssue && (!ios || !streamingLinks?.apple);
+    // On iOS, if we have an 'apple' or 'native' link, it's an HLS/m3u8 stream
+    const isHls = ios && (!!streamingLinks?.apple || !!streamingLinks?.native);
+    const shouldShowWarning = hasCodecIssue && !isHls;
 
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
@@ -121,22 +124,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         [downloadUrl, file.name]
     );
 
-    // One-time codec warning toast
+    // Clean up toast logic - moving to inline warning component
     useEffect(() => {
-        if (shouldShowWarning && showCodecWarning && !hasShownToastRef.current) {
-            hasShownToastRef.current = true;
-            toast.warning("Audio/Codec issues detected in browser", {
-                description: "This non-MP4 file (MKV, AVI, etc.) may not play correctly. Open in an external player for full support.",
-                duration: 8000,
-                action: {
-                    label: "Open in VLC",
-                    onClick: () => openInExternalPlayer(MediaPlayer.VLC)
-                },
-                onAutoClose: () => setShowCodecWarning(false),
-                onDismiss: () => setShowCodecWarning(false),
-            });
+        if (shouldShowWarning && showCodecWarning) {
+            // No-op: we now render VideoCodecWarning inline
         }
-    }, [shouldShowWarning, showCodecWarning, openInExternalPlayer]);
+    }, [shouldShowWarning, showCodecWarning]);
 
     const [iosDidStartPlayback, setIosDidStartPlayback] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -638,12 +631,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         controls={ios}
                         autoPlay={!ios && canStartPlayback}
                         playsInline
-                        preload={ios ? "none" : "metadata"}
+                        preload={ios && !isHls ? "none" : "metadata"}
+                        crossOrigin={isHls ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black"
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
                         onLoadedData={handleLoad}
                         onError={handleError}
+                    />
+
+                    <VideoCodecWarning
+                        show={shouldShowWarning && showCodecWarning}
+                        onClose={() => setShowCodecWarning(false)}
+                        onOpenInPlayer={openInExternalPlayer}
                     />
 
                     {/* Non-iOS: brief "preparing subtitles" gate (proxy conversion) */}

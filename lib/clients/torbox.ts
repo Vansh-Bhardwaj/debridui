@@ -326,12 +326,28 @@ export default class TorBoxClient extends BaseClient {
             const [torrentId, targetFileId] = (fileNode?.id || id).split(":");
             if (!torrentId || !targetFileId) return {};
 
-            // TorBox's requestdl with redirect=false returns the direct streaming-friendly link
-            const link = await this.getResolvedDownloadLink(torrentId, targetFileId);
+            // 1. Create stream to get a token
+            const token = await this.makeRequest<string>(
+                `stream/createstream?id=${torrentId}&file_id=${targetFileId}&type=torrent`,
+                { method: "GET" }
+            );
+
+            if (!token) return {};
+
+            // 2. Get stream data using the token and API key as presigned_token
+            // The API documentation says it returns a string (the direct stream URL)
+            const streamUrl = await this.makeRequest<string>(
+                `stream/getstreamdata?token=${token}&presigned_token=${this.user.apiKey}`,
+                { method: "GET" }
+            );
+
+            if (!streamUrl) return {};
+
             return {
-                native: link,
+                native: streamUrl,
             };
-        } catch {
+        } catch (error) {
+            console.error("[TorBox] Failed to get streaming links:", error);
             return {};
         }
     }

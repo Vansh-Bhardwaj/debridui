@@ -1,9 +1,10 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MediaPlayer } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface VideoCodecWarningProps {
     show: boolean;
@@ -16,44 +17,77 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
     onClose,
     onOpenInPlayer,
 }: VideoCodecWarningProps) {
-    if (!show) return null;
+    const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => {
+        if (show) {
+            setIsVisible(true);
+            const timer = setTimeout(() => {
+                setIsVisible(false);
+                setTimeout(onClose, 300); // Wait for exit animation
+            }, 8000);
+            return () => clearTimeout(timer);
+        } else {
+            setIsVisible(false);
+        }
+    }, [show, onClose]);
+
+    if (!show && !isVisible) return null;
 
     return (
-        <div className="absolute top-0 left-0 right-0 bg-yellow-500/90 text-black px-4 py-2 flex items-start gap-3 z-20">
-            <Info className="h-5 w-5 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">This video format may have audio/codec issues in browser</p>
-                <p className="text-xs mt-0.5">
-                    Non-MP4 formats (MKV, AVI, etc.) may use codecs not supported in browsers. Open in an external
-                    player (web player stays default):
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        className="text-xs"
-                        onClick={() => onOpenInPlayer(MediaPlayer.VLC)}>
-                        Open in VLC
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        className="text-xs"
-                        onClick={() => onOpenInPlayer(MediaPlayer.MPV)}>
-                        Open in MPV
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        className="text-xs"
-                        onClick={() => onOpenInPlayer(MediaPlayer.IINA)}>
-                        Open in IINA
-                    </Button>
+        <div
+            className={cn(
+                "absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm sm:max-w-md transition-all duration-300 ease-in-out px-4",
+                isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+            )}
+        >
+            <div className="bg-yellow-500/10 backdrop-blur-md border border-yellow-500/20 rounded-xl p-4 shadow-2xl flex items-start gap-4">
+                <div className="bg-yellow-500/20 p-2 rounded-lg">
+                    <Info className="h-5 w-5 text-yellow-500 shrink-0" />
                 </div>
+
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-yellow-500">Audio/Codec compatibility issue</p>
+                    <p className="text-xs text-white/80 mt-1 leading-relaxed">
+                        This format may not play correctly in your browser. For full support, open in an external player.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            onClick={() => onOpenInPlayer(MediaPlayer.VLC)}>
+                            VLC
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            onClick={() => onOpenInPlayer(MediaPlayer.MPV)}>
+                            MPV
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            onClick={() => onOpenInPlayer(MediaPlayer.IINA)}>
+                            IINA
+                        </Button>
+                    </div>
+                </div>
+
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 -mt-1 -mr-1 hover:bg-white/5 text-white/40 hover:text-white"
+                    onClick={() => {
+                        setIsVisible(false);
+                        setTimeout(onClose, 300);
+                    }}
+                >
+                    <X className="h-4 w-4" />
+                </Button>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 hover:bg-black/20" onClick={onClose}>
-                <X className="h-4 w-4" />
-            </Button>
         </div>
     );
 });
