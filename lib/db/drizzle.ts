@@ -1,17 +1,22 @@
 import "@/lib/polyfills";
-import { drizzle as drizzleHttp } from "drizzle-orm/neon-http";
-import { drizzle as drizzleServerless } from "drizzle-orm/neon-serverless";
-import { neon, Pool } from "@neondatabase/serverless";
+import { drizzle as drizzlePg } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema";
 import * as authSchema from "./auth-schema";
 import { getEnv } from "@/lib/env";
 
-/** Minimal Hyperdrive interface (the full type lives in gitignored cloudflare-env.d.ts) */
+/**
+ * Minimal type for Cloudflare Hyperdrive binding.
+ * The real type comes from cloudflare-env.d.ts which is gitignored.
+ */
 interface HyperdriveBinding {
     connectionString: string;
 }
 
-/** Context returned by getCloudflareContext */
+/**
+ * Context returned by getCloudflareContext.
+ * Cloudflare-env.d.ts is gitignored so we define a minimal shape here.
+ */
 interface CloudflareContext {
     env?: {
         HYPERDRIVE?: HyperdriveBinding;
@@ -21,7 +26,7 @@ interface CloudflareContext {
     [key: string]: unknown;
 }
 
-type DbType = ReturnType<typeof drizzleHttp> | ReturnType<typeof drizzleServerless>;
+type DbType = ReturnType<typeof drizzlePg>;
 
 // Per-request database instance cache using WeakMap keyed by request context
 const dbCache = new WeakMap<object, DbType>();
@@ -43,44 +48,49 @@ function getCloudflareCtx(): CloudflareContext | null {
         const { getCloudflareContext } = require("@opennextjs/cloudflare");
         return getCloudflareContext() ?? null;
     } catch {
-        // Not in Cloudflare context (local dev or build time)
         return null;
     }
 }
 
 /**
  * Resolve a database connection string from available sources.
- * Priority: Hyperdrive → process.env.DATABASE_URL → ctx.env.DATABASE_URL
+ *
+ * Priority:
+ *   1. Hyperdrive binding (TCP proxy with connection pooling + caching)
+ *   2. process.env.DATABASE_URL (local dev / OpenNext-bridged vars)
+ *   3. ctx.env.DATABASE_URL (un-bridged wrangler vars/secrets)
+ *
+ * Hyperdrive provides a local TCP proxy connection string (*.hyperdrive.local)
+ * with sslmode=disable. SSL is terminated inside Cloudflare's infrastructure:
+ *   Worker → Hyperdrive (internal, no SSL) → Neon Database (SSL enabled)
  */
-function resolveConnectionInfo(): {
-    connectionString: string;
+function resolveConnection(): {
+    url: string;
     source: "hyperdrive" | "env" | "ctx-env";
+    viaHyperdrive: boolean;
 } {
     const ctx = getCloudflareCtx();
 
-    // 1. Hyperdrive binding (preferred in production for connection pooling)
-    if (ctx?.env?.HYPERDRIVE?.connectionString) {
-        return {
-            connectionString: ctx.env.HYPERDRIVE.connectionString,
-            source: "hyperdrive",
-        };
+    // 1. Hyperdrive binding — best performance (connection pooling + caching)
+    const hyperdrive = ctx?.env?.HYPERDRIVE;
+    if (hyperdrive?.connectionString) {
+        return { url: hyperdrive.connectionString, source: "hyperdrive", viaHyperdrive: true };
     }
 
-    // 2. process.env.DATABASE_URL (local dev + OpenNext-bridged secrets)
+    // 2. process.env.DATABASE_URL (local dev + OpenNext-bridged vars/secrets)
     const envUrl = getEnv("DATABASE_URL");
     if (envUrl) {
-        return { connectionString: envUrl, source: "env" };
+        return { url: envUrl, source: "env", viaHyperdrive: false };
     }
 
-    // 3. Cloudflare context env.DATABASE_URL (failsafe for un-bridged secrets)
+    // 3. Cloudflare context env.DATABASE_URL (un-bridged wrangler vars/secrets)
     const ctxUrl = ctx?.env?.DATABASE_URL;
     if (typeof ctxUrl === "string" && ctxUrl) {
-        return { connectionString: ctxUrl, source: "ctx-env" };
+        return { url: ctxUrl, source: "ctx-env", viaHyperdrive: false };
     }
 
-    // Build a descriptive error so logs reveal exactly what's missing
     const details = [
-        `Hyperdrive binding: ${ctx?.env?.HYPERDRIVE ? "exists but connectionString is empty" : "not available"}`,
+        `Hyperdrive: ${hyperdrive ? "binding exists but no connectionString" : "not bound"}`,
         `process.env.DATABASE_URL: ${envUrl === undefined ? "not set" : "empty"}`,
         `ctx.env.DATABASE_URL: ${ctxUrl === undefined ? "not set" : "empty"}`,
         `Cloudflare context: ${ctx ? "available" : "not available"}`,
@@ -90,32 +100,40 @@ function resolveConnectionInfo(): {
 }
 
 /**
- * Create a database instance for the current request context.
- * Uses Hyperdrive in production (TCP pool via serverless driver),
- * or neon-http over DATABASE_URL for local dev / fallback.
+ * Create a drizzle database instance using postgres-js driver.
+ *
+ * Uses the `postgres` (Postgres.js) library which connects via TCP.
+ * When Hyperdrive is available, it connects through Cloudflare's local TCP proxy
+ * for connection pooling, query caching, and reduced latency.
+ *
+ * Important: `prepare: false` is required for Hyperdrive — it does not support
+ * PostgreSQL extended protocol (prepared statements).
  */
-function createDbInstance(): { db: DbType; source: string } {
-    const { connectionString, source } = resolveConnectionInfo();
+function createDbInstance(): { db: DbType; source: string; viaHyperdrive: boolean } {
+    const { url, source, viaHyperdrive } = resolveConnection();
 
-    // Log the connection source (production-only to reduce noise)
+    const sql = postgres(url, {
+        // Hyperdrive doesn't support prepared statements (PostgreSQL extended protocol)
+        prepare: false,
+        // Idle timeout — Workers are short-lived, close connections promptly
+        idle_timeout: 20,
+        // Max connections per Worker instance
+        max: 1,
+    });
+
     if (process.env.NODE_ENV === "production") {
         try {
-            const u = new URL(connectionString);
-            console.log(`[db] Connected via ${source}`, { host: u.hostname, port: u.port || "5432" });
+            const u = new URL(url);
+            console.log(`[db] Connected via ${source}${viaHyperdrive ? " (hyperdrive)" : " (direct)"}`, {
+                host: u.hostname,
+                port: u.port || "5432",
+            });
         } catch {
-            console.log(`[db] Connected via ${source} (URL parse failed)`);
+            console.log(`[db] Connected via ${source}${viaHyperdrive ? " (hyperdrive)" : " (direct)"}`);
         }
     }
 
-    if (source === "hyperdrive") {
-        // Hyperdrive provides a local TCP proxy — use the serverless driver with Pool
-        const pool = new Pool({ connectionString });
-        return { db: drizzleServerless(pool, drizzleConfig), source };
-    }
-
-    // Fallback: neon-http driver (stateless HTTP queries, works everywhere)
-    const sql = neon(connectionString);
-    return { db: drizzleHttp(sql, drizzleConfig), source };
+    return { db: drizzlePg(sql, drizzleConfig), source, viaHyperdrive };
 }
 
 /**
@@ -123,7 +141,6 @@ function createDbInstance(): { db: DbType; source: string } {
  * Caches per-request in Cloudflare Workers, uses singleton for local dev.
  */
 export function getDb(): DbType {
-    // Try to get Cloudflare context for per-request caching
     const ctx = getCloudflareCtx();
 
     if (ctx) {
@@ -157,8 +174,8 @@ export const db = new Proxy({} as unknown as DbType, {
  */
 export function getDbConnectionInfo(): {
     source: string;
-    hyperdriveAvailable: boolean;
-    hyperdriveHasConnectionString: boolean;
+    viaHyperdrive: boolean;
+    hasHyperdriveBinding: boolean;
     hasProcessEnvDbUrl: boolean;
     hasCtxEnvDbUrl: boolean;
     cloudflareContext: boolean;
@@ -168,16 +185,18 @@ export function getDbConnectionInfo(): {
 } {
     try {
         const ctx = getCloudflareCtx();
-        const hd = ctx?.env?.HYPERDRIVE;
+        const hyperdrive = ctx?.env?.HYPERDRIVE;
         const processEnvDbUrl = getEnv("DATABASE_URL");
         const ctxEnvDbUrl = typeof ctx?.env?.DATABASE_URL === "string" ? ctx.env.DATABASE_URL : undefined;
 
-        // Determine which source would be used
         let source = "none";
         let connStr: string | undefined;
-        if (hd?.connectionString) {
+        let viaHyperdrive = false;
+
+        if (hyperdrive?.connectionString) {
             source = "hyperdrive";
-            connStr = hd.connectionString;
+            connStr = hyperdrive.connectionString;
+            viaHyperdrive = true;
         } else if (processEnvDbUrl) {
             source = "env";
             connStr = processEnvDbUrl;
@@ -198,8 +217,8 @@ export function getDbConnectionInfo(): {
 
         return {
             source,
-            hyperdriveAvailable: !!hd,
-            hyperdriveHasConnectionString: !!hd?.connectionString,
+            viaHyperdrive,
+            hasHyperdriveBinding: !!hyperdrive,
             hasProcessEnvDbUrl: !!processEnvDbUrl,
             hasCtxEnvDbUrl: !!ctxEnvDbUrl,
             cloudflareContext: !!ctx,
@@ -209,8 +228,8 @@ export function getDbConnectionInfo(): {
     } catch (error) {
         return {
             source: "error",
-            hyperdriveAvailable: false,
-            hyperdriveHasConnectionString: false,
+            viaHyperdrive: false,
+            hasHyperdriveBinding: false,
             hasProcessEnvDbUrl: false,
             hasCtxEnvDbUrl: false,
             cloudflareContext: false,

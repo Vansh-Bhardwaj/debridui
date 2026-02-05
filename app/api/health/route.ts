@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, getDbConnectionInfo } from "@/lib/db";
 import { getAppUrl, getEnv } from "@/lib/env";
-import type { AuthCheck, BuildCheck, DbCheck, EnvCheck, HyperdriveCheck, HealthResponse, CheckStatus } from "@/lib/health";
+import type { AuthCheck, BuildCheck, DbCheck, DbConnectionCheck, EnvCheck, HealthResponse, CheckStatus } from "@/lib/health";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +19,12 @@ const buildEnvCheck = (): EnvCheck => {
     const hasAuthSecret = !!getEnv("NEON_AUTH_COOKIE_SECRET");
     const googleOAuthEnabled = true; // Handled by Neon Console
 
-    // Check if Hyperdrive provides database connectivity (DATABASE_URL not needed)
+    // Check if ctx.env provides DATABASE_URL even if process.env doesn't
     const connInfo = getDbConnectionInfo();
-    const hyperdriveHandlesDb = connInfo.source === "hyperdrive" || connInfo.source === "ctx-env";
+    const hasDbAnySource = hasDb || connInfo.source === "ctx-env";
 
     const missing: string[] = [];
-    if (!hasDb && !hyperdriveHandlesDb) missing.push("DATABASE_URL");
+    if (!hasDbAnySource) missing.push("DATABASE_URL");
     if (!hasAuthUrl) missing.push("NEXT_PUBLIC_NEON_AUTH_URL");
     if (!hasAuthSecret) missing.push("NEON_AUTH_COOKIE_SECRET");
 
@@ -85,13 +85,10 @@ const buildBuildCheck = (): BuildCheck => {
 };
 
 const buildDbCheck = async (): Promise<DbCheck> => {
-    const databaseUrl = getEnv("DATABASE_URL");
-    // In production on Workers, DATABASE_URL may not be in process.env
-    // but the db proxy handles connection resolution internally
     const connInfo = getDbConnectionInfo();
     const hasAnyConnection = connInfo.source !== "none" && connInfo.source !== "error";
 
-    if (!databaseUrl && !hasAnyConnection) {
+    if (!hasAnyConnection) {
         return {
             status: "error",
             ok: false,
@@ -125,34 +122,31 @@ const buildDbCheck = async (): Promise<DbCheck> => {
     }
 };
 
-const buildHyperdriveCheck = (): HyperdriveCheck => {
+const buildConnectionCheck = (): DbConnectionCheck => {
     const info = getDbConnectionInfo();
 
-    // Hyperdrive is "ok" when it's the active source
-    // "degraded" when Cloudflare context exists but Hyperdrive isn't available (using fallback)
-    // "ok" in local dev where Hyperdrive isn't expected
     let status: CheckStatus;
-    if (info.source === "hyperdrive") {
-        status = "ok";
-    } else if (info.cloudflareContext && !info.hyperdriveAvailable) {
-        // On Workers but Hyperdrive binding missing
-        status = "error";
-    } else if (info.cloudflareContext && info.hyperdriveAvailable && !info.hyperdriveHasConnectionString) {
-        // Binding exists but connectionString is empty
-        status = "degraded";
+    if (info.source === "hyperdrive" || info.source === "env" || info.source === "ctx-env") {
+        // Hyperdrive is ideal; env/ctx-env are acceptable fallbacks
+        status = info.viaHyperdrive ? "ok" : "degraded";
     } else if (!info.cloudflareContext) {
-        // Local dev — Hyperdrive not expected
-        status = "ok";
+        // Local dev — fine as long as process.env.DATABASE_URL works
+        status = info.hasProcessEnvDbUrl ? "ok" : "error";
     } else {
-        status = "degraded";
+        status = "error";
+    }
+
+    // If we're in local dev (no CF context), don't degrade just because no Hyperdrive
+    if (!info.cloudflareContext && info.hasProcessEnvDbUrl) {
+        status = "ok";
     }
 
     return {
         status,
-        ok: status === "ok",
+        ok: status !== "error",
         source: info.source,
-        hyperdriveAvailable: info.hyperdriveAvailable,
-        hyperdriveHasConnectionString: info.hyperdriveHasConnectionString,
+        viaHyperdrive: info.viaHyperdrive,
+        hasHyperdriveBinding: info.hasHyperdriveBinding,
         hasProcessEnvDbUrl: info.hasProcessEnvDbUrl,
         hasCtxEnvDbUrl: info.hasCtxEnvDbUrl,
         cloudflareContext: info.cloudflareContext,
@@ -169,9 +163,9 @@ export async function GET() {
     const authCheck = buildAuthCheck();
     const buildCheck = buildBuildCheck();
     const dbCheck = await buildDbCheck();
-    const hyperdriveCheck = buildHyperdriveCheck();
+    const connectionCheck = buildConnectionCheck();
 
-    const status = getStatusFromList([envCheck.status, authCheck.status, buildCheck.status, dbCheck.status, hyperdriveCheck.status]);
+    const status = getStatusFromList([envCheck.status, authCheck.status, buildCheck.status, dbCheck.status, connectionCheck.status]);
 
     const response: HealthResponse = {
         status,
@@ -181,7 +175,7 @@ export async function GET() {
             db: dbCheck,
             auth: authCheck,
             build: buildCheck,
-            hyperdrive: hyperdriveCheck,
+            connection: connectionCheck,
         },
     };
 

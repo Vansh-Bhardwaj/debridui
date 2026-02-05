@@ -35,12 +35,12 @@ export interface BuildCheck {
     buildTime?: string;
 }
 
-export interface HyperdriveCheck {
+export interface DbConnectionCheck {
     status: CheckStatus;
     ok: boolean;
     source: string;
-    hyperdriveAvailable: boolean;
-    hyperdriveHasConnectionString: boolean;
+    viaHyperdrive: boolean;
+    hasHyperdriveBinding: boolean;
     hasProcessEnvDbUrl: boolean;
     hasCtxEnvDbUrl: boolean;
     cloudflareContext: boolean;
@@ -57,6 +57,6 @@ export interface HealthResponse {
         db: DbCheck;
         auth: AuthCheck;
         build: BuildCheck;
-        hyperdrive: HyperdriveCheck;
+        connection: DbConnectionCheck;
     };
 }

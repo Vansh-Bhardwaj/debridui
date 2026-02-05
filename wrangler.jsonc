@@ -12,12 +12,13 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  // Hyperdrive for database connection pooling
+  // Hyperdrive for database connection pooling (TCP proxy)
+  // In production, the Worker uses env.HYPERDRIVE.connectionString via postgres-js driver.
+  // Local dev uses the localConnectionString below (or DATABASE_URL from .env.local).
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       "id": "e7bd6156f2a5469aac3b6b370dae5e41",
-      // Local development uses direct DATABASE_URL from .env.local
       "localConnectionString": "postgresql://neondb_owner:npg_9JiVGvOZ3tjq@ep-empty-scene-a1gs3bqr-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
     }
   ],
@@ -32,10 +33,9 @@
   },
   // SECRETS - These must be set via `wrangler secret put <NAME>`:
   // - NEON_AUTH_COOKIE_SECRET (generate with: openssl rand -base64 32)
-  // - DATABASE_URL (failsafe: direct Neon connection string, used if Hyperdrive is unavailable)
-  // 
-  // Note: DATABASE_URL is primarily handled by Hyperdrive binding above.
-  // Setting it as a secret provides a fallback if Hyperdrive fails.
+  //
+  // DATABASE_URL is NOT needed in production — Hyperdrive binding provides
+  // the connection string via env.HYPERDRIVE.connectionString.
   "observability": {
     "logs": {
       "enabled": true

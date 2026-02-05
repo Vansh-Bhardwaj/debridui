@@ -376,11 +376,9 @@ export default function StatusPage() {
                             <div className="text-xs text-destructive">Error: {error}</div>
                         ) : (
                             <>
-                                <ServiceRow label="Environment" status={data?.checks.env.status} />
                                 <ServiceRow label="Database" status={data?.checks.db.status} />
-                                <ServiceRow label="Hyperdrive" status={data?.checks.hyperdrive?.status} />
                                 <ServiceRow label="Authentication" status={data?.checks.auth.status} />
-                                <ServiceRow label="Build" status={data?.checks.build.status} />
+                                <ServiceRow label="Deployment" status={data?.checks.build.status} />
                             </>
                         )}
                     </CardContent>
@@ -398,95 +396,84 @@ export default function StatusPage() {
                     <div className="grid gap-4 md:grid-cols-2">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Environment</CardTitle>
-                                <CardDescription>Runtime configuration & flags</CardDescription>
-                                <CardAction>
-                                    {data ? <StatusBadge status={data.checks.env.status} /> : null}
-                                </CardAction>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                <KeyValue label="App URL" value={formatValue(data?.checks.env.appUrl)} />
-                                <KeyValue label="Google OAuth" value={formatValue(data?.checks.env.googleOAuthEnabled)} />
-                                <KeyValue label="Missing" value={formatList(data?.checks.env.missing)} />
-                                <KeyValue label="Warnings" value={formatList(data?.checks.env.warnings)} />
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
                                 <CardTitle>Database</CardTitle>
-                                <CardDescription>Connectivity & latency</CardDescription>
+                                <CardDescription>Connectivity &amp; performance</CardDescription>
                                 <CardAction>
                                     {data ? <StatusBadge status={data.checks.db.status} /> : null}
                                 </CardAction>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                <KeyValue label="Host" value={formatValue(data?.checks.db.host)} />
-                                <KeyValue label="Port" value={formatValue(data?.checks.db.port)} />
+                                <KeyValue
+                                    label="Connection Mode"
+                                    value={data?.checks.connection?.viaHyperdrive ? "Hyperdrive (pooled)" : data?.checks.connection?.source === "env" || data?.checks.connection?.source === "ctx-env" ? "Direct" : "—"}
+                                />
                                 <KeyValue label="Latency" value={data?.checks.db.latencyMs ? `${data.checks.db.latencyMs}ms` : "—"} />
-                                <KeyValue label="Error" value={formatValue(data?.checks.db.error)} />
+                                {data?.checks.db.error && <KeyValue label="Error" value={data.checks.db.error} />}
                             </CardContent>
                         </Card>
 
                         <Card>
                             <CardHeader>
-                                <CardTitle>Hyperdrive</CardTitle>
-                                <CardDescription>Cloudflare connection pooling</CardDescription>
-                                <CardAction>
-                                    {data ? <StatusBadge status={data.checks.hyperdrive?.status} /> : null}
-                                </CardAction>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                <KeyValue label="Active Source" value={formatValue(data?.checks.hyperdrive?.source)} />
-                                <KeyValue label="CF Context" value={formatValue(data?.checks.hyperdrive?.cloudflareContext)} />
-                                <KeyValue label="Binding Available" value={formatValue(data?.checks.hyperdrive?.hyperdriveAvailable)} />
-                                <KeyValue label="Has Conn String" value={formatValue(data?.checks.hyperdrive?.hyperdriveHasConnectionString)} />
-                                <KeyValue label="Fallback (env)" value={formatValue(data?.checks.hyperdrive?.hasProcessEnvDbUrl)} />
-                                <KeyValue label="Fallback (ctx)" value={formatValue(data?.checks.hyperdrive?.hasCtxEnvDbUrl)} />
-                                <KeyValue label="Error" value={formatValue(data?.checks.hyperdrive?.error)} />
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Auth</CardTitle>
-                                <CardDescription>Neon Auth configuration</CardDescription>
+                                <CardTitle>Authentication</CardTitle>
+                                <CardDescription>Sign-in &amp; session management</CardDescription>
                                 <CardAction>
                                     {data ? <StatusBadge status={data.checks.auth.status} /> : null}
                                 </CardAction>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                <KeyValue label="Base URL" value={formatValue(data?.checks.auth.baseUrl)} />
-                                <KeyValue label="Cookie Prefix" value={formatValue(data?.checks.auth.cookiePrefix)} />
-                                <KeyValue label="Google OAuth" value={formatValue(data?.checks.auth.googleOAuthEnabled)} />
-                                <KeyValue label="Warnings" value={formatList(data?.checks.auth.warnings)} />
-                                <KeyValue label="Errors" value={formatList(data?.checks.auth.errors)} />
+                                <KeyValue label="Google Sign-In" value={formatValue(data?.checks.auth.googleOAuthEnabled)} />
+                                {data?.checks.auth.errors && data.checks.auth.errors.length > 0 && (
+                                    <KeyValue label="Issues" value={formatList(data.checks.auth.errors)} />
+                                )}
                             </CardContent>
                         </Card>
 
                         <Card>
                             <CardHeader>
-                                <CardTitle>Build</CardTitle>
-                                <CardDescription>Deployment metadata</CardDescription>
+                                <CardTitle>Deployment</CardTitle>
+                                <CardDescription>Current build status</CardDescription>
                                 <CardAction>
                                     {data ? <StatusBadge status={data.checks.build.status} /> : null}
                                 </CardAction>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                <KeyValue label="NODE_ENV" value={formatValue(data?.checks.build.nodeEnv)} />
-                                <KeyValue label="Build Time" value={formatValue(data?.checks.build.buildTime)} />
+                                <KeyValue label="Environment" value={data?.checks.build.nodeEnv === "production" ? "Production" : formatValue(data?.checks.build.nodeEnv)} />
+                                {data?.checks.build.buildTime && (
+                                    <KeyValue label="Last Built" value={formatValue(data.checks.build.buildTime)} />
+                                )}
                             </CardContent>
                         </Card>
+
+                        {/* Show environment warnings only if there are issues */}
+                        {data?.checks.env.status !== "ok" && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Configuration</CardTitle>
+                                    <CardDescription>Issues detected</CardDescription>
+                                    <CardAction>
+                                        {data ? <StatusBadge status={data.checks.env.status} /> : null}
+                                    </CardAction>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                    {data?.checks.env.missing && data.checks.env.missing.length > 0 && (
+                                        <KeyValue label="Missing Config" value={formatList(data.checks.env.missing)} />
+                                    )}
+                                    {data?.checks.env.warnings && data.checks.env.warnings.length > 0 && (
+                                        <KeyValue label="Warnings" value={formatList(data.checks.env.warnings)} />
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
 
-                    {/* Collapsible raw JSON */}
+                    {/* Collapsible raw JSON — developer diagnostics */}
                     <div>
                         <button
                             onClick={() => setRawExpanded(!rawExpanded)}
                             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
                         >
                             <ChevronDown className={`size-3.5 transition-transform duration-300 ${rawExpanded ? "rotate-0" : "-rotate-90"}`} />
-                            <span className="tracking-widest uppercase">Raw JSON</span>
+                            <span className="tracking-widest uppercase">Diagnostics</span>
                         </button>
                         {rawExpanded && (
                             <Card>
