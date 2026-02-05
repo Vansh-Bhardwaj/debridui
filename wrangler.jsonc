@@ -32,8 +32,10 @@
   },
   // SECRETS - These must be set via `wrangler secret put <NAME>`:
   // - NEON_AUTH_COOKIE_SECRET (generate with: openssl rand -base64 32)
+  // - DATABASE_URL (failsafe: direct Neon connection string, used if Hyperdrive is unavailable)
   // 
-  // Note: DATABASE_URL is now handled by Hyperdrive binding
+  // Note: DATABASE_URL is primarily handled by Hyperdrive binding above.
+  // Setting it as a secret provides a fallback if Hyperdrive fails.
   "observability": {
     "logs": {
       "enabled": true

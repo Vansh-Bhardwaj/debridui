@@ -378,6 +378,7 @@ export default function StatusPage() {
                             <>
                                 <ServiceRow label="Environment" status={data?.checks.env.status} />
                                 <ServiceRow label="Database" status={data?.checks.db.status} />
+                                <ServiceRow label="Hyperdrive" status={data?.checks.hyperdrive?.status} />
                                 <ServiceRow label="Authentication" status={data?.checks.auth.status} />
                                 <ServiceRow label="Build" status={data?.checks.build.status} />
                             </>
@@ -424,6 +425,25 @@ export default function StatusPage() {
                                 <KeyValue label="Port" value={formatValue(data?.checks.db.port)} />
                                 <KeyValue label="Latency" value={data?.checks.db.latencyMs ? `${data.checks.db.latencyMs}ms` : "—"} />
                                 <KeyValue label="Error" value={formatValue(data?.checks.db.error)} />
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Hyperdrive</CardTitle>
+                                <CardDescription>Cloudflare connection pooling</CardDescription>
+                                <CardAction>
+                                    {data ? <StatusBadge status={data.checks.hyperdrive?.status} /> : null}
+                                </CardAction>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <KeyValue label="Active Source" value={formatValue(data?.checks.hyperdrive?.source)} />
+                                <KeyValue label="CF Context" value={formatValue(data?.checks.hyperdrive?.cloudflareContext)} />
+                                <KeyValue label="Binding Available" value={formatValue(data?.checks.hyperdrive?.hyperdriveAvailable)} />
+                                <KeyValue label="Has Conn String" value={formatValue(data?.checks.hyperdrive?.hyperdriveHasConnectionString)} />
+                                <KeyValue label="Fallback (env)" value={formatValue(data?.checks.hyperdrive?.hasProcessEnvDbUrl)} />
+                                <KeyValue label="Fallback (ctx)" value={formatValue(data?.checks.hyperdrive?.hasCtxEnvDbUrl)} />
+                                <KeyValue label="Error" value={formatValue(data?.checks.hyperdrive?.error)} />
                             </CardContent>
                         </Card>
 
