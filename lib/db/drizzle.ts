@@ -6,6 +6,11 @@ import * as schema from "./schema";
 import * as authSchema from "./auth-schema";
 import { getEnv } from "@/lib/env";
 
+/** Minimal Hyperdrive interface (the full type lives in gitignored cloudflare-env.d.ts) */
+interface HyperdriveBinding {
+    connectionString: string;
+}
+
 type DbType = ReturnType<typeof drizzleHttp> | ReturnType<typeof drizzleServerless>;
 
 // Per-request database instance cache using WeakMap keyed by request context
@@ -23,7 +28,7 @@ const drizzleConfig = {
  * Get Hyperdrive binding from Cloudflare context (OpenNext)
  * In production on Cloudflare Workers, this accesses the HYPERDRIVE binding
  */
-function getHyperdriveFromContext(): Hyperdrive | null {
+function getHyperdriveFromContext(): HyperdriveBinding | null {
     try {
         // Dynamic import to avoid build-time issues
         // eslint-disable-next-line @typescript-eslint/no-require-imports
