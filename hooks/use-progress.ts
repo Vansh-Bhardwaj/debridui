@@ -265,7 +265,7 @@ export function useContinueWatching() {
                 try {
                     const res = await fetch("/api/progress");
                     if (res.ok) {
-                        const { progress: serverProgress } = await res.json();
+                        const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & ProgressData> };
 
                         // Merge: prefer most recent between local and server
                         const merged = new Map<string, ProgressKey & ProgressData>();

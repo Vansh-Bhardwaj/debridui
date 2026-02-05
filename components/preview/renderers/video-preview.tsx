@@ -1,7 +1,22 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
-import { LegacyVideoPreview } from "./legacy-video-preview";
+import dynamic from "next/dynamic";
+import { Loader2 } from "lucide-react";
+
+
+// Lazy load the legacy player to reduce bundle size
+const LegacyVideoPreview = dynamic(
+    () => import("./legacy-video-preview").then((mod) => mod.LegacyVideoPreview),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="h-full w-full flex items-center justify-center bg-black/50 text-white">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        ),
+    }
+);
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { DebridFileNode } from "@/lib/types";
 

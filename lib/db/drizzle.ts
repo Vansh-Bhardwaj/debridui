@@ -6,15 +6,64 @@ import * as schema from "./schema";
 import * as authSchema from "./auth-schema";
 import { getEnv } from "@/lib/env";
 
-let dbInstance: any = null;
+type DbType = ReturnType<typeof drizzleHttp> | ReturnType<typeof drizzleServerless>;
 
-// Get database connection string - uses Hyperdrive in production
-function getDatabaseUrl(): string {
-    // In Cloudflare Workers, Hyperdrive binding provides the connection string
-    // @ts-expect-error - Hyperdrive binding is injected by Cloudflare Workers
-    if (typeof globalThis.HYPERDRIVE !== "undefined" && globalThis.HYPERDRIVE?.connectionString) {
-        // @ts-expect-error - Hyperdrive binding is injected by Cloudflare Workers
-        return globalThis.HYPERDRIVE.connectionString;
+// Per-request database instance cache using WeakMap keyed by request context
+const dbCache = new WeakMap<object, DbType>();
+let fallbackDbInstance: DbType | null = null;
+
+const drizzleConfig = {
+    schema: {
+        ...schema,
+        ...authSchema,
+    },
+};
+
+/**
+ * Get Hyperdrive binding from Cloudflare context (OpenNext)
+ * In production on Cloudflare Workers, this accesses the HYPERDRIVE binding
+ */
+function getHyperdriveFromContext(): Hyperdrive | null {
+    try {
+        // Dynamic import to avoid build-time issues
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getCloudflareContext } = require("@opennextjs/cloudflare");
+        const ctx = getCloudflareContext();
+        return ctx?.env?.HYPERDRIVE ?? null;
+    } catch {
+        // Not in Cloudflare context (local dev or build time)
+        return null;
+    }
+}
+
+/**
+ * Create a database instance for the current request context
+ * Uses Hyperdrive in production Cloudflare Workers, falls back to DATABASE_URL
+ */
+function createDbInstance(): { db: DbType; isHyperdrive: boolean } {
+    const hyperdrive = getHyperdriveFromContext();
+    
+    if (hyperdrive?.connectionString) {
+        // Use Hyperdrive connection (TCP pooling via Serverless driver)
+        const connectionString = hyperdrive.connectionString;
+        
+        if (process.env.NODE_ENV === "production") {
+            try {
+                const dbUrl = new URL(connectionString);
+                console.log("[db] Using Hyperdrive", {
+                    host: dbUrl.hostname,
+                    port: dbUrl.port || "5432",
+                });
+            } catch {
+                console.log("[db] Using Hyperdrive (URL parse failed)");
+            }
+        }
+        
+        const pool = new Pool({ connectionString });
+        return {
+            db: drizzleServerless(pool, drizzleConfig),
+            isHyperdrive: true,
+        };
     }
 
     // Fallback to DATABASE_URL for local dev
@@ -22,55 +71,62 @@ function getDatabaseUrl(): string {
     if (!databaseUrl) {
         throw new Error("DATABASE_URL is not set and Hyperdrive is not available");
     }
-    return databaseUrl;
-}
-
-type DbType = ReturnType<typeof drizzleHttp> | ReturnType<typeof drizzleServerless>;
-
-export function getDb(): DbType {
-    if (dbInstance) return dbInstance;
-
-    const databaseUrl = getDatabaseUrl();
-    // @ts-expect-error - indexing globalThis
-    const isHyperdrive = databaseUrl.includes("hyperdrive") || (typeof globalThis["HYPERDRIVE"] !== "undefined");
 
     if (process.env.NODE_ENV === "production") {
         try {
             const dbUrl = new URL(databaseUrl);
-            console.log("[db] init", {
+            console.log("[db] Using direct connection (no Hyperdrive)", {
                 host: dbUrl.hostname,
                 port: dbUrl.port || "5432",
-                viaHyperdrive: isHyperdrive
             });
-        } catch (error) {
-            console.warn("[db] Failed to parse DATABASE_URL or Hyperdrive URL", error);
+        } catch {
+            console.warn("[db] Failed to parse DATABASE_URL");
         }
     }
 
-    const drizzleConfig = {
-        schema: {
-            ...schema,
-            ...authSchema,
-        },
+    const sql = neon(databaseUrl);
+    return {
+        db: drizzleHttp(sql, drizzleConfig),
+        isHyperdrive: false,
     };
-
-    // Use TCP driver (Serverless Pool) for Hyperdrive to enable TCP pooling
-    // Use HTTP driver for local dev or standard Neon connections
-    if (isHyperdrive && process.env.NODE_ENV === "production") {
-        const pool = new Pool({ connectionString: databaseUrl });
-        dbInstance = drizzleServerless(pool, drizzleConfig);
-    } else {
-        const sql = neon(databaseUrl);
-        dbInstance = drizzleHttp(sql, drizzleConfig);
-    }
-
-    return dbInstance;
 }
 
-// Support existing imports
+/**
+ * Get database instance for the current request
+ * Caches per-request in Cloudflare Workers, uses singleton for local dev
+ */
+export function getDb(): DbType {
+    // Try to get context for per-request caching
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getCloudflareContext } = require("@opennextjs/cloudflare");
+        const ctx = getCloudflareContext();
+        
+        if (ctx) {
+            // Use context as cache key for per-request isolation
+            const cached = dbCache.get(ctx);
+            if (cached) return cached;
+            
+            const { db } = createDbInstance();
+            dbCache.set(ctx, db);
+            return db;
+        }
+    } catch {
+        // Not in Cloudflare context
+    }
+
+    // Local dev: use singleton
+    if (!fallbackDbInstance) {
+        const { db } = createDbInstance();
+        fallbackDbInstance = db;
+    }
+    return fallbackDbInstance;
+}
+
+// Support existing imports with lazy evaluation per-request
 export const db = new Proxy({} as unknown as DbType, {
-    get(_target, prop: keyof DbType) {
+    get(_target, prop: string | symbol) {
         const instance = getDb();
-        return (instance as any)[prop];
+        return (instance as unknown as Record<string | symbol, unknown>)[prop];
     }
 });

@@ -7,7 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { queryClient, persistOptions } from "@/lib/query-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "@/lib/polyfills";
-import "@/lib/preview/register-renderers"; // Register preview renderers
+
 
 const Providers = ({ children }: { children: React.ReactNode }) => {
     return (

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer } from "@/lib/utils";
+import { selectBestStreamingUrl, hasLikelyCodecIssues, detectCodecSupport } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getLanguageDisplayName } from "@/lib/utils/subtitles";
 import {
@@ -132,15 +133,27 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const hasCodecIssue = isNonMP4Video(file.name);
 
-    // Prioritize Apple-native streaming link on iOS (usually HLS/m3u8)
-    const effectiveUrl = (ios && streamingLinks)
-        ? (streamingLinks.apple || streamingLinks.native || downloadUrl)
-        : downloadUrl;
+    // Smart streaming URL selection based on browser codec support
+    // Uses transcoded streams when native format likely won't work
+    const streamingSelection = useMemo(() => {
+        return selectBestStreamingUrl(downloadUrl, streamingLinks, file.name);
+    }, [downloadUrl, streamingLinks, file.name]);
 
-    // Suppress warning if we have a native streaming link that handles the codec
+    const effectiveUrl = streamingSelection.url;
+    const isUsingTranscodedStream = streamingSelection.isTranscoded;
+    const streamFormat = streamingSelection.format;
+
+    // Track if we've tried fallback to transcoded stream
+    const [triedTranscodeFallback, setTriedTranscodeFallback] = useState(false);
+    const [useDirectUrl, setUseDirectUrl] = useState(false);
+
+    // Final URL: if user requested direct, use download URL; otherwise use smart selection
+    const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
+
+    // Suppress warning if we're using a transcoded stream
     // On iOS, if we have an 'apple' or 'native' link, it's an HLS/m3u8 stream
     const isHls = ios && (!!streamingLinks?.apple || !!streamingLinks?.native);
-    const shouldShowWarning = hasCodecIssue && !isHls;
+    const shouldShowWarning = hasCodecIssue && !isHls && !isUsingTranscodedStream;
 
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
@@ -237,14 +250,42 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             loadingTimeoutRef.current = null;
         }
         setShowLoadingHint(false);
+        
+        // If we haven't tried transcoded stream yet and one is available, try it
+        if (!triedTranscodeFallback && streamingLinks && Object.keys(streamingLinks).length > 0 && !isUsingTranscodedStream) {
+            setTriedTranscodeFallback(true);
+            setIsLoading(true);
+            
+            // Force use of a transcoded stream
+            const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM || streamingLinks.dash;
+            if (transcodedUrl && transcodedUrl !== effectiveUrl) {
+                toast.info("Trying transcoded stream...", {
+                    description: "The original format wasn't supported. Switching to a compatible format.",
+                    duration: 3000,
+                });
+                // Reset the video element with the transcoded URL
+                const video = videoRef.current;
+                if (video) {
+                    video.src = transcodedUrl;
+                    video.load();
+                    if (!ios) {
+                        video.play().catch(() => {});
+                    }
+                }
+                return;
+            }
+        }
+        
         setError(true);
         const errorMessage = "Failed to load video";
         toast.error(errorMessage, {
-            description: "The video could not be loaded. This might be due to an unsupported format or a network issue.",
+            description: hasCodecIssue 
+                ? "This video format isn't supported by your browser. Try opening in an external player like VLC."
+                : "The video could not be loaded. This might be due to an unsupported format or a network issue.",
             duration: 5000,
         });
         onError?.(new Error(errorMessage));
-    }, [onError]);
+    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, ios]);
 
     const handleTimeUpdate = useCallback(() => {
         const el = videoRef.current;
@@ -891,17 +932,38 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <AlertCircle className="h-12 w-12 mb-2" />
                     <p className="text-sm">Failed to load video</p>
                     <p className="text-xs text-white/70 mt-1">{file.name}</p>
+                    {streamingLinks && Object.keys(streamingLinks).length > 0 && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => {
+                                setError(false);
+                                setIsLoading(true);
+                                setTriedTranscodeFallback(true);
+                                const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM;
+                                if (transcodedUrl && videoRef.current) {
+                                    videoRef.current.src = transcodedUrl;
+                                    videoRef.current.load();
+                                    if (!ios) videoRef.current.play().catch(() => {});
+                                }
+                            }}
+                        >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Try Transcoded Format
+                        </Button>
+                    )}
                 </div>
             ) : (
                 <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative">
                     <video
                         ref={videoRef}
-                        src={canStartPlayback ? effectiveUrl : undefined}
+                        src={canStartPlayback ? finalUrl : undefined}
                         controls={ios}
                         autoPlay={!ios && canStartPlayback}
                         playsInline
-                        preload={ios && !isHls ? "none" : "metadata"}
-                        crossOrigin={isHls ? "anonymous" : undefined}
+                        preload={ios && !isHls && !isUsingTranscodedStream ? "none" : "metadata"}
+                        crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black"
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
@@ -1326,29 +1388,50 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 <Play className="h-10 w-10 fill-current ml-1" />
                             </div>
                             <span className="text-sm font-medium">Tap to play</span>
+                            {hasCodecIssue && !isUsingTranscodedStream && (
+                                <span className="text-xs text-white/70 max-w-xs text-center px-4">
+                                    This format may not play in Safari. If playback fails, use an external player app.
+                                </span>
+                            )}
                         </button>
                     )}
 
-                    {/* iOS: if loading takes too long, stream may not support Range requests */}
+                    {/* iOS: if loading takes too long, stream may not support Range requests or codec is unsupported */}
                     {ios && showLoadingHint && (
                         <div className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
-                            <p className="mb-3 font-medium">Video taking too long? The stream may not work in Safari.</p>
-                            <div className="flex flex-wrap justify-center gap-4">
+                            <p className="mb-2 font-medium">Video taking too long?</p>
+                            <p className="mb-3 text-white/70">
+                                {hasCodecIssue 
+                                    ? "This video format (MKV/AC3/DTS) isn't supported on iOS Safari."
+                                    : "The stream may not work in Safari."}
+                            </p>
+                            <p className="mb-3 text-white/70">Open with an external player app:</p>
+                            <div className="flex flex-wrap justify-center gap-3">
                                 <button
                                     type="button"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
                                     onClick={() => openInExternalPlayer(MediaPlayer.VLC)}>
                                     <ExternalLink className="h-3 w-3" />
-                                    Open in VLC
+                                    VLC
                                 </button>
                                 <button
                                     type="button"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                                    onClick={() => openInExternalPlayer(MediaPlayer.MPV)}>
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition-colors"
+                                    onClick={() => openInExternalPlayer(MediaPlayer.INFUSE)}>
                                     <ExternalLink className="h-3 w-3" />
-                                    Open in MPV
+                                    Infuse
                                 </button>
                             </div>
+                            <p className="mt-3 text-[10px] text-white/50">
+                                Don&apos;t have these apps?{" "}
+                                <a href="https://apps.apple.com/app/vlc-media-player/id650377962" target="_blank" rel="noopener" className="underline">
+                                    Get VLC
+                                </a>
+                                {" or "}
+                                <a href="https://apps.apple.com/app/infuse-7/id1136220934" target="_blank" rel="noopener" className="underline">
+                                    Get Infuse
+                                </a>
+                            </p>
                         </div>
                     )}
                 </div>

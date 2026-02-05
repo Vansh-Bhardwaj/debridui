@@ -8,6 +8,8 @@ import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
+import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
+
 
 // App layout - requires at least one account
 // Redirect logic is centralized in AuthProvider
@@ -37,6 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarInset>
             </SidebarProvider>
             <PreviewDialog />
+            <PreviewRegistryLoader />
         </SearchProvider>
     );
 }

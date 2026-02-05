@@ -34,7 +34,14 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const body = await request.json();
+        const body = await request.json() as {
+            imdbId?: string;
+            type?: string;
+            season?: number;
+            episode?: number;
+            progressSeconds?: number;
+            durationSeconds?: number;
+        };
         const { imdbId, type, season, episode, progressSeconds, durationSeconds } = body;
 
         // Validate required fields

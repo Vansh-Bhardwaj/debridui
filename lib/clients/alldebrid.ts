@@ -77,6 +77,9 @@ interface AddFileResponse {
     files: ({ file: string } & BaseInfo & ErrorResponse)[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface AllDebridResponse { status: string; error?: { message?: string; code?: string }; data: any }
+
 interface AddTorrentResponse {
     magnets: ({ magnet: string } & BaseInfo & ErrorResponse)[];
 }
@@ -118,7 +121,7 @@ export default class AllDebridClient extends BaseClient {
             throw new Error(`API request failed for ${path}: ${response.statusText}`);
         }
 
-        const data = await response.json();
+        const data: AllDebridResponse = await response.json();
         AllDebridClient.validateResponse(data);
         return data.data;
     }
@@ -130,7 +133,7 @@ export default class AllDebridClient extends BaseClient {
             headers: { Authorization: `Bearer ${apiKey}` },
         });
 
-        const data = await response.json();
+        const data: AllDebridResponse = await response.json();
         this.validateResponse(data);
 
         const { user } = data.data;
@@ -157,7 +160,7 @@ export default class AllDebridClient extends BaseClient {
     }> {
         const url = `https://api.alldebrid.com/v4.1/pin/get?agent=${USER_AGENT}`;
         const response = await fetch(url);
-        const data = await response.json();
+        const data: AllDebridResponse = await response.json();
 
         this.validateResponse(data);
 
@@ -186,7 +189,7 @@ export default class AllDebridClient extends BaseClient {
                 body: formData,
             });
 
-            const data = await response.json();
+            const data: AllDebridResponse = await response.json();
             this.validateResponse(data);
 
             if (data.data.activated) {

@@ -111,10 +111,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, [session]);
 
     // Centralized redirect logic - single source of truth for all auth redirects
+    // Added resilience: don't redirect on transient errors, only when definitively no session
     useEffect(() => {
         if (isSessionPending || isAccountsLoading) return;
 
-        // No session → login
+        // Don't redirect to login if there's a session error - show error screen instead
+        // This prevents logouts from transient network issues
+        if (sessionError && !session) {
+            // Session check failed with error - don't redirect, let error screen handle it
+            return;
+        }
+
+        // No session and no error → user is genuinely not logged in
         if (!session) {
             router.push("/login");
             return;
@@ -133,7 +141,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!hasAccounts && !isOnboarding) {
             router.push("/onboarding");
         }
-    }, [session, isSessionPending, isAccountsLoading, userAccounts.length, pathname, router]);
+    }, [session, sessionError, isSessionPending, isAccountsLoading, userAccounts.length, pathname, router]);
 
     // Sync currentAccountId to localStorage when it changes
     useEffect(() => {

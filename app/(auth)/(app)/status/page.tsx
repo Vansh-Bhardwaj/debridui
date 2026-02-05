@@ -1,13 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+    Activity,
+    AlertTriangle,
+    CheckCircle2,
+    ChevronDown,
+    Monitor,
+    RefreshCw,
+    Smartphone,
+    XCircle,
+} from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { SectionDivider } from "@/components/section-divider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { detectCodecSupport, isIOS, isSafari, type CodecSupport } from "@/lib/utils/codec-support";
 import type { CheckStatus, HealthResponse } from "@/lib/health";
 
 type StatusMeta = {
@@ -55,10 +66,219 @@ function KeyValue({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex items-center justify-between gap-4 text-xs">
             <span className="text-muted-foreground">{label}</span>
-            <span className="font-mono text-foreground text-right">{value}</span>
+            <span className="font-mono text-foreground text-right truncate max-w-[60%]">{value}</span>
         </div>
     );
 }
+
+// — Inline service status row for overview card
+function ServiceRow({ label, status }: { label: string; status?: CheckStatus }) {
+    if (!status) return null;
+    const meta = STATUS_META[status];
+    const Icon = meta.Icon;
+    return (
+        <div className="flex items-center justify-between py-1.5">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className={`inline-flex items-center gap-1.5 text-xs ${status === "ok" ? "text-green-600" : status === "degraded" ? "text-yellow-600" : "text-destructive"}`}>
+                <Icon className="size-3" />
+                {meta.label}
+            </span>
+        </div>
+    );
+}
+
+// — Codec support indicator
+function CodecRow({ label, supported, category }: { label: string; supported: boolean; category?: string }) {
+    return (
+        <div className="flex items-center justify-between py-1.5">
+            <div className="flex items-center gap-2">
+                <span className="text-xs">{label}</span>
+                {category && <span className="text-[10px] text-muted-foreground/60 tracking-wide uppercase">{category}</span>}
+            </div>
+            {supported ? (
+                <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircle2 className="size-3" /> Supported
+                </span>
+            ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <XCircle className="size-3" /> Unsupported
+                </span>
+            )}
+        </div>
+    );
+}
+
+// — Browser detection
+function getBrowserInfo() {
+    if (typeof navigator === "undefined") return { name: "Unknown", version: "" };
+    const ua = navigator.userAgent;
+    if (/Edg\//.test(ua)) return { name: "Edge", version: ua.match(/Edg\/([\d.]+)/)?.[1] ?? "" };
+    if (/OPR\//.test(ua)) return { name: "Opera", version: ua.match(/OPR\/([\d.]+)/)?.[1] ?? "" };
+    if (/Chrome\//.test(ua) && !/Edg/.test(ua)) return { name: "Chrome", version: ua.match(/Chrome\/([\d.]+)/)?.[1] ?? "" };
+    if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return { name: "Safari", version: ua.match(/Version\/([\d.]+)/)?.[1] ?? "" };
+    if (/Firefox\//.test(ua)) return { name: "Firefox", version: ua.match(/Firefox\/([\d.]+)/)?.[1] ?? "" };
+    return { name: "Unknown", version: "" };
+}
+
+function getPlatformInfo() {
+    if (typeof navigator === "undefined") return { os: "Unknown", device: "Unknown" };
+    const ua = navigator.userAgent;
+    const ios = isIOS();
+    const isMac = /Macintosh/.test(ua);
+    const isWindows = /Windows/.test(ua);
+    const isAndroid = /Android/.test(ua);
+    const isLinux = /Linux/.test(ua) && !isAndroid;
+
+    const os = ios ? "iOS" : isMac ? "macOS" : isWindows ? "Windows" : isAndroid ? "Android" : isLinux ? "Linux" : "Unknown";
+    const device = ios || isAndroid ? "Mobile" : "Desktop";
+    return { os, device };
+}
+
+// — Compatibility tab content
+const CompatibilitySection = memo(function CompatibilitySection() {
+    const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
+    const [browser, setBrowser] = useState<{ name: string; version: string }>({ name: "—", version: "" });
+    const [platform, setPlatform] = useState<{ os: string; device: string }>({ os: "—", device: "—" });
+
+    useEffect(() => {
+        setCodecSupport(detectCodecSupport());
+        setBrowser(getBrowserInfo());
+        setPlatform(getPlatformInfo());
+    }, []);
+
+    const safari = typeof navigator !== "undefined" && isSafari();
+    const ios = typeof navigator !== "undefined" && isIOS();
+
+    // Compute overall playback rating
+    const playbackRating = useMemo(() => {
+        if (!codecSupport) return null;
+        const videoScore = [codecSupport.h264, codecSupport.hevc, codecSupport.vp9, codecSupport.av1].filter(Boolean).length;
+        const audioScore = [codecSupport.aac, codecSupport.ac3, codecSupport.eac3, codecSupport.dts, codecSupport.opus].filter(Boolean).length;
+        const total = videoScore + audioScore;
+        if (total >= 7) return { label: "Excellent", status: "ok" as CheckStatus, detail: "Most formats will play natively" };
+        if (total >= 4) return { label: "Good", status: "ok" as CheckStatus, detail: "Common formats supported, some may need transcoding" };
+        if (total >= 2) return { label: "Limited", status: "degraded" as CheckStatus, detail: "Many formats will need transcoding for playback" };
+        return { label: "Poor", status: "error" as CheckStatus, detail: "Most formats will require transcoding or an external player" };
+    }, [codecSupport]);
+
+    return (
+        <div className="space-y-4">
+            {/* Device & Browser */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-3">
+                        {platform.device === "Mobile" ? (
+                            <Smartphone className="size-4 text-primary" />
+                        ) : (
+                            <Monitor className="size-4 text-primary" />
+                        )}
+                        Your Device
+                    </CardTitle>
+                    <CardDescription>Browser and platform information</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    <KeyValue label="Browser" value={browser.version ? `${browser.name} ${browser.version}` : browser.name} />
+                    <KeyValue label="Platform" value={platform.os} />
+                    <KeyValue label="Device" value={platform.device} />
+                    {ios && <KeyValue label="iOS Mode" value="Yes — HLS preferred for best playback" />}
+                    {safari && !ios && <KeyValue label="Safari Mode" value="Yes — HLS preferred for best playback" />}
+                </CardContent>
+            </Card>
+
+            {/* Playback Rating */}
+            {playbackRating && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Playback Compatibility</CardTitle>
+                        <CardDescription>{playbackRating.detail}</CardDescription>
+                        <CardAction>
+                            <StatusBadge status={playbackRating.status} />
+                        </CardAction>
+                    </CardHeader>
+                </Card>
+            )}
+
+            {/* Video Codecs */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Video Codecs</CardTitle>
+                    <CardDescription>Native browser video format support</CardDescription>
+                </CardHeader>
+                {codecSupport && (
+                    <CardContent className="space-y-0.5">
+                        <CodecRow label="H.264 / AVC" supported={codecSupport.h264} />
+                        <CodecRow label="H.265 / HEVC" supported={codecSupport.hevc} />
+                        <CodecRow label="VP9" supported={codecSupport.vp9} />
+                        <CodecRow label="AV1" supported={codecSupport.av1} />
+                    </CardContent>
+                )}
+            </Card>
+
+            {/* Audio Codecs */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Audio Codecs</CardTitle>
+                    <CardDescription>Native browser audio format support</CardDescription>
+                </CardHeader>
+                {codecSupport && (
+                    <CardContent className="space-y-0.5">
+                        <CodecRow label="AAC" supported={codecSupport.aac} />
+                        <CodecRow label="MP3" supported={codecSupport.mp3} />
+                        <CodecRow label="Opus" supported={codecSupport.opus} />
+                        <CodecRow label="FLAC" supported={codecSupport.flac} />
+                        <div className="pt-2">
+                            <SectionDivider label="Surround Sound" />
+                        </div>
+                        <CodecRow label="AC3 / Dolby Digital" supported={codecSupport.ac3} />
+                        <CodecRow label="E-AC3 / Dolby Digital Plus" supported={codecSupport.eac3} />
+                        <CodecRow label="DTS" supported={codecSupport.dts} />
+                        <CodecRow label="Dolby TrueHD" supported={codecSupport.truehd} />
+                    </CardContent>
+                )}
+            </Card>
+
+            {/* Tips */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Playback Tips</CardTitle>
+                    <CardDescription>Getting the best experience</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ul className="space-y-2 text-xs text-muted-foreground">
+                        {ios && (
+                            <li className="flex gap-2">
+                                <span className="text-primary shrink-0">•</span>
+                                <span>iOS Safari has limited codec support. The player will auto-select HLS streams when available for best results.</span>
+                            </li>
+                        )}
+                        {codecSupport && !codecSupport.ac3 && !codecSupport.eac3 && (
+                            <li className="flex gap-2">
+                                <span className="text-primary shrink-0">•</span>
+                                <span>Your browser cannot play AC3/E-AC3 audio natively. MKV files with Dolby audio will be auto-transcoded for playback.</span>
+                            </li>
+                        )}
+                        {codecSupport && !codecSupport.hevc && (
+                            <li className="flex gap-2">
+                                <span className="text-primary shrink-0">•</span>
+                                <span>HEVC/H.265 is not supported. 4K HDR content encoded in HEVC may need an external player like VLC or Infuse.</span>
+                            </li>
+                        )}
+                        <li className="flex gap-2">
+                            <span className="text-primary shrink-0">•</span>
+                            <span>For files that won&apos;t play, use the download option and open in VLC, Infuse, or another native player.</span>
+                        </li>
+                        {browser.name === "Chrome" && (
+                            <li className="flex gap-2">
+                                <span className="text-primary shrink-0">•</span>
+                                <span>Chrome has the broadest codec support. Most files should play natively without transcoding.</span>
+                            </li>
+                        )}
+                    </ul>
+                </CardContent>
+            </Card>
+        </div>
+    );
+});
 
 export default function StatusPage() {
     const [data, setData] = useState<HealthResponse | null>(null);
@@ -66,6 +286,7 @@ export default function StatusPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const [refreshInterval, setRefreshInterval] = useState("60000");
+    const [rawExpanded, setRawExpanded] = useState(false);
 
     const fetchHealth = useCallback(async () => {
         setIsLoading(true);
@@ -108,7 +329,7 @@ export default function StatusPage() {
             <PageHeader
                 icon={Activity}
                 title="System Status"
-                description="Live status of key services and integrations"
+                description="Live status of services, integrations, and device compatibility"
                 action={
                     <div className="flex flex-wrap items-center gap-2">
                         <div className="flex items-center gap-2">
@@ -134,6 +355,7 @@ export default function StatusPage() {
                 }
             />
 
+            {/* Overview */}
             <section className="space-y-4">
                 <SectionDivider label="Overview" />
                 <Card>
@@ -143,113 +365,125 @@ export default function StatusPage() {
                             {overallMeta.label}
                         </CardTitle>
                         <CardDescription>
-                            {lastUpdated ? `Last updated ${lastUpdated}` : "Checking status..."}
+                            {lastUpdated ? `Last checked ${lastUpdated}` : "Checking status..."}
                         </CardDescription>
                         <CardAction>
                             <StatusBadge status={overallStatus} />
                         </CardAction>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-0.5">
                         {error ? (
                             <div className="text-xs text-destructive">Error: {error}</div>
                         ) : (
-                            <div className="text-xs text-muted-foreground">
-                                All checks run directly from the production environment.
-                            </div>
+                            <>
+                                <ServiceRow label="Environment" status={data?.checks.env.status} />
+                                <ServiceRow label="Database" status={data?.checks.db.status} />
+                                <ServiceRow label="Authentication" status={data?.checks.auth.status} />
+                                <ServiceRow label="Build" status={data?.checks.build.status} />
+                            </>
                         )}
                     </CardContent>
                 </Card>
             </section>
 
-            <section className="space-y-4">
-                <SectionDivider label="Checks" />
+            {/* Tabs: Services + Compatibility */}
+            <Tabs defaultValue="services">
+                <TabsList variant="line" className="w-full justify-start">
+                    <TabsTrigger value="services">Services</TabsTrigger>
+                    <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
+                </TabsList>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Environment</CardTitle>
-                            <CardDescription>Runtime configuration & flags</CardDescription>
-                            <CardAction>
-                                {data ? <StatusBadge status={data.checks.env.status} /> : null}
-                            </CardAction>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <KeyValue label="App URL" value={formatValue(data?.checks.env.appUrl)} />
-                            <KeyValue
-                                label="Google OAuth"
-                                value={formatValue(data?.checks.env.googleOAuthEnabled)}
-                            />
-                            <KeyValue label="Missing" value={formatList(data?.checks.env.missing)} />
-                            <KeyValue label="Warnings" value={formatList(data?.checks.env.warnings)} />
-                        </CardContent>
-                    </Card>
+                <TabsContent value="services" className="space-y-4 pt-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Environment</CardTitle>
+                                <CardDescription>Runtime configuration & flags</CardDescription>
+                                <CardAction>
+                                    {data ? <StatusBadge status={data.checks.env.status} /> : null}
+                                </CardAction>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <KeyValue label="App URL" value={formatValue(data?.checks.env.appUrl)} />
+                                <KeyValue label="Google OAuth" value={formatValue(data?.checks.env.googleOAuthEnabled)} />
+                                <KeyValue label="Missing" value={formatList(data?.checks.env.missing)} />
+                                <KeyValue label="Warnings" value={formatList(data?.checks.env.warnings)} />
+                            </CardContent>
+                        </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Database</CardTitle>
-                            <CardDescription>Connectivity & latency</CardDescription>
-                            <CardAction>
-                                {data ? <StatusBadge status={data.checks.db.status} /> : null}
-                            </CardAction>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <KeyValue label="Host" value={formatValue(data?.checks.db.host)} />
-                            <KeyValue label="Port" value={formatValue(data?.checks.db.port)} />
-                            <KeyValue label="Latency" value={formatValue(data?.checks.db.latencyMs)} />
-                            <KeyValue label="Error" value={formatValue(data?.checks.db.error)} />
-                        </CardContent>
-                    </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Database</CardTitle>
+                                <CardDescription>Connectivity & latency</CardDescription>
+                                <CardAction>
+                                    {data ? <StatusBadge status={data.checks.db.status} /> : null}
+                                </CardAction>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <KeyValue label="Host" value={formatValue(data?.checks.db.host)} />
+                                <KeyValue label="Port" value={formatValue(data?.checks.db.port)} />
+                                <KeyValue label="Latency" value={data?.checks.db.latencyMs ? `${data.checks.db.latencyMs}ms` : "—"} />
+                                <KeyValue label="Error" value={formatValue(data?.checks.db.error)} />
+                            </CardContent>
+                        </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Auth</CardTitle>
-                            <CardDescription>Neon Auth configuration</CardDescription>
-                            <CardAction>
-                                {data ? <StatusBadge status={data.checks.auth.status} /> : null}
-                            </CardAction>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <KeyValue label="Base URL" value={formatValue(data?.checks.auth.baseUrl)} />
-                            <KeyValue label="Cookie Prefix" value={formatValue(data?.checks.auth.cookiePrefix)} />
-                            <KeyValue
-                                label="Google OAuth"
-                                value={formatValue(data?.checks.auth.googleOAuthEnabled)}
-                            />
-                            <KeyValue label="Warnings" value={formatList(data?.checks.auth.warnings)} />
-                            <KeyValue label="Errors" value={formatList(data?.checks.auth.errors)} />
-                        </CardContent>
-                    </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Auth</CardTitle>
+                                <CardDescription>Neon Auth configuration</CardDescription>
+                                <CardAction>
+                                    {data ? <StatusBadge status={data.checks.auth.status} /> : null}
+                                </CardAction>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <KeyValue label="Base URL" value={formatValue(data?.checks.auth.baseUrl)} />
+                                <KeyValue label="Cookie Prefix" value={formatValue(data?.checks.auth.cookiePrefix)} />
+                                <KeyValue label="Google OAuth" value={formatValue(data?.checks.auth.googleOAuthEnabled)} />
+                                <KeyValue label="Warnings" value={formatList(data?.checks.auth.warnings)} />
+                                <KeyValue label="Errors" value={formatList(data?.checks.auth.errors)} />
+                            </CardContent>
+                        </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Build</CardTitle>
-                            <CardDescription>Deployment metadata</CardDescription>
-                            <CardAction>
-                                {data ? <StatusBadge status={data.checks.build.status} /> : null}
-                            </CardAction>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <KeyValue label="NODE_ENV" value={formatValue(data?.checks.build.nodeEnv)} />
-                            <KeyValue label="Build Time" value={formatValue(data?.checks.build.buildTime)} />
-                        </CardContent>
-                    </Card>
-                </div>
-            </section>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Build</CardTitle>
+                                <CardDescription>Deployment metadata</CardDescription>
+                                <CardAction>
+                                    {data ? <StatusBadge status={data.checks.build.status} /> : null}
+                                </CardAction>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <KeyValue label="NODE_ENV" value={formatValue(data?.checks.build.nodeEnv)} />
+                                <KeyValue label="Build Time" value={formatValue(data?.checks.build.buildTime)} />
+                            </CardContent>
+                        </Card>
+                    </div>
 
-            <section className="space-y-4">
-                <SectionDivider label="Raw" />
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Health JSON</CardTitle>
-                        <CardDescription>/api/health response</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <pre className="max-h-80 overflow-auto rounded-sm border border-border/50 bg-muted/30 p-4 text-xs">
-                            {rawJson || "Loading..."}
-                        </pre>
-                    </CardContent>
-                </Card>
-            </section>
+                    {/* Collapsible raw JSON */}
+                    <div>
+                        <button
+                            onClick={() => setRawExpanded(!rawExpanded)}
+                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+                        >
+                            <ChevronDown className={`size-3.5 transition-transform duration-300 ${rawExpanded ? "rotate-0" : "-rotate-90"}`} />
+                            <span className="tracking-widest uppercase">Raw JSON</span>
+                        </button>
+                        {rawExpanded && (
+                            <Card>
+                                <CardContent className="pt-4">
+                                    <pre className="max-h-80 overflow-auto rounded-sm border border-border/50 bg-muted/30 p-4 text-xs">
+                                        {rawJson || "Loading..."}
+                                    </pre>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="compatibility" className="space-y-4 pt-4">
+                    <CompatibilitySection />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
