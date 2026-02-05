@@ -1,137 +1,259 @@
+<div align="center">
+
 # DebridUI
 
-Fork of [viperadnan-git/debridui](https://github.com/viperadnan-git/debridui). Live at [debrid.indevs.in](https://debrid.indevs.in).
+**A modern debrid client with built-in playback, continue watching, and subtitle support.**
 
-<p align="center">
-  <a href="https://debrid.indevs.in"><img src="https://img.shields.io/website?url=https%3A%2F%2Fdebrid.indevs.in&label=Deployment&color=brightgreen" alt="Deployment" /></a>
-  <a href="https://nextjs.org"><img src="https://img.shields.io/github/package-json/dependency-version/Vansh-Bhardwaj/debridui/next?logo=next.js&logoColor=white&label=Next.js&color=black" alt="Next.js" /></a>
-  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/github/package-json/dependency-version/Vansh-Bhardwaj/debridui/dev/typescript?logo=typescript&logoColor=white&label=TypeScript&color=3178C6" alt="TypeScript" /></a>
-  <a href="https://tailwindcss.com"><img src="https://img.shields.io/github/package-json/dependency-version/Vansh-Bhardwaj/debridui/dev/tailwindcss?logo=tailwind-css&logoColor=white&label=Tailwind&color=06B6D4" alt="Tailwind CSS" /></a>
-  <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/Vansh-Bhardwaj/debridui?color=%23E8E2D8">
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Vansh-Bhardwaj/debridui?color=blue" alt="License" /></a>
-</p>
+Edge-deployed on Cloudflare Workers for fast, global access.
 
-A modern, fast debrid client with integrated media discovery and streaming capabilities.
+<br />
+
+<a href="https://debrid.indevs.in"><img src="https://img.shields.io/website?url=https%3A%2F%2Fdebrid.indevs.in&label=Live%20Demo&style=for-the-badge&color=brightgreen" alt="Live Demo" /></a>
+&nbsp;
+<a href="https://github.com/Vansh-Bhardwaj/debridui"><img src="https://img.shields.io/github/stars/Vansh-Bhardwaj/debridui?style=for-the-badge&color=yellow&logo=github" alt="Stars" /></a>
+&nbsp;
+<a href="./LICENSE"><img src="https://img.shields.io/github/license/Vansh-Bhardwaj/debridui?style=for-the-badge&color=blue" alt="License" /></a>
+
+<br />
+
+<a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-black?style=flat-square&logo=next.js&logoColor=white" alt="Next.js" /></a>
+<a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+<a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
+<a href="https://workers.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
+<a href="https://neon.tech"><img src="https://img.shields.io/badge/Neon_PostgreSQL-00E599?style=flat-square&logo=postgresql&logoColor=white" alt="Neon" /></a>
+<a href="https://orm.drizzle.team"><img src="https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=flat-square&logo=drizzle&logoColor=black" alt="Drizzle" /></a>
+
+</div>
+
+<br />
 
 > [!IMPORTANT]
-> This project does not provide, host, or stream any content. DebridUI is a client interface that connects to third-party debrid service APIs to display authorized users' private files and content. [Read full disclaimer](DISCLAIMER.md).
+> This project does not provide, host, or stream any content. DebridUI is a client interface that connects to third-party debrid service APIs to display authorized users' private files and content. [Read full disclaimer →](DISCLAIMER.md)
 
-## Community Hosted Instances
+---
 
-- [https://debrid.indevs.in](https://debrid.indevs.in) - This fork's deployment
-- [https://debridui.viperadnan.com](https://debridui.viperadnan.com) - Original (viperadnan)
+## 🎬 About
 
-## Features
+DebridUI is an open-source web client for managing debrid service files and streaming media. This fork builds on the excellent foundation by [@viperadnan](https://github.com/viperadnan-git/debridui) — whose continuous work on the original project made this possible — and adds a set of features focused on playback, performance, and edge deployment.
 
-### File Management
+| Instance | Stack |
+|---|---|
+| 🌐 **[debrid.indevs.in](https://debrid.indevs.in)** | This fork — Cloudflare Workers |
+| 🌐 [debridui.viperadnan.com](https://debridui.viperadnan.com) | Original by viperadnan |
 
-- **Multi-account support** - Manage multiple debrid accounts seamlessly
-- **Real-time file tracking** - Live updates for download progress and status
-- **Advanced file explorer** - Tree view, search, sorting, and batch operations
-- **Direct streaming** - Stream to VLC, IINA, MPV, PotPlayer, Kodi, MX Player
-- **Drag & drop uploads** - Upload files and links easily
+---
 
-### Media Discovery
+## ✨ Highlights
 
-- **Trakt.tv catalogue** - Browse trending movies and TV shows
-- **Smart search** - Find content across multiple sources
-- **Media details** - Cast info, ratings, trailers, and recommendations
-- **Season/episode browser** - Navigate TV shows with ease
+This fork extends the original with several additions:
 
-### User Experience
+<table>
+<tr>
+<td width="50%" valign="top">
 
-- **Dark/Light mode** - Automatic theme switching
-- **Responsive design** - Works on desktop, tablet, and mobile
-- **Keyboard shortcuts** - Quick navigation with Cmd/Ctrl+K search
-- **Progress tracking** - Visual indicators for active downloads
-- **Context menus** - Right-click actions for quick operations
+### 🎥 Streaming & Playback
+- **Built-in video player** with codec detection and iOS fixes
+- **Continue watching** — resume where you left off, on any device
+- **Subtitle integration** from Stremio addons via proxy
+- **External players** — VLC (Android/iOS/desktop), IINA, MPV, Kodi & more
+- **Smart addon filtering** — stream & subtitle addons queried separately
+- **Cancel button** on the streaming lookup toast
 
-## Getting Started
+</td>
+<td width="50%" valign="top">
+
+### ⚡ Performance & Infrastructure
+- **Cloudflare Workers** — edge-deployed globally
+- **Hyperdrive** — connection pooling & query caching for PostgreSQL
+- **Adaptive polling** — 5–30s dynamic intervals, pauses in background
+- **Optimized DB queries** — upserts, batched reordering, ON CONFLICT
+- **Health monitoring** — public `/status` page with live checks
+- **Cache-Control headers** on API responses
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 📂 File Management
+- **Multi-account** — Real-Debrid, TorBox, AllDebrid
+- **Advanced explorer** — tree view, search, sort, batch operations
+- **Drag & drop** — upload torrents, magnets, and files
+- **Web downloads** — direct URL downloads with progress
+
+</td>
+<td width="50%" valign="top">
+
+### 🔍 Media Discovery
+- **Trakt.tv** — trending, popular, and recommended titles
+- **Stremio addon search** across all configured sources
+- **YouTube trailers** — embedded previews on media pages
+- **Detailed pages** — cast, ratings, season & episode browser
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><strong>Comparison with upstream</strong></summary>
+
+<br />
+
+> Both projects are actively developed. The upstream focuses on a clean, universal deployment; this fork leans into Cloudflare edge deployment and adds playback features.
+
+| Area | This Fork | Upstream |
+|---|---|---|
+| Deployment | Cloudflare Workers + Hyperdrive | Vercel / standalone |
+| Database driver | `postgres` (Postgres.js) via TCP proxy | `@neondatabase/serverless` |
+| Built-in video player | ✅ Codec detection, iOS fixes | External player links |
+| Continue watching | ✅ Cross-device progress | — |
+| Subtitle support | ✅ Proxy-based from addons | — |
+| Addon filtering | ✅ Manifest-based capability check | All addons queried |
+| VLC iOS | ✅ Platform-specific URLs | Single scheme |
+| Streaming cancel | ✅ Cancel button on toast | — |
+| Addon catalog browser | — | ✅ Browse community addons |
+| CDN image proxy | — | ✅ wsrv.nl optimization |
+| Adaptive polling | ✅ 5–30s dynamic | Fixed interval |
+| Health / Status | ✅ Public status page | — |
+
+</details>
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 20+ or Bun
-- PostgreSQL 14+
-- A debrid account (Real-Debrid, TorBox, AllDebrid supported)
+- [Bun](https://bun.sh) 1.2+ (or Node.js 20+)
+- [Neon](https://neon.tech) PostgreSQL database
+- [Cloudflare](https://cloudflare.com) account (for production)
+- A debrid account — Real-Debrid, TorBox, or AllDebrid
 
-### Configuration
-
-Copy `.env.example` to `.env.local` and fill in the required values:
-
-```bash
-cp .env.example .env.local
-```
-
-See [`.env.example`](.env.example) for all available environment variables and their descriptions.
-
-### Installation
+### Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/Vansh-Bhardwaj/debridui
 cd debridui
-
-# Install dependencies
 bun install
-
-# Configure environment (see Configuration section above)
-cp .env.example .env.local
-
-# Set up database
+cp .env.example .env.local   # then edit with your values
 bunx drizzle-kit push
-
-# Run development server
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to access the app.
+Open **[http://localhost:3000](http://localhost:3000)** and you're in.
 
-### Deployment
+<details>
+<summary><strong>Environment Variables</strong></summary>
 
-**Vercel (Recommended):**
+<br />
 
-1. Push code to GitHub
-2. Import project on [Vercel](https://vercel.com)
-3. Add PostgreSQL database (Vercel Postgres, Neon, Supabase, etc.)
-4. Configure environment variables
-5. Deploy
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Dev only | PostgreSQL connection string (prod uses Hyperdrive) |
+| `NEON_AUTH_COOKIE_SECRET` | ✅ | Cookie encryption — `openssl rand -base64 32` |
+| `NEXT_PUBLIC_APP_URL` | ✅ | Public deployment URL |
+| `NEXT_PUBLIC_CORS_PROXY_URL` | ✅ | CORS proxy for addon API requests |
+| `NEXT_PUBLIC_TRAKT_CLIENT_ID` | ✅ | Trakt.tv API client ID |
+| `NEXT_PUBLIC_NEON_AUTH_URL` | ✅ | Neon Auth endpoint |
+| `NEON_AUTH_BASE_URL` | ✅ | Neon Auth base URL (server-side) |
+| `NEXT_PUBLIC_DISCORD_URL` | — | Discord invite link (shown in UI) |
+| `NEXT_PUBLIC_DISABLE_EMAIL_SIGNUP` | — | `"true"` to disable email signup |
 
-**Standalone (Self-hosted):**
+See [`.env.example`](.env.example) for a full template.
 
-This app uses Next.js standalone output for optimized self-hosting.
+</details>
 
-**Environment Variables:**
-Ensure all required environment variables from [`.env.example`](.env.example) are set in your production environment.
+<details>
+<summary><strong>Deploy to Cloudflare Workers</strong></summary>
+
+<br />
+
+This fork uses [@opennextjs/cloudflare](https://opennext.js.org/cloudflare) for Cloudflare Workers deployment:
 
 ```bash
-# Build the app
 bun run build
-
-# Static files are automatically copied to .next/standalone via postbuild script
-
-# Start the server
-NODE_ENV=production node .next/standalone/server.js
+bunx wrangler deploy
 ```
 
-## CORS Proxy
+**Full setup:**
 
-Addons require a CORS proxy to function. Deploy `proxy.worker.js` to Cloudflare Workers:
+1. Create a [Neon](https://neon.tech) database
+2. Create a [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) config pointing to it
+3. Update `wrangler.jsonc` with your Hyperdrive ID and env vars
+4. Set secrets: `bunx wrangler secret put NEON_AUTH_COOKIE_SECRET`
+5. Deploy the CORS proxy worker (see below)
+6. Deploy: `bunx wrangler deploy`
 
-1. Create a [Cloudflare Workers](https://workers.cloudflare.com) account
-2. Click "Create Application" → "Create Worker"
-3. Replace worker code with contents of `proxy.worker.js`
-4. Update `ALLOWED_ORIGINS` array with your domain(s)
-5. Deploy and copy the worker URL
-6. Add to `.env.local`: `NEXT_PUBLIC_CORS_PROXY_URL=https://your.worker.workers.dev?url=`
+> **Alternative:** The app also works as a standard Next.js deployment (Vercel, self-hosted, etc.) — just set `DATABASE_URL` in your environment.
 
-## Contributing
+</details>
+
+<details>
+<summary><strong>CORS Proxy Setup</strong></summary>
+
+<br />
+
+Stremio addons require a CORS proxy. Deploy `proxy.worker.js` to Cloudflare Workers:
+
+1. Create a Worker on [Cloudflare Workers](https://workers.cloudflare.com)
+2. Paste the contents of `proxy.worker.js`
+3. Update `ALLOWED_ORIGINS` with your deployment domain(s)
+4. Deploy and use the worker URL as `NEXT_PUBLIC_CORS_PROXY_URL`
+
+</details>
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                    Browser                       │
+│  React 19 · Zustand · React Query (IDB cache)   │
+└────────────────────┬────────────────────────────┘
+                     │
+         ┌───────────▼───────────┐
+         │   Cloudflare Workers  │
+         │   Next.js SSR + API   │
+         └───────────┬───────────┘
+                     │
+         ┌───────────▼───────────┐
+         │     Hyperdrive        │
+         │  TCP proxy + pooling  │
+         └───────────┬───────────┘
+                     │
+         ┌───────────▼───────────┐
+         │   Neon PostgreSQL     │
+         │     (serverless)      │
+         └───────────────────────┘
+```
+
+| Layer | Stack |
+|---|---|
+| **Frontend** | React 19 + Tailwind CSS v4 + shadcn/ui |
+| **State** | Zustand stores + React Query with IndexedDB persistence |
+| **Database** | Drizzle ORM → Postgres.js (`prepare: false`) → Hyperdrive |
+| **Auth** | Neon Auth (cookie-based, Google OAuth) |
+| **Addons** | Stremio-compatible protocol with manifest-based filtering |
+
+---
+
+## 🤝 Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-## Disclaimer
+---
 
-> **⚠️ Important Legal Notice**: This project is a client interface only and does not host, store, or distribute any content. Users are solely responsible for ensuring their use complies with all applicable laws, copyright regulations, and third-party service terms. By using this software, you acknowledge and agree to the [full disclaimer](DISCLAIMER.md).
+## ⚠️ Disclaimer
 
-## License
+This project is a client interface only and does not host, store, or distribute any content. Users are solely responsible for ensuring their use complies with all applicable laws, copyright regulations, and third-party service terms. [Read full disclaimer →](DISCLAIMER.md)
 
-GPL-3.0-or-later - see [LICENSE](LICENSE) file for details.
+---
+
+<div align="center">
+
+**GPL-3.0-or-later** — see [LICENSE](LICENSE) for details.
+
+Built with ❤️ on the shoulders of [viperadnan/debridui](https://github.com/viperadnan-git/debridui)
+
+</div>

@@ -116,12 +116,18 @@ const normalizeUrl = (url: string): string => {
 
 const generateVlcUrl = (url: string, fileName: string): string => {
     const normalized = normalizeUrl(url);
-    if (isMobileOrTablet()) {
+    const platform = detectPlatform();
+    if (platform === Platform.ANDROID) {
+        // Android: use intent scheme to launch VLC app directly
         const encodedTitle = encodeURIComponent(fileName);
         const cleanUrl = normalized.replace("https://", "");
         return `intent://${cleanUrl}#Intent;scheme=https;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle};end`;
     }
-    // Encode URL so Windows protocol handler doesn't mangle colons (e.g. https:// -> https//) when passing to a .bat. The .bat must decode before passing to VLC.
+    if (platform === Platform.IOS) {
+        // iOS: use vlc-x-callback for proper URL handling
+        return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(normalized)}`;
+    }
+    // Desktop: vlc:// protocol
     return `vlc://${encodeURIComponent(normalized)}`;
 };
 

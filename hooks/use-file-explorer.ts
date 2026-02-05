@@ -20,7 +20,14 @@ export function useFileExplorer() {
     const { data, isLoading } = useQuery({
         queryKey: [currentAccount.id, "getTorrentList", currentPage, sortBy, sortOrder],
         queryFn: () => client.getTorrentList({ offset, limit }),
-        refetchInterval: 3000,
+        // Adaptive polling: fast when downloads are active, slow when idle
+        // Saves ~80% Worker requests vs fixed 3s polling
+        refetchInterval: (query) => {
+            const files = query.state.data?.files;
+            const hasActive = files?.some((f) => f.status === "downloading" || f.status === "waiting" || f.status === "processing");
+            return hasActive ? 5000 : 30000;
+        },
+        refetchIntervalInBackground: false, // Stop polling when tab is hidden
     });
 
     // Calculate total pages from data

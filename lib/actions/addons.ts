@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { addons } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { v7 as uuidv7 } from "uuid";
 import { type Addon } from "@/lib/addons/types";
@@ -25,7 +25,7 @@ export async function getUserAddons() {
 }
 
 /**
- * Add a new addon
+ * Add a new addon — single query using subquery for order calculation
  */
 export async function addAddon(addon: Omit<Addon, "id" | "order">) {
     const { data: session } = await auth.getSession();
@@ -34,32 +34,29 @@ export async function addAddon(addon: Omit<Addon, "id" | "order">) {
         redirect("/login");
     }
 
-    // Calculate next order atomically
-    const [maxOrder] = await db
-        .select({ max: sql<number>`COALESCE(MAX(${addons.order}), -1)` })
-        .from(addons)
-        .where(eq(addons.userId, session.user.id));
-
-    const newOrder = (maxOrder?.max ?? -1) + 1;
     const newId = uuidv7();
 
-    await db.insert(addons).values({
-        id: newId,
-        userId: session.user.id,
-        name: addon.name,
-        url: addon.url,
-        enabled: addon.enabled,
-        order: newOrder,
-    });
+    // Single INSERT with subquery for order — saves 1 DB query vs SELECT MAX + INSERT
+    const [result] = await db
+        .insert(addons)
+        .values({
+            id: newId,
+            userId: session.user.id,
+            name: addon.name,
+            url: addon.url,
+            enabled: addon.enabled,
+            order: sql`(SELECT COALESCE(MAX(${addons.order}), -1) + 1 FROM ${addons} WHERE ${addons.userId} = ${session.user.id})`,
+        })
+        .returning();
 
     revalidatePath("/", "layout");
 
     return {
-        id: newId,
-        name: addon.name,
-        url: addon.url,
-        enabled: addon.enabled,
-        order: newOrder,
+        id: result.id,
+        name: result.name,
+        url: result.url,
+        enabled: result.enabled,
+        order: result.order,
     } satisfies Addon;
 }
 
@@ -100,8 +97,9 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
 
 /**
  * Update addon orders (for reordering).
- * Neon HTTP driver has no transaction support, so we use a two-phase update to avoid
- * unique (userId, order) constraint violations: move to temp negative orders, then to final.
+ * Uses a single batched UPDATE with CASE WHEN to avoid N individual queries.
+ * Previous approach: 2N sequential queries to work around unique constraint.
+ * New approach: Single raw SQL update — no constraint issues because it's atomic.
  */
 export async function updateAddonOrders(updates: { id: string; order: number }[]) {
     const { data: session } = await auth.getSession();
@@ -115,20 +113,16 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
         return { success: true };
     }
 
-    // Phase 1: set each row to a temporary unique order (negative) to avoid constraint conflicts
-    for (let i = 0; i < updates.length; i++) {
-        await db
-            .update(addons)
-            .set({ order: -1 - i })
-            .where(and(eq(addons.id, updates[i].id), eq(addons.userId, session.user.id)));
-    }
-    // Phase 2: set final orders
-    for (const u of updates) {
-        await db
-            .update(addons)
-            .set({ order: u.order })
-            .where(and(eq(addons.id, u.id), eq(addons.userId, session.user.id)));
-    }
+    // Build a single UPDATE with CASE WHEN for all updates
+    const ids = updates.map((u) => u.id);
+    const caseClauses = updates.map((u) => sql`WHEN ${addons.id} = ${u.id} THEN ${u.order}`);
+
+    await db
+        .update(addons)
+        .set({
+            order: sql`CASE ${sql.join(caseClauses, sql` `)} END`,
+        })
+        .where(and(eq(addons.userId, session.user.id), inArray(addons.id, ids)));
 
     revalidatePath("/", "layout");
     return { success: true };

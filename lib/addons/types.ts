@@ -125,3 +125,25 @@ export class AddonError extends Error {
         this.name = "AddonError";
     }
 }
+
+// ── Manifest capability helpers ────────────────────────────────────
+
+type ManifestLike = { resources?: Array<string | { name?: string }> };
+
+/** Check if an addon manifest declares the "stream" resource (Stremio protocol). */
+export function addonSupportsStreams(manifest: ManifestLike): boolean {
+    return (
+        manifest?.resources?.some((r) =>
+            typeof r === "string" ? r === "stream" : r?.name === "stream"
+        ) ?? false
+    );
+}
+
+/** Check if an addon manifest declares the "subtitles" resource (Stremio protocol). */
+export function addonSupportsSubtitles(manifest: ManifestLike): boolean {
+    return (
+        manifest?.resources?.some((r) =>
+            typeof r === "string" ? r === "subtitles" : r?.name === "subtitles"
+        ) ?? false
+    );
+}

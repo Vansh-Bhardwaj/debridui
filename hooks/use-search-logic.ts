@@ -33,7 +33,7 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
         queryKey: getFindTorrentsCacheKey(currentAccount.id, query),
         queryFn: () => client.findTorrents(query),
         enabled: shouldSearch,
-        staleTime: 0,
+        staleTime: 30_000, // 30s — file lists don't change in real-time
         gcTime: 60_000,
     });
 

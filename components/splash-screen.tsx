@@ -1,8 +1,12 @@
 import Image from "next/image";
 import { memo } from "react";
 
-// `rerender-memo` - Static component, no props, safe to memoize
-export const SplashScreen = memo(function SplashScreen() {
+interface SplashScreenProps {
+    stage?: string;
+}
+
+// `rerender-memo` - Static component, safe to memoize
+export const SplashScreen = memo(function SplashScreen({ stage }: SplashScreenProps) {
     return (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-background">
             <Image
@@ -13,7 +17,9 @@ export const SplashScreen = memo(function SplashScreen() {
                 className="invert dark:invert-0 animate-pulse"
                 loading="eager"
             />
-            <span className="text-xs tracking-widest uppercase text-muted-foreground">Loading</span>
+            <span className="text-xs tracking-widest uppercase text-muted-foreground">
+                {stage || "Loading"}
+            </span>
         </div>
     );
 });

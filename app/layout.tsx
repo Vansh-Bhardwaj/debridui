@@ -8,7 +8,8 @@ import { Analytics } from "@/components/analytics";
 
 const siteConfig = {
     name: "DebridUI",
-    description: "A modern debrid client with integrated media discovery and streaming.",
+    description:
+        "A modern debrid client with built-in playback, continue watching, subtitle support, and media discovery — edge-deployed on Cloudflare Workers.",
     url: "https://debrid.indevs.in",
     ogImage: "/banner.jpg",
     keywords: [
@@ -23,6 +24,9 @@ const siteConfig = {
         "download manager",
         "trakt",
         "media discovery",
+        "continue watching",
+        "subtitle support",
+        "cloudflare workers",
     ],
 };
 
@@ -37,8 +41,11 @@ export const metadata: Metadata = {
     },
     description: siteConfig.description,
     keywords: siteConfig.keywords,
-    authors: [{ name: "Adnan Ahmad", url: "https://viperadnan.com" }],
-    creator: "Adnan Ahmad",
+    authors: [
+        { name: "Vansh Bhardwaj", url: "https://github.com/Vansh-Bhardwaj" },
+        { name: "Adnan Ahmad", url: "https://viperadnan.com" },
+    ],
+    creator: "Vansh Bhardwaj",
     openGraph: {
         type: "website",
         locale: "en_US",

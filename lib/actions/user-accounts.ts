@@ -40,24 +40,9 @@ export async function addUserAccount(data: { apiKey: string; type: AccountType; 
     const { apiKey, type, name } = data;
     const userId = session.user.id;
 
-    // Check if account already exists
-    const existing = await db
-        .select()
-        .from(userAccounts)
-        .where(
-            and(
-                eq(userAccounts.userId, userId),
-                eq(userAccounts.apiKey, apiKey),
-                eq(userAccounts.type, type)
-            )
-        );
-
-    if (existing.length > 0) {
-        return existing[0];
-    }
-
     try {
-        // Add account to database
+        // Single upsert — avoids SELECT + conditional INSERT (saves 1 DB query)
+        // Uses unique_user_account constraint on (userId, apiKey, type)
         const [account] = await db
             .insert(userAccounts)
             .values({
@@ -66,6 +51,10 @@ export async function addUserAccount(data: { apiKey: string; type: AccountType; 
                 apiKey,
                 type,
                 name,
+            })
+            .onConflictDoUpdate({
+                target: [userAccounts.userId, userAccounts.apiKey, userAccounts.type],
+                set: { name },
             })
             .returning();
 
@@ -87,17 +76,15 @@ export async function removeUserAccount(accountId: string) {
         redirect("/login");
     }
 
-    // Verify ownership before deletion
-    const account = await db
-        .select()
-        .from(userAccounts)
-        .where(and(eq(userAccounts.id, accountId), eq(userAccounts.userId, session.user.id)));
+    // Single DELETE with ownership check — avoids redundant SELECT (saves 1 DB query)
+    const deleted = await db
+        .delete(userAccounts)
+        .where(and(eq(userAccounts.id, accountId), eq(userAccounts.userId, session.user.id)))
+        .returning({ id: userAccounts.id });
 
-    if (account.length === 0) {
+    if (deleted.length === 0) {
         throw new Error("Account not found or unauthorized");
     }
-
-    await db.delete(userAccounts).where(eq(userAccounts.id, accountId));
 
     revalidatePath("/", "layout");
     return { success: true };

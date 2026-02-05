@@ -3,7 +3,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 /**
  * Syncs the current authenticated user from Neon Auth to our local database.
@@ -18,19 +17,16 @@ export async function syncUser() {
 
     const { id, name, email, image } = session.user;
 
-    // Check if user already exists in our DB
-    const existing = await db.select().from(user).where(eq(user.id, id));
-
-    if (existing.length === 0) {
-        // Create user in our DB
-        await db.insert(user).values({
+    // Single upsert — avoids SELECT + conditional INSERT (saves 1 DB query)
+    await db
+        .insert(user)
+        .values({
             id,
             name: name || email.split("@")[0],
             email,
             image,
-        });
-        console.log(`[auth] Synced new user: ${email} (${id})`);
-    }
+        })
+        .onConflictDoNothing({ target: user.id });
 
     return { success: true };
 }

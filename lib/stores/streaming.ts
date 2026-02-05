@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { type AddonSource, type AddonSubtitle, type TvSearchParams } from "@/lib/addons/types";
+import { type AddonSource, type AddonSubtitle, type TvSearchParams, type AddonManifest, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
 import { isEnglishSubtitle, getSubtitleLabel } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
@@ -52,6 +52,7 @@ interface StreamingState {
     playNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
     playPreviousEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
     setEpisodeContext: (context: EpisodeContext | null) => void;
+    cancel: () => void;
     dismiss: () => void;
     getProgressKey: () => ProgressKey | null;
 }
@@ -113,6 +114,45 @@ function dismissToast() {
     } else {
         toast.dismiss(id);
     }
+}
+
+type AddonInfo = { id: string; url: string; name: string };
+
+/**
+ * Classify addons into stream-capable and subtitle-capable using cached manifests.
+ * Safe default: if manifest is unknown/failed, assume it supports streams (no regression).
+ */
+async function classifyAddons(addons: AddonInfo[]): Promise<{ streamAddons: AddonInfo[]; subtitleAddons: AddonInfo[] }> {
+    const manifests = await Promise.all(
+        addons.map(async (addon): Promise<AddonManifest | null> => {
+            try {
+                return await queryClient.fetchQuery({
+                    queryKey: ["addon", addon.id, "manifest"],
+                    queryFn: async () => {
+                        const client = new AddonClient({ url: addon.url });
+                        return client.fetchManifest();
+                    },
+                    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+                });
+            } catch {
+                return null;
+            }
+        })
+    );
+
+    const streamAddons = addons.filter((_, i) => {
+        const m = manifests[i];
+        if (!m?.resources) return true; // unknown → include (safe default)
+        return addonSupportsStreams(m);
+    });
+
+    const subtitleAddons = addons.filter((_, i) => {
+        const m = manifests[i];
+        if (!m?.resources) return false; // unknown → skip for subtitles (safe)
+        return addonSupportsSubtitles(m);
+    });
+
+    return { streamAddons, subtitleAddons };
 }
 
 interface ShowSourceToastParams {
@@ -259,11 +299,18 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             set({ episodeContext: null });
         }
 
-        toastId = toast.loading("Finding best source...", { description: displayTitle, position: TOAST_POSITION });
+        toastId = toast.loading("Finding best source...", {
+            description: displayTitle,
+            position: TOAST_POSITION,
+            cancel: { label: "Cancel", onClick: () => get().cancel() },
+        });
         toastCreatedAt = Date.now();
 
         try {
-            const sourcePromises = addons.map(async (addon) => {
+            // Classify addons by capability — only query addons for what they support
+            const { streamAddons, subtitleAddons } = await classifyAddons(addons);
+
+            const sourcePromises = streamAddons.map(async (addon) => {
                 const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
 
                 const cached = queryClient.getQueryData<AddonSource[]>(queryKey);
@@ -280,8 +327,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             });
 
-            // Fetch subtitles in parallel from enabled addons
-            const subtitlePromises = addons.map(async (addon): Promise<SubtitleQueryResult> => {
+            // Fetch subtitles in parallel from subtitle-capable addons only
+            const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
                 try {
                     const client = new AddonClient({ url: addon.url });
                     const response = await client.fetchSubtitles(imdbId, type, tvParams);
@@ -387,8 +434,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 targetTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${epData?.title ? ` - ${epData.title}` : ""}`;
             }
 
-            // 2. Fetch Streams (Background)
-            const sourcePromises = addons.map(async (addon) => {
+            // 2. Classify addons by capability
+            const { streamAddons, subtitleAddons } = await classifyAddons(addons);
+
+            // 3. Fetch Streams (Background) — only from stream-capable addons
+            const sourcePromises = streamAddons.map(async (addon) => {
                 const queryKey = ["addon", addon.id, "sources", episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode }] as const;
                 const cached = queryClient.getQueryData<AddonSource[]>(queryKey);
                 if (cached) return cached;
@@ -401,7 +451,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 } catch { return [] as AddonSource[]; }
             });
 
-            const subtitlePromises = addons.map(async (addon): Promise<SubtitleQueryResult> => {
+            const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
                 try {
                     const client = new AddonClient({ url: addon.url });
                     const response = await client.fetchSubtitles(episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode });
@@ -575,6 +625,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             },
             addons
         );
+    },
+
+    cancel: () => {
+        // Increment requestId to invalidate in-flight fetches
+        requestId++;
+        dismissToast();
+        set({ activeRequest: null, selectedSource: null });
     },
 
     dismiss: () => {

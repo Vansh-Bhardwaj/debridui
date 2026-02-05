@@ -224,7 +224,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Show splash during: session check, no session (redirect), accounts loading, user info loading
     if (isSessionPending || !session || isAccountsLoading || (accountsLength > 0 && isLoadingUser)) {
-        return <SplashScreen />;
+        const stage = isSessionPending
+            ? "Checking session..."
+            : !session
+              ? "Redirecting..."
+              : isAccountsLoading
+                ? "Loading accounts..."
+                : "Connecting to service...";
+        return <SplashScreen stage={stage} />;
     }
 
     // Show error screen when account fetch fails

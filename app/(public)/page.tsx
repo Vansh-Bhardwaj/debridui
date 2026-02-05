@@ -1,6 +1,29 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRightIcon, ArrowUpRightIcon, ChevronDownIcon } from "lucide-react";
+import {
+    ArrowRightIcon,
+    ArrowUpRightIcon,
+    ChevronDownIcon,
+    Play,
+    MonitorPlay,
+    Subtitles,
+    Gamepad2,
+    Filter,
+    FolderOpen,
+    Users,
+    Search,
+    Globe,
+    Zap,
+    Activity,
+    Timer,
+    Database,
+    Clapperboard,
+    Tv,
+    Youtube,
+    Star,
+    BookOpen,
+    type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Gallery } from "@/components/gallery";
@@ -54,46 +77,50 @@ const techStack = [
     { name: "Next.js", icon: "nextdotjs" },
     { name: "TypeScript", icon: "typescript" },
     { name: "Tailwind", icon: "tailwindcss" },
+    { name: "Cloudflare", icon: "cloudflare" },
     { name: "PostgreSQL", icon: "postgresql" },
 ];
 
-const features = [
+const features: { category: string; icon: LucideIcon; items: { icon: LucideIcon; label: string }[] }[] = [
     {
-        category: "Files",
+        category: "Streaming",
+        icon: Play,
         items: [
-            "Multi-account support",
-            "Real-time tracking",
-            "Tree view & batch ops",
-            "Stream to VLC, Kodi, MPV",
-            "Drag & drop uploads",
+            { icon: MonitorPlay, label: "Built-in video player" },
+            { icon: Timer, label: "Continue watching & resume" },
+            { icon: Subtitles, label: "Subtitle integration" },
+            { icon: Gamepad2, label: "VLC, IINA, MPV, Kodi & more" },
+            { icon: Filter, label: "Smart addon filtering" },
         ],
     },
     {
         category: "Discovery",
+        icon: Search,
         items: [
-            "Trakt.tv integration",
-            "Stremio addons support",
-            "Cross-source search",
-            "Ratings & trailers",
-            "Episode browser",
+            { icon: Tv, label: "Trakt.tv integration" },
+            { icon: Clapperboard, label: "Stremio addon search" },
+            { icon: Youtube, label: "YouTube trailer previews" },
+            { icon: Star, label: "Cast, ratings & details" },
+            { icon: BookOpen, label: "Season & episode browser" },
         ],
     },
     {
-        category: "Experience",
+        category: "Performance",
+        icon: Zap,
         items: [
-            "Crafted for intuitive UX",
-            "Dark & light themes",
-            "Fully responsive",
-            "Keyboard shortcuts",
-            "Progress tracking",
+            { icon: Globe, label: "Cloudflare edge deployment" },
+            { icon: Database, label: "Hyperdrive connection pooling" },
+            { icon: Activity, label: "Adaptive smart polling" },
+            { icon: Users, label: "Multi-account support" },
+            { icon: FolderOpen, label: "Real-time file explorer" },
         ],
     },
 ];
 
 const steps = [
-    { num: "01", title: "Sign up", desc: "Create account or use Google" },
-    { num: "02", title: "Connect", desc: "Link Real-Debrid, TorBox, or AllDebrid" },
-    { num: "03", title: "Stream", desc: "Browse and play content" },
+    { num: "01", title: "Sign up", desc: "Create an account or sign in with Google" },
+    { num: "02", title: "Connect", desc: "Link Real-Debrid, TorBox, or AllDebrid and add addons" },
+    { num: "03", title: "Watch", desc: "Browse, stream and pick up where you left off" },
 ];
 
 export default function Home() {
@@ -134,7 +161,7 @@ export default function Home() {
                         />
 
                         <p className="text-muted-foreground text-xl sm:text-2xl md:text-3xl max-w-xl leading-snug font-light">
-                            A modern debrid client with integrated media discovery and streaming.
+                            A performance-focused debrid client with built-in playback, continue watching, and subtitle support — deployed at the edge.
                         </p>
 
                         <div className="flex flex-wrap items-center gap-3 pt-4">
@@ -198,6 +225,29 @@ export default function Home() {
                 </div>
             </section>
 
+            {/* Highlights strip */}
+            <section className="px-6 py-16 md:px-12 md:py-24 lg:px-20">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+                        {[
+                            { icon: MonitorPlay, label: "Built-in Player", desc: "Watch directly in your browser with codec detection" },
+                            { icon: Timer, label: "Continue Watching", desc: "Pick up where you left off on any device" },
+                            { icon: Subtitles, label: "Subtitles", desc: "Fetched automatically from Stremio addons" },
+                            { icon: Globe, label: "Edge Deployed", desc: "Cloudflare Workers for fast global access" },
+                        ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <div key={item.label} className="pl-4 border-l border-border/50">
+                                    <Icon className="size-5 text-primary mb-3" strokeWidth={1.5} />
+                                    <p className="text-sm font-medium mb-1">{item.label}</p>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </section>
+
             {/* Divider with label */}
             <div className="px-6 md:px-12 lg:px-20">
                 <div className="max-w-6xl mx-auto flex items-center gap-4">
@@ -235,22 +285,32 @@ export default function Home() {
             <section className="px-6 py-20 md:px-12 md:py-32 lg:px-20">
                 <div className="max-w-6xl mx-auto">
                     <div className="grid md:grid-cols-3 gap-12 md:gap-16">
-                        {features.map((section) => (
-                            <div key={section.category}>
-                                <h3 className="text-xs text-primary tracking-widest uppercase mb-6">
-                                    {section.category}
-                                </h3>
-                                <ul className="space-y-3">
-                                    {section.items.map((item) => (
-                                        <li
-                                            key={item}
-                                            className="text-sm text-foreground/70 leading-relaxed pl-4 border-l border-border/50">
-                                            {item}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
+                        {features.map((section) => {
+                            const CategoryIcon = section.icon;
+                            return (
+                                <div key={section.category}>
+                                    <div className="flex items-center gap-2.5 mb-6">
+                                        <CategoryIcon className="size-4 text-primary" strokeWidth={1.5} />
+                                        <h3 className="text-xs tracking-widest uppercase text-muted-foreground">
+                                            {section.category}
+                                        </h3>
+                                    </div>
+                                    <ul className="space-y-3.5">
+                                        {section.items.map((item) => {
+                                            const ItemIcon = item.icon;
+                                            return (
+                                                <li
+                                                    key={item.label}
+                                                    className="flex items-center gap-3 text-sm text-foreground/80 leading-relaxed pl-4 border-l border-border/50">
+                                                    <ItemIcon className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                                                    {item.label}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </section>
@@ -303,7 +363,7 @@ export default function Home() {
                 <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-8">
                     <div>
                         <h2 className="text-2xl md:text-3xl font-light mb-2">Ready to start?</h2>
-                        <p className="text-muted-foreground">Free and open source. No credit card required.</p>
+                        <p className="text-muted-foreground">Free, open source, and deployed at the edge.</p>
                     </div>
                     <Button asChild size="lg" className="h-12 px-8">
                         <Link href="/dashboard">
@@ -340,7 +400,7 @@ export default function Home() {
 
             {/* Footer */}
             <footer className="px-6 py-8 md:px-12 lg:px-20 border-t border-border/50">
-                <div className="max-w-6xl mx-auto">
+                <div className="max-w-6xl mx-auto space-y-4">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                         <div className="flex items-center gap-3">
                             <Image
@@ -379,6 +439,16 @@ export default function Home() {
                             </Link>
                         </nav>
                     </div>
+                    <p className="text-xs text-muted-foreground/60 text-center md:text-left">
+                        Built on the foundation of{" "}
+                        <Link
+                            href="https://github.com/viperadnan-git/debridui"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-muted-foreground transition-colors underline underline-offset-2">
+                            viperadnan/debridui
+                        </Link>
+                    </p>
                 </div>
             </footer>
         </div>

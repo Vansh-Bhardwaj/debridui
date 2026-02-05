@@ -39,6 +39,7 @@ export function WebDownloadsProvider({ children }: { children: ReactNode }) {
         queryKey: listKey,
         queryFn: () => client.getWebDownloadList({ offset, limit: WEB_DOWNLOADS_PAGE_SIZE }),
         refetchInterval: client.refreshInterval,
+        refetchIntervalInBackground: false, // Stop polling when tab is hidden
     });
 
     // Merge API list with ephemeral links (if client supports them)

@@ -3,11 +3,46 @@ import { useMemo } from "react";
 import { getUserAddons, addAddon, removeAddon, toggleAddon, updateAddonOrders } from "@/lib/actions/addons";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
-import { type Addon, type AddonSource, type AddonSubtitle, type TvSearchParams } from "@/lib/addons/types";
+import { type Addon, type AddonManifest, type AddonSource, type AddonSubtitle, type TvSearchParams, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
 import { getSubtitleLabel, isEnglishSubtitle } from "@/lib/utils/subtitles";
 import { useToastMutation } from "@/lib/utils/mutation-factory";
 
 const USER_ADDONS_KEY = ["user-addons"];
+
+/**
+ * Shared manifest query options — DRY factory used by hooks and imperative code.
+ * 24-hour stale time; keyed by addon ID.
+ */
+export function manifestQueryOptions(addon: { id: string; url: string }) {
+    return {
+        queryKey: ["addon", addon.id, "manifest"] as const,
+        queryFn: async () => {
+            const client = new AddonClient({ url: addon.url });
+            return client.fetchManifest();
+        },
+        staleTime: 1000 * 60 * 60 * 24, // 24 hours
+        gcTime: 24 * 60 * 60 * 1000,
+    };
+}
+
+/**
+ * Imperative version: get only stream-capable addons from a list.
+ * Uses queryClient.ensureQueryData for cache-first manifest resolution.
+ * Suitable for non-hook contexts (e.g., Zustand stores).
+ */
+export async function getStreamCapableAddons<T extends { id: string; url: string }>(
+    addons: T[],
+    qc: { ensureQueryData: <R>(opts: { queryKey: readonly unknown[]; queryFn: () => Promise<R>; staleTime: number }) => Promise<R> }
+): Promise<T[]> {
+    const manifests = await Promise.all(
+        addons.map((a) => qc.ensureQueryData(manifestQueryOptions(a)).catch(() => null as AddonManifest | null))
+    );
+    return addons.filter((_, i) => {
+        const m = manifests[i];
+        if (!m?.resources) return true; // unknown → include (safe default)
+        return addonSupportsStreams(m);
+    });
+}
 
 /**
  * Fetch all user addons from database
@@ -154,17 +189,12 @@ interface UseAddonOptions {
 }
 
 /**
- * Hook to fetch and cache addon manifest
+ * Hook to fetch and cache addon manifest (uses shared manifestQueryOptions)
  */
 export function useAddon({ addonId, url, enabled = true }: UseAddonOptions) {
     return useQuery({
-        queryKey: ["addon", addonId, "manifest"],
-        queryFn: async () => {
-            const client = new AddonClient({ url });
-            return await client.fetchManifest();
-        },
+        ...manifestQueryOptions({ id: addonId, url }),
         enabled,
-        staleTime: 1000 * 60 * 60 * 24, // 24 hours
     });
 }
 
@@ -202,9 +232,27 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
     // Stable reference for enabled addons list
     const enabledAddons = useMemo(() => addons.filter((a: Addon) => a.enabled).sort((a: Addon, b: Addon) => a.order - b.order), [addons]);
 
+    // Fetch manifests to determine addon capabilities (shared cache with useAddonSubtitles)
+    const manifestQueries = useQueries({
+        queries: enabledAddons.map((addon: Addon) => ({
+            ...manifestQueryOptions(addon),
+            enabled: true,
+        })),
+    });
+
+    // Filter to only addons that support streams.
+    // Safe default: if manifest is not yet loaded/failed, still include (no regression).
+    const streamAddons = useMemo(() => {
+        return enabledAddons.filter((_: Addon, i: number) => {
+            const manifest = manifestQueries[i]?.data;
+            if (!manifest?.resources) return true; // unknown → include (safe default)
+            return addonSupportsStreams(manifest);
+        });
+    }, [enabledAddons, manifestQueries]);
+
     // Individual query per addon for progressive loading
     const queries = useQueries({
-        queries: enabledAddons.map((addon: Addon) => ({
+        queries: streamAddons.map((addon: Addon) => ({
             queryKey: ["addon", addon.id, "sources", imdbId, mediaType, tvParams] as const,
             queryFn: () => fetchAddonSources(addon, imdbId, mediaType, tvParams),
             staleTime: 5 * 60 * 1000, // 5 minutes
@@ -239,14 +287,14 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
         return queries
             .map((query, index) => ({
                 query,
-                addon: enabledAddons[index],
+                addon: streamAddons[index],
             }))
             .filter(({ query }) => query.isError)
             .map(({ addon }) => addon.name);
-    }, [queries, enabledAddons]);
+    }, [queries, streamAddons]);
 
-    // Loading state: true if ANY query is still loading
-    const isLoading = queries.some((q) => q.isLoading);
+    // Loading state: true if manifests or ANY source query is still loading
+    const isLoading = manifestQueries.some((q) => q.isLoading) || queries.some((q) => q.isLoading);
 
     return {
         data: combinedData,
@@ -255,12 +303,6 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
     };
 }
 
-/** Check if addon manifest declares subtitles resource (Stremio protocol) */
-export function addonSupportsSubtitles(manifest: { resources?: Array<string | { name?: string }> }): boolean {
-    return (
-        manifest?.resources?.some((r) => (typeof r === "string" ? r === "subtitles" : r?.name === "subtitles")) ?? false
-    );
-}
 
 
 interface UseAddonSubtitlesOptions {
@@ -282,13 +324,8 @@ export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubti
 
     const manifestQueries = useQueries({
         queries: enabledAddons.map((addon: Addon) => ({
-            queryKey: ["addon", addon.id, "manifest"] as const,
-            queryFn: async () => {
-                const client = new AddonClient({ url: addon.url });
-                return client.fetchManifest();
-            },
-            staleTime: 1000 * 60 * 60 * 24,
-            gcTime: 24 * 60 * 60 * 1000,
+            ...manifestQueryOptions(addon),
+            enabled: true,
         })),
     });
 
