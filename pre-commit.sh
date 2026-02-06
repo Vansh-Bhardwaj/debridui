@@ -1,4 +1,4 @@
-# /bin/bash
+#!/bin/bash
 
 # Re-format staged files only
 

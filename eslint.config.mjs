@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     'out/**',
     'build/**',
     'next-env.d.ts',
+    'cloudflare-env.d.ts',
+    'vlc-bridge/**',
   ]),
   // Custom rules
   {
