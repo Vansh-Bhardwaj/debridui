@@ -1,0 +1,58 @@
+name: Build VLC Bridge Extension
+
+on:
+  push:
+    tags:
+      - "ext-v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Package Extension
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build extension zip
+        working-directory: vlc-bridge
+        run: node build-zip.js
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(node -p "require('./vlc-bridge/extension/manifest.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/ext-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VLC Bridge v${{ steps.version.outputs.version }}
+          body: |
+            ## Debrid VLC Bridge v${{ steps.version.outputs.version }}
+
+            Chrome/Edge extension for controlling VLC media player from DebridUI.
+
+            ### Installation
+
+            1. Download the `.zip` file below
+            2. Extract the zip to a permanent folder
+            3. Open `chrome://extensions` (or `edge://extensions`)
+            4. Enable **Developer mode** (top-right toggle)
+            5. Click **Load unpacked** and select the extracted folder
+            6. Open [DebridUI](https://debrid.indevs.in) and play any media
+
+            ### Requirements
+
+            - VLC media player with HTTP interface enabled
+          files: vlc-bridge/debrid-vlc-bridge-v*.zip

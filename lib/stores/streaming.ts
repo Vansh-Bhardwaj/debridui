@@ -249,7 +249,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 progressKey: options?.progressKey,
             });
         } else {
-            openInPlayer({ url: source.url, fileName, player: mediaPlayer });
+            openInPlayer({ url: source.url, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
         }
     },
 
@@ -492,7 +492,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     },
 
     playNextEpisode: async (addons) => {
-        const { episodeContext, play, preloadedData, playSource, getProgressKey } = get();
+        const { episodeContext, play, preloadedData, playSource } = get();
         if (!episodeContext) {
             toast.error("No episode context", { description: "Cannot navigate to next episode" });
             return;

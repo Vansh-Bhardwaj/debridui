@@ -1,6 +1,40 @@
 import { MediaPlayer, Platform } from "../types";
 import { useSettingsStore } from "../stores/settings";
+import { VLCBridgeClient } from "../vlc-bridge";
+import { startVLCProgressSync } from "../vlc-progress";
+import type { ProgressKey } from "@/hooks/use-progress";
 import { toast } from "sonner";
+
+// Singleton VLC Bridge client — lazy initialized
+let vlcBridge: VLCBridgeClient | null = null;
+let vlcBridgeDetected: boolean | null = null;
+
+/** Get or create the VLC Bridge client */
+function getVLCBridge(): VLCBridgeClient {
+    if (!vlcBridge) {
+        vlcBridge = new VLCBridgeClient();
+    }
+    return vlcBridge;
+}
+
+/** Check if VLC Bridge extension is available (cached after first check) */
+async function isVLCBridgeAvailable(): Promise<boolean> {
+    if (vlcBridgeDetected !== null) return vlcBridgeDetected;
+    try {
+        vlcBridgeDetected = await getVLCBridge().detect();
+    } catch {
+        vlcBridgeDetected = false;
+    }
+    return vlcBridgeDetected;
+}
+
+/** Reset bridge detection (call when extension might have been installed/removed) */
+export const resetVLCBridgeDetection = (): void => {
+    vlcBridgeDetected = null;
+};
+
+/** Get bridge client for direct use (e.g. progress tracking, controls) */
+export const getVLCBridgeClient = (): VLCBridgeClient => getVLCBridge();
 
 export interface ParsedUserAgent {
     browser: string;
@@ -153,10 +187,14 @@ export const openInPlayer = ({
     url,
     fileName,
     player,
+    subtitles,
+    progressKey,
 }: {
     url: string;
     fileName: string;
     player?: MediaPlayer;
+    subtitles?: string[];
+    progressKey?: ProgressKey;
 }): void => {
     const selectedPlayer = player || useSettingsStore.getState().get("mediaPlayer");
 
@@ -165,6 +203,78 @@ export const openInPlayer = ({
         return;
     }
 
+    // VLC on desktop: try extension bridge first for full control + subtitles
+    if (selectedPlayer === MediaPlayer.VLC && !isMobileOrTablet()) {
+        openInVLCBridge(url, subtitles, progressKey).catch(() => {
+            // Fall back to protocol handler
+            const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName);
+            window.open(playerUrl, "_self");
+        });
+        return;
+    }
+
     const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName);
     window.open(playerUrl, "_self");
 };
+
+/** Read saved progress from localStorage (mirrors use-progress logic). */
+function readSavedProgress(key: ProgressKey): number | null {
+    try {
+        const storageKey = key.type === "show" && key.season !== undefined && key.episode !== undefined
+            ? `progress:${key.imdbId}:s${key.season}e${key.episode}`
+            : `progress:${key.imdbId}`;
+        const stored = localStorage.getItem(storageKey);
+        if (!stored) return null;
+        const { progressSeconds, durationSeconds } = JSON.parse(stored);
+        if (!progressSeconds || !durationSeconds || durationSeconds <= 0) return null;
+        const pct = (progressSeconds / durationSeconds) * 100;
+        // Only resume if between 1% and 95%
+        return pct >= 1 && pct <= 95 ? progressSeconds : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Try to play via VLC Bridge extension. Rejects if extension unavailable. */
+async function openInVLCBridge(url: string, subtitles?: string[], progressKey?: ProgressKey): Promise<void> {
+    const available = await isVLCBridgeAvailable();
+    if (!available) throw new Error("VLC Bridge not available");
+
+    const bridge = getVLCBridge();
+
+    // Proxy subtitle URLs through the app so VLC can fetch them reliably
+    const subs = subtitles?.slice(0, 3).map((u, i) => proxySubtitleUrl(u, i)).filter(Boolean) as string[] | undefined;
+
+    const result = await bridge.play(url, subs?.length ? { subtitles: subs } : undefined);
+
+    if (!result.success && result.code === "VLC_NOT_RUNNING") {
+        toast.error("VLC is not running", {
+            description: "Open VLC with HTTP interface enabled, then try again",
+        });
+        throw new Error("VLC not running");
+    }
+
+    if (!result.success) {
+        toast.error("VLC playback failed", { description: result.error });
+        throw new Error(result.error);
+    }
+
+    toast.success("Playing in VLC");
+    if (progressKey) {
+        startVLCProgressSync(progressKey, url);
+        // Resume from saved position
+        const resumeAt = readSavedProgress(progressKey);
+        if (resumeAt && resumeAt > 5) {
+            // Small delay to let VLC load the stream before seeking
+            setTimeout(() => bridge.seek(resumeAt), 1500);
+        }
+    }
+}
+
+/** Convert a raw subtitle URL to a proxied URL with a descriptive filename
+ *  so VLC can detect the language and type from the path. */
+function proxySubtitleUrl(url: string, index?: number): string {
+    if (typeof window === "undefined") return url;
+    const label = index && index > 0 ? `English_${index + 1}.srt` : "English.srt";
+    return `${window.location.origin}/api/subtitles/vlc/${label}?url=${encodeURIComponent(url)}`;
+}
