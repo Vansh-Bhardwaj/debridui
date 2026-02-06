@@ -22,23 +22,29 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
-        if (show) {
-            setIsVisible(true);
-            // Auto-dismiss when video starts playing
-            if (isPlaying) {
+        if (!show) {
+            queueMicrotask(() => setIsVisible(false));
+            return;
+        }
+
+        // Become visible (deferred to avoid synchronous setState-in-effect)
+        queueMicrotask(() => setIsVisible(true));
+
+        // Auto-dismiss when video starts playing
+        if (isPlaying) {
+            const id = setTimeout(() => {
                 setIsVisible(false);
                 setTimeout(onClose, 300);
-                return;
-            }
-            // Fallback: auto-dismiss after 8 seconds if not playing
-            const timer = setTimeout(() => {
-                setIsVisible(false);
-                setTimeout(onClose, 300); // Wait for exit animation
-            }, 8000);
-            return () => clearTimeout(timer);
-        } else {
-            setIsVisible(false);
+            }, 0);
+            return () => clearTimeout(id);
         }
+
+        // Fallback: auto-dismiss after 8 seconds if not playing
+        const timer = setTimeout(() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+        }, 8000);
+        return () => clearTimeout(timer);
     }, [show, isPlaying, onClose]);
 
     if (!show && !isVisible) return null;

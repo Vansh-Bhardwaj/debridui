@@ -45,7 +45,7 @@ export function PreviewContent({
         );
     }
 
-    const RendererComponent = renderer.component as any;
+    const RendererComponent = renderer.component as React.ComponentType<Record<string, unknown>>;
     return (
         <RendererComponent
             key={file.id}

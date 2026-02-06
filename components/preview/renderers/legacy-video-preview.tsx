@@ -6,7 +6,7 @@ import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer } from "@/lib/utils";
-import { selectBestStreamingUrl, hasLikelyCodecIssues, detectCodecSupport } from "@/lib/utils/codec-support";
+import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getLanguageDisplayName } from "@/lib/utils/subtitles";
 import {
@@ -141,11 +141,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const effectiveUrl = streamingSelection.url;
     const isUsingTranscodedStream = streamingSelection.isTranscoded;
-    const streamFormat = streamingSelection.format;
 
     // Track if we've tried fallback to transcoded stream
     const [triedTranscodeFallback, setTriedTranscodeFallback] = useState(false);
-    const [useDirectUrl, setUseDirectUrl] = useState(false);
+    const [useDirectUrl, _setUseDirectUrl] = useState(false);
 
     // Final URL: if user requested direct, use download URL; otherwise use smart selection
     const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
@@ -183,7 +182,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
         queryKey: ["trakt", "original-language", progressKey?.imdbId, progressKey?.type],
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         queryFn: async () => {
             if (!progressKey) return null;
             if (progressKey.type === "movie") {

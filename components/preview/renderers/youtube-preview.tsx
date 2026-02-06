@@ -32,7 +32,7 @@ export function YouTubePreview({ downloadUrl, onLoad, onError }: YouTubePreviewP
 
             if (!videoId) return null;
             return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
-        } catch (e) {
+        } catch {
             return null;
         }
     };
@@ -41,8 +41,11 @@ export function YouTubePreview({ downloadUrl, onLoad, onError }: YouTubePreviewP
 
     useEffect(() => {
         if (!embedUrl) {
-            setError("Invalid YouTube URL");
-            onError?.(new Error("Invalid YouTube URL"));
+            // Batch state update outside render via microtask
+            queueMicrotask(() => {
+                setError("Invalid YouTube URL");
+                onError?.(new Error("Invalid YouTube URL"));
+            });
         }
     }, [embedUrl, onError]);
 

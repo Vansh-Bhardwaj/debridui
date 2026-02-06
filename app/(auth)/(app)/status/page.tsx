@@ -19,6 +19,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { detectCodecSupport, isIOS, isSafari, type CodecSupport } from "@/lib/utils/codec-support";
+import { useVLCStore } from "@/lib/stores/vlc";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { MediaPlayer } from "@/lib/types";
 import type { CheckStatus, HealthResponse } from "@/lib/health";
 
 type StatusMeta = {
@@ -136,15 +139,15 @@ function getPlatformInfo() {
 
 // — Compatibility tab content
 const CompatibilitySection = memo(function CompatibilitySection() {
-    const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
-    const [browser, setBrowser] = useState<{ name: string; version: string }>({ name: "—", version: "" });
-    const [platform, setPlatform] = useState<{ os: string; device: string }>({ os: "—", device: "—" });
-
-    useEffect(() => {
-        setCodecSupport(detectCodecSupport());
-        setBrowser(getBrowserInfo());
-        setPlatform(getPlatformInfo());
-    }, []);
+    const [codecSupport] = useState<CodecSupport | null>(() =>
+        typeof window !== "undefined" ? detectCodecSupport() : null
+    );
+    const [browser] = useState(() =>
+        typeof window !== "undefined" ? getBrowserInfo() : { name: "—", version: "" }
+    );
+    const [platform] = useState(() =>
+        typeof window !== "undefined" ? getPlatformInfo() : { os: "—", device: "—" }
+    );
 
     const safari = typeof navigator !== "undefined" && isSafari();
     const ios = typeof navigator !== "undefined" && isIOS();
@@ -276,9 +279,122 @@ const CompatibilitySection = memo(function CompatibilitySection() {
                     </ul>
                 </CardContent>
             </Card>
+
+            {/* VLC Bridge — shown in Integrations tab */}
         </div>
     );
 });
+
+// ── VLC Bridge status card ─────────────────────────────────────────────────
+
+const VLCBridgeCard = memo(function VLCBridgeCard() {
+    const mediaPlayer = useSettingsStore((s) => s.settings.mediaPlayer);
+    const extensionDetected = useVLCStore((s) => s.extensionDetected);
+    const vlcConnected = useVLCStore((s) => s.vlcConnected);
+    const status = useVLCStore((s) => s.status);
+    const nowPlaying = useVLCStore((s) => s.nowPlaying);
+    const detecting = useVLCStore((s) => s.detecting);
+    const detect = useVLCStore((s) => s.detect);
+    const startPolling = useVLCStore((s) => s.startPolling);
+    const stopPolling = useVLCStore((s) => s.stopPolling);
+
+    const isVLC = mediaPlayer === MediaPlayer.VLC;
+
+    // Auto-detect and poll when card is visible
+    useEffect(() => {
+        if (!isVLC) return;
+        if (!extensionDetected && !detecting) {
+            detect().then((found) => {
+                if (found) startPolling();
+            });
+        } else if (extensionDetected) {
+            startPolling();
+        }
+        return () => stopPolling();
+    }, [isVLC, extensionDetected, detecting, detect, startPolling, stopPolling]);
+
+    // Overall status
+    const overallStatus: CheckStatus = detecting
+        ? "degraded"
+        : extensionDetected && vlcConnected
+          ? "ok"
+          : extensionDetected
+            ? "degraded"
+            : "error";
+
+    const stateLabel = status?.state === "playing"
+        ? "Playing"
+        : status?.state === "paused"
+          ? "Paused"
+          : status?.state === "stopped"
+            ? "Stopped"
+            : "—";
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-3">
+                    <svg className="size-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    VLC Bridge
+                </CardTitle>
+                <CardDescription>
+                    {isVLC ? "Extension-based VLC integration" : "Set player to VLC to enable"}
+                </CardDescription>
+                <CardAction>
+                    <StatusBadge status={overallStatus} />
+                </CardAction>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                <ServiceRow
+                    label="Extension"
+                    status={detecting ? "degraded" : extensionDetected ? "ok" : "error"}
+                />
+                <ServiceRow
+                    label="VLC Connection"
+                    status={vlcConnected ? "ok" : extensionDetected ? "error" : undefined}
+                />
+                {vlcConnected && (
+                    <>
+                        <KeyValue label="State" value={stateLabel} />
+                        {nowPlaying && <KeyValue label="Now Playing" value={nowPlaying} />}
+                        {status && status.length > 0 && (
+                            <KeyValue
+                                label="Progress"
+                                value={`${formatTime(status.time)} / ${formatTime(status.length)}`}
+                            />
+                        )}
+                    </>
+                )}
+                {!extensionDetected && isVLC && !detecting && (
+                    <div className="pt-2">
+                        <Button variant="outline" size="sm" onClick={() => detect()}>
+                            <RefreshCw className="size-3 mr-1.5" />
+                            Retry Detection
+                        </Button>
+                    </div>
+                )}
+                {!isVLC && (
+                    <div className="text-xs text-muted-foreground pt-1">
+                        Change your media player to VLC in Settings to enable the bridge integration.
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+});
+
+function formatTime(value: number): string {
+    if (!Number.isFinite(value) || value < 0) return "0:00";
+    const total = Math.floor(value);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+    const ss = String(s).padStart(2, "0");
+    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
 
 export default function StatusPage() {
     const [data, setData] = useState<HealthResponse | null>(null);
@@ -390,6 +506,7 @@ export default function StatusPage() {
                 <TabsList variant="line" className="w-full justify-start">
                     <TabsTrigger value="services">Services</TabsTrigger>
                     <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
+                    <TabsTrigger value="integrations">Integrations</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="services" className="space-y-4 pt-4">
@@ -489,6 +606,10 @@ export default function StatusPage() {
 
                 <TabsContent value="compatibility" className="space-y-4 pt-4">
                     <CompatibilitySection />
+                </TabsContent>
+
+                <TabsContent value="integrations" className="space-y-4 pt-4">
+                    <VLCBridgeCard />
                 </TabsContent>
             </Tabs>
         </div>

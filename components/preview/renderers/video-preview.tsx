@@ -19,6 +19,7 @@ const LegacyVideoPreview = dynamic(
 );
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { DebridFileNode } from "@/lib/types";
+import { type ProgressKey } from "@/hooks/use-progress";
 
 interface VideoPreviewProps {
     file: DebridFileNode;
@@ -49,7 +50,7 @@ class VideoPreviewErrorBoundary extends Component<
 }
 
 /** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
-export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev, onPreload, onLoad, onError }: VideoPreviewProps & { onNext?: () => void; onPrev?: () => void; onPreload?: () => void; progressKey?: any }) {
+export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev, onPreload, onLoad, onError }: VideoPreviewProps & { onNext?: () => void; onPrev?: () => void; onPreload?: () => void; progressKey?: ProgressKey }) {
     const legacy = (
         <LegacyVideoPreview
             file={file}

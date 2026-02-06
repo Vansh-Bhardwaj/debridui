@@ -95,29 +95,43 @@ export function useProgress(key: ProgressKey | null) {
     const { data: session } = authClient.useSession();
     const isLoggedIn = !!session?.user;
 
-    const [initialProgress, setInitialProgress] = useState<number | null>(null);
-    const lastSyncRef = useRef<number>(0);
-    const lastProgressRef = useRef<ProgressData | null>(null);
-    const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    // Load initial progress on mount
-    useEffect(() => {
-        if (!key) {
-            setInitialProgress(null);
-            return;
-        }
-
+    const [initialProgress, setInitialProgress] = useState<number | null>(() => {
+        if (!key) return null;
         const local = readLocalProgress(key);
         if (local && local.progressSeconds > 0) {
-            // Only resume if progress is between 1% and 95%
             const percent = local.durationSeconds > 0
                 ? (local.progressSeconds / local.durationSeconds) * 100
                 : 0;
             if (percent >= 1 && percent <= 95) {
-                setInitialProgress(local.progressSeconds);
+                return local.progressSeconds;
             }
         }
-    }, [key?.imdbId, key?.type, key?.season, key?.episode]);
+        return null;
+    });
+    const lastSyncRef = useRef<number>(0);
+    const lastProgressRef = useRef<ProgressData | null>(null);
+    const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Re-compute initial progress when key identity changes
+    const prevKeyRef = useRef(key);
+    useEffect(() => {
+        if (prevKeyRef.current === key) return;
+        prevKeyRef.current = key;
+
+        if (!key) {
+            queueMicrotask(() => setInitialProgress(null));
+            return;
+        }
+        const local = readLocalProgress(key);
+        if (local && local.progressSeconds > 0) {
+            const percent = local.durationSeconds > 0
+                ? (local.progressSeconds / local.durationSeconds) * 100
+                : 0;
+            queueMicrotask(() => setInitialProgress(percent >= 1 && percent <= 95 ? local.progressSeconds : null));
+        } else {
+            queueMicrotask(() => setInitialProgress(null));
+        }
+    }, [key]);
 
     // Sync to server periodically
     useEffect(() => {
@@ -141,7 +155,7 @@ export function useProgress(key: ProgressKey | null) {
                 syncToServer(key, lastProgressRef.current);
             }
         };
-    }, [key?.imdbId, key?.type, key?.season, key?.episode, isLoggedIn]);
+    }, [key, isLoggedIn]);
 
     /**
      * Update progress (called on timeupdate, throttled by caller)
@@ -158,7 +172,7 @@ export function useProgress(key: ProgressKey | null) {
         // Always write to localStorage
         writeLocalProgress(key, data);
         lastProgressRef.current = data;
-    }, [key?.imdbId, key?.type, key?.season, key?.episode]);
+    }, [key]);
 
     /**
      * Force sync to server (call on pause or video end)
@@ -172,7 +186,7 @@ export function useProgress(key: ProgressKey | null) {
             syncToServer(key, lastProgressRef.current);
             lastSyncRef.current = Date.now();
         }
-    }, [key?.imdbId, key?.type, key?.season, key?.episode, isLoggedIn]);
+    }, [key, isLoggedIn]);
 
     /**
      * Mark as completed (clears from continue watching)
@@ -193,7 +207,7 @@ export function useProgress(key: ProgressKey | null) {
 
             fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
         }
-    }, [key?.imdbId, key?.type, key?.season, key?.episode, isLoggedIn]);
+    }, [key, isLoggedIn]);
 
     return {
         initialProgress,
