@@ -26,6 +26,7 @@ const DETAIL_ROUTES: Record<string, string> = {
     movies: "Movie",
     shows: "TV Show",
     people: "People",
+    discover: "Discover",
 };
 
 // Static route labels

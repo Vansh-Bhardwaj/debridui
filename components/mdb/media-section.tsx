@@ -17,6 +17,8 @@ interface MediaSectionProps {
     showRank?: boolean;
     viewAllHref?: string;
     className?: string;
+    /** Number of grid rows (default 2). Use 1 for compact catalog rows. */
+    rows?: 1 | 2;
 }
 
 const MediaSectionSkeleton = memo(function MediaSectionSkeleton() {
@@ -39,8 +41,11 @@ export const MediaSection = memo(function MediaSection({
     showRank = false,
     viewAllHref,
     className,
+    rows = 2,
 }: MediaSectionProps) {
-    const filteredItems = useMemo(() => items?.slice(0, 20).filter((item) => item.movie || item.show) ?? [], [items]);
+    const maxItems = rows === 1 ? 10 : 20;
+    const filteredItems = useMemo(() => items?.slice(0, maxItems).filter((item) => item.movie || item.show) ?? [], [items, maxItems]);
+    const gridRows = rows === 1 ? "grid-rows-1" : "grid-rows-2";
 
     if (error) {
         return (
@@ -76,7 +81,7 @@ export const MediaSection = memo(function MediaSection({
                 {isLoading ? (
                     <MediaSectionSkeleton />
                 ) : (
-                    <div className="grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
+                    <div className={cn("grid grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max", gridRows)}>
                         {filteredItems.map((item, index) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";

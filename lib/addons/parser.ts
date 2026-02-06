@@ -1,5 +1,7 @@
 import { formatSize } from "../utils";
-import { type AddonStream, type AddonSource, Resolution, SourceQuality } from "./types";
+import { type AddonStream, type AddonSource, type CatalogMeta, Resolution, SourceQuality } from "./types";
+import { type TraktMediaItem, type TraktMedia, type TraktImages } from "@/lib/trakt";
+import { cdnUrl } from "@/lib/utils/media";
 
 const HASH_REGEX = /[a-f0-9]{40}/;
 const FILE_SIZE_REGEX = /\b\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B\b/gi;
@@ -194,4 +196,25 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
  */
 export function parseStreams(streams: AddonStream[], addonId: string, addonName: string): AddonSource[] {
     return streams.map((stream) => parseStream(stream, addonId, addonName));
+}
+
+/**
+ * Convert catalog metas to TraktMediaItem format for reuse with MediaSection/MediaCard
+ */
+export function catalogMetasToMediaItems(metas: CatalogMeta[]): TraktMediaItem[] {
+    return metas.map((meta) => {
+        const type = meta.type === "series" ? "show" : "movie";
+        const media: TraktMedia = {
+            title: meta.name,
+            year: parseInt(meta.releaseInfo || "") || 0,
+            ids: { trakt: 0, slug: meta.id, tmdb: 0, imdb: meta.id },
+            images: meta.poster
+                ? ({ poster: [cdnUrl(meta.poster, { w: 300, h: 450 })] } as Partial<TraktImages> as TraktImages)
+                : undefined,
+            rating: meta.imdbRating ? parseFloat(meta.imdbRating) : undefined,
+            genres: meta.genres,
+            overview: meta.description,
+        };
+        return type === "movie" ? { movie: media } : { show: media };
+    });
 }

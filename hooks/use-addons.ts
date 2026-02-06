@@ -1,9 +1,10 @@
-import { useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { TraktMediaItem } from "@/lib/trakt";
 import { getUserAddons, addAddon, removeAddon, toggleAddon, updateAddonOrders } from "@/lib/actions/addons";
 import { AddonClient } from "@/lib/addons/client";
-import { parseStreams } from "@/lib/addons/parser";
-import { type Addon, type AddonManifest, type AddonSource, type AddonSubtitle, type TvSearchParams, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
+import { parseStreams, catalogMetasToMediaItems } from "@/lib/addons/parser";
+import { type Addon, type AddonManifest, type AddonSource, type AddonSubtitle, type TvSearchParams, addonSupportsStreams, addonSupportsSubtitles, addonSupportsCatalogs } from "@/lib/addons/types";
 import { getSubtitleLabel, isEnglishSubtitle } from "@/lib/utils/subtitles";
 import { useToastMutation } from "@/lib/utils/mutation-factory";
 
@@ -375,4 +376,102 @@ export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubti
         data: combinedSubtitles,
         isLoading: manifestQueries.some((q) => q.isLoading) || subtitleQueries.some((q) => q.isLoading),
     };
+}
+
+// ── Catalog browsing ─────────────────────────────────────────────
+
+export interface AddonCatalogDef {
+    type: string;
+    id: string;
+    name: string;
+    addonId: string;
+    addonName: string;
+    addonUrl: string;
+}
+
+/** Encode a catalog definition into a URL-safe slug: `addonId~type~catalogId` */
+export function catalogSlug(catalog: AddonCatalogDef): string {
+    return `${catalog.addonId}~${catalog.type}~${catalog.id}`;
+}
+
+/** Decode a catalog slug back into its parts. */
+export function parseCatalogSlug(slug: string): { addonId: string; type: string; catalogId: string } | null {
+    const parts = slug.split("~");
+    if (parts.length !== 3) return null;
+    return { addonId: parts[0], type: parts[1], catalogId: parts[2] };
+}
+
+/**
+ * Get all browseable catalog definitions from enabled addons.
+ * Skips search-only catalogs (those requiring a `search` extra).
+ */
+export function useAddonCatalogDefs() {
+    const { data: addons = [] } = useUserAddons();
+    const enabledAddons = useMemo(
+        () => addons.filter((a: Addon) => a.enabled).sort((a: Addon, b: Addon) => a.order - b.order),
+        [addons]
+    );
+
+    const manifestQueries = useQueries({
+        queries: enabledAddons.map((addon: Addon) => ({
+            ...manifestQueryOptions(addon),
+            enabled: true,
+        })),
+    });
+
+    const catalogs = useMemo((): AddonCatalogDef[] => {
+        const result: AddonCatalogDef[] = [];
+        for (let i = 0; i < enabledAddons.length; i++) {
+            const addon = enabledAddons[i];
+            const manifest = manifestQueries[i]?.data;
+            if (!manifest || !addonSupportsCatalogs(manifest)) continue;
+
+            for (const cat of manifest.catalogs ?? []) {
+                const isSearchOnly = cat.extra?.some((e) => e.name === "search" && e.isRequired);
+                if (isSearchOnly) continue;
+
+                result.push({
+                    type: cat.type,
+                    id: cat.id,
+                    name: cat.name ?? cat.id,
+                    addonId: addon.id,
+                    addonName: addon.name,
+                    addonUrl: addon.url,
+                });
+            }
+        }
+        return result;
+    }, [enabledAddons, manifestQueries]);
+
+    const isLoading = manifestQueries.some((q) => q.isLoading);
+    return { data: catalogs, isLoading };
+}
+
+/**
+ * Fetch content for a single addon catalog.
+ * Returns TraktMediaItem[] for reuse with MediaSection / MediaCard.
+ */
+export function useAddonCatalog(catalog: AddonCatalogDef | null, enabled = true): UseQueryResult<TraktMediaItem[]> {
+    return useQuery({
+        queryKey: ["addon", catalog?.addonId, "catalog", catalog?.type, catalog?.id],
+        queryFn: async () => {
+            if (!catalog) return [];
+            const client = new AddonClient({ url: catalog.addonUrl });
+            const res = await client.fetchCatalog(catalog.type, catalog.id);
+            return catalogMetasToMediaItems(res.metas);
+        },
+        enabled: enabled && !!catalog,
+        staleTime: 30 * 60 * 1000,
+        retry: 1,
+    });
+}
+
+/** Resolve a single catalog definition by its slug parts. */
+export function useAddonCatalogDef(addonId: string, type: string, catalogId: string) {
+    const { data: catalogs = [], isLoading } = useAddonCatalogDefs();
+    const catalog = useMemo(
+        () => catalogs.find((c) => c.addonId === addonId && c.type === type && c.id === catalogId) ?? null,
+        [catalogs, addonId, type, catalogId]
+    );
+    return { data: catalog, isLoading };
 }

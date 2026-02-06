@@ -46,6 +46,11 @@ export interface AddonManifest {
         type: string;
         id: string;
         name?: string;
+        extra?: Array<{
+            name: string;
+            isRequired?: boolean;
+            options?: string[];
+        }>;
     }>;
     behaviorHints?: {
         adult?: boolean;
@@ -53,6 +58,22 @@ export interface AddonManifest {
         configurable?: boolean;
         configurationRequired?: boolean;
     };
+}
+
+export interface CatalogMeta {
+    id: string;
+    type: string;
+    name: string;
+    poster?: string;
+    posterShape?: string;
+    description?: string;
+    genres?: string[];
+    imdbRating?: string;
+    releaseInfo?: string;
+}
+
+export interface CatalogResponse {
+    metas: CatalogMeta[];
 }
 
 export interface AddonStream {
@@ -129,6 +150,14 @@ export class AddonError extends Error {
 // ── Manifest capability helpers ────────────────────────────────────
 
 type ManifestLike = { resources?: Array<string | { name?: string }> };
+
+/** Check if an addon manifest declares the "catalog" resource with at least one catalog. */
+export function addonSupportsCatalogs(manifest: ManifestLike & { catalogs?: unknown[] }): boolean {
+    const hasResource = manifest?.resources?.some((r) =>
+        typeof r === "string" ? r === "catalog" : r?.name === "catalog"
+    ) ?? false;
+    return hasResource && (manifest.catalogs?.length ?? 0) > 0;
+}
 
 /** Check if an addon manifest declares the "stream" resource (Stremio protocol). */
 export function addonSupportsStreams(manifest: ManifestLike): boolean {

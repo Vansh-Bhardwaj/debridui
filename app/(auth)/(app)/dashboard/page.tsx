@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
-import { memo, useState } from "react";
+import { memo, useState, useCallback, useEffect, useRef } from "react";
 import {
     useTraktTrendingMovies,
     useTraktTrendingShows,
@@ -15,7 +15,13 @@ import {
     useTraktAnticipatedShows,
     useTraktBoxOfficeMovies,
 } from "@/hooks/use-trakt";
-import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket } from "lucide-react";
+import {
+    useAddonCatalogDefs,
+    useAddonCatalog,
+    catalogSlug,
+    type AddonCatalogDef,
+} from "@/hooks/use-addons";
+import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
@@ -148,6 +154,91 @@ const ContentSection = memo(function ContentSection({ label, icon, children, del
     );
 });
 
+// ── Addon catalog components ────────────────────────────────────
+
+/** Single addon catalog row — only fetches content when visible. */
+const AddonCatalogRow = memo(function AddonCatalogRow({
+    catalog,
+    isVisible,
+}: {
+    catalog: AddonCatalogDef;
+    isVisible: boolean;
+}) {
+    const { data, isLoading, error } = useAddonCatalog(catalog, isVisible);
+
+    // Don't render anything until visible the first time
+    if (!isVisible && !data) return null;
+
+    return (
+        <MediaSection
+            title={catalog.name}
+            items={data ?? undefined}
+            isLoading={isLoading}
+            error={error}
+            rows={1}
+            viewAllHref={`/discover/addon/${catalogSlug(catalog)}`}
+        />
+    );
+});
+
+/** Shows all browseable addon catalogs with lazy-loaded rows via IntersectionObserver. */
+const AddonCatalogs = memo(function AddonCatalogs() {
+    const { data: catalogs } = useAddonCatalogDefs();
+    const [visible, setVisible] = useState<Set<string>>(new Set());
+    const observerRef = useRef<IntersectionObserver | null>(null);
+
+    const sentinelRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            if (!node) return;
+            const key = node.dataset.key;
+            if (!key) return;
+            if (!observerRef.current) {
+                observerRef.current = new IntersectionObserver(
+                    (entries) => {
+                        const newKeys: string[] = [];
+                        for (const entry of entries) {
+                            if (entry.isIntersecting) {
+                                const k = (entry.target as HTMLElement).dataset.key;
+                                if (k) newKeys.push(k);
+                            }
+                        }
+                        if (newKeys.length > 0) {
+                            setVisible((prev) => {
+                                const next = new Set(prev);
+                                for (const k of newKeys) next.add(k);
+                                return next;
+                            });
+                        }
+                    },
+                    { rootMargin: "100% 0px" }
+                );
+            }
+            observerRef.current.observe(node);
+        },
+        []
+    );
+
+    // Cleanup observer on unmount
+    useEffect(() => {
+        return () => observerRef.current?.disconnect();
+    }, []);
+
+    if (!catalogs?.length) return null;
+
+    return (
+        <ContentSection label="From Your Addons" icon={<Puzzle className="size-3.5" />}>
+            {catalogs.map((cat) => {
+                const key = catalogSlug(cat);
+                return (
+                    <div key={key} ref={sentinelRef} data-key={key}>
+                        <AddonCatalogRow catalog={cat} isVisible={visible.has(key)} />
+                    </div>
+                );
+            })}
+        </ContentSection>
+    );
+});
+
 const DashboardPage = memo(function DashboardPage() {
     const [searchOpen, setSearchOpen] = useState(false);
 
@@ -178,6 +269,9 @@ const DashboardPage = memo(function DashboardPage() {
 
             {/* Content Sections with lazy loading */}
             <div className="lg:px-6 space-y-16">
+                {/* Addon Catalogs — lazy-loaded per-row */}
+                <AddonCatalogs />
+
                 {/* Trending */}
                 <ContentSection label="Trending Now" icon={<TrendingUp className="size-3.5" />} delay={0}>
                     <MediaSection

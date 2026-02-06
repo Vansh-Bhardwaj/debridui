@@ -3,6 +3,7 @@ import {
     type AddonManifest,
     type AddonStreamResponse,
     type AddonSubtitlesResponse,
+    type CatalogResponse,
     type TvSearchParams,
 } from "./types";
 import { getProxyUrl } from "@/lib/utils";
@@ -212,6 +213,29 @@ export class AddonClient {
             throw new AddonError("TV show requires season and episode parameters");
         }
         return this.fetchTvSubtitles(imdbId, tvParams);
+    }
+
+    /**
+     * Fetch catalog content
+     */
+    async fetchCatalog(type: string, catalogId: string, extra?: Record<string, string>): Promise<CatalogResponse> {
+        let url = `${this.baseUrl}/catalog/${type}/${catalogId}`;
+
+        if (extra && Object.keys(extra).length > 0) {
+            const extraStr = Object.entries(extra)
+                .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+                .join("&");
+            url += `/${extraStr}`;
+        }
+
+        url += ".json";
+        const response = await this.makeRequest<CatalogResponse>(getProxyUrl(url));
+
+        if (!response.metas || !Array.isArray(response.metas)) {
+            return { metas: [] };
+        }
+
+        return response;
     }
 
     /**
