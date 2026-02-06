@@ -6,7 +6,7 @@ import { Play, X, Star } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
-import { getPosterUrl } from "@/lib/utils/trakt";
+import { getPosterUrl } from "@/lib/utils/media";
 import Image from "next/image";
 
 interface ContinueWatchingItemProps {

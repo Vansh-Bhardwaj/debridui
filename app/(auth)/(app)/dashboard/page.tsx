@@ -15,7 +15,7 @@ import {
     useTraktAnticipatedShows,
     useTraktBoxOfficeMovies,
 } from "@/hooks/use-trakt";
-import { SearchIcon, Sparkles, Film, Tv, TrendingUp, Calendar, Ticket, Puzzle } from "lucide-react";
+import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";

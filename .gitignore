@@ -54,6 +54,9 @@ next-env.d.ts
 # claude
 .claude/settings.local.json
 
+# vlc-bridge build artifacts
+vlc-bridge/*.zip
+
 # api specs
 *.openapi.json
 *.openapi.yaml

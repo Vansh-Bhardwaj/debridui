@@ -35,6 +35,9 @@ function srtToVtt(srt: string): string {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const url = searchParams.get("url") ?? "";
+    // raw=1 skips VTT conversion (for external players like VLC that prefer SRT)
+    const raw = searchParams.get("raw") === "1";
+    const lang = searchParams.get("lang") ?? "";
 
     if (!url || !isSafeHttpUrl(url)) {
         return NextResponse.json({ error: "Invalid url" }, { status: 400 });
@@ -56,6 +59,23 @@ export async function GET(req: Request) {
             { error: `Upstream error: ${upstream.status} ${upstream.statusText}` },
             { status: upstream.status }
         );
+    }
+
+    // Raw mode: return upstream content as-is (for VLC and other external players)
+    if (raw) {
+        const text = await upstream.text();
+        const ext = text.trimStart().startsWith("WEBVTT") ? "vtt" : "srt";
+        const filename = lang ? `${lang}.${ext}` : `subtitle.${ext}`;
+        return new NextResponse(text, {
+            status: 200,
+            headers: {
+                "content-type": ext === "vtt" ? "text/vtt; charset=utf-8" : "application/x-subrip; charset=utf-8",
+                "content-disposition": `inline; filename="${filename}"`,
+                "access-control-allow-origin": "*",
+                "cache-control": "public, max-age=300",
+                ...(lang ? { "content-language": lang } : {}),
+            },
+        });
     }
 
     const upstreamContentType = (upstream.headers.get("content-type") ?? "").toLowerCase();

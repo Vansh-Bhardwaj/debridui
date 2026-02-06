@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SearchButton } from "@/components/common/search-button";
 import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
+import { VLCMiniPlayer } from "@/components/vlc-mini-player";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
@@ -40,6 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </SidebarProvider>
             <PreviewDialog />
             <PreviewRegistryLoader />
+            <VLCMiniPlayer />
         </SearchProvider>
     );
 }
