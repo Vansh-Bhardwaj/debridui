@@ -6,7 +6,7 @@ import { NavMain } from "@/components/sidebar/nav-main";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { AccountSwitcher } from "./account-switcher";
-import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, Activity } from "lucide-react";
+import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity } from "lucide-react";
 import { useSearch } from "@/components/mdb/search-provider";
 
 const data = {
@@ -52,6 +52,13 @@ const data = {
             icon: SettingsIcon,
         },
     ],
+    navSecondary: [
+        {
+            title: "Help",
+            url: "/help",
+            icon: HelpCircle,
+        },
+    ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -70,6 +77,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarHeader>
             <SidebarContent>
                 <NavMain items={data.navMain} onAction={handleNavAction} />
+                <NavMain items={data.navSecondary} className="mt-auto" variant="subtle" />
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border/50">
                 <NavUser />
