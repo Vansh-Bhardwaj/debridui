@@ -27,6 +27,11 @@ ENV NEXT_PUBLIC_APP_URL="__NEXT_PUBLIC_APP_URL__"
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID="__NEXT_PUBLIC_GOOGLE_CLIENT_ID__"
 ENV NEXT_PUBLIC_DISABLE_EMAIL_SIGNUP="__NEXT_PUBLIC_DISABLE_EMAIL_SIGNUP__"
 
+# Server-side secrets need placeholder values to pass build-time validation.
+# Real values are provided at runtime via Docker environment variables.
+ENV NEON_AUTH_COOKIE_SECRET="build-placeholder-replaced-at-runtime"
+ENV NEON_AUTH_BASE_URL="https://build-placeholder.example.com"
+
 RUN bun run build
 
 # Production image
