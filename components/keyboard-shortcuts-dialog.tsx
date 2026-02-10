@@ -29,6 +29,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
             { keys: ["Space"], description: "Play / Pause" },
             { keys: ["←", "→"], description: "Seek ±5s" },
             { keys: ["J", "L"], description: "Seek ±10s" },
+            { keys: ["[", "]"], description: "Speed ±0.25x" },
             { keys: ["↑", "↓"], description: "Volume ±10%" },
             { keys: ["M"], description: "Toggle mute" },
             { keys: ["F"], description: "Toggle fullscreen" },

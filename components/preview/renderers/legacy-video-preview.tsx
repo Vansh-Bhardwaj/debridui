@@ -127,10 +127,21 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // User's preferred subtitle language from settings
     const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
+    // User's preferred audio language from streaming settings
+    const preferredAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
 
     // Manual subtitle rendering (bypasses Windows OS caption override)
     const [parsedCues, setParsedCues] = useState<SubtitleCue[][]>([]);
     const [activeCueText, setActiveCueText] = useState<string>("");
+
+    // In-player OSD (on-screen display) for keyboard feedback
+    const [osdText, setOsdText] = useState("");
+    const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const showOsd = useCallback((text: string) => {
+        setOsdText(text);
+        if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
+        osdTimeoutRef.current = setTimeout(() => setOsdText(""), 800);
+    }, []);
 
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
@@ -326,19 +337,33 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const tracks = el.audioTracks;
             let chosenIndex = 0;
 
-            // First, try to match Trakt original language (e.g. "en")
-            const targetLang = normalizeLangCode(originalLanguageCode);
-            if (targetLang && tracks.length > 0) {
+            // Priority 1: user's preferred audio language from settings
+            const userLang = normalizeLangCode(preferredAudioLang);
+            if (userLang && tracks.length > 0) {
                 for (let i = 0; i < tracks.length; i++) {
                     const trackLang = normalizeLangCode(tracks[i]?.language);
-                    if (trackLang && trackLang === targetLang) {
+                    if (trackLang && trackLang === userLang) {
                         chosenIndex = i;
                         break;
                     }
                 }
             }
 
-            // If no explicit language match, fall back to browser default / "original" labels
+            // Priority 2: Trakt original language (e.g. "en")
+            if (chosenIndex === 0) {
+                const targetLang = normalizeLangCode(originalLanguageCode);
+                if (targetLang && tracks.length > 0) {
+                    for (let i = 0; i < tracks.length; i++) {
+                        const trackLang = normalizeLangCode(tracks[i]?.language);
+                        if (trackLang && trackLang === targetLang) {
+                            chosenIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Priority 3: fall back to browser default / "original" labels
             if (chosenIndex === 0 && tracks.length > 1) {
                 let originalIndex = 0;
 
@@ -374,7 +399,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
-    }, [originalLanguageCode]);
+    }, [originalLanguageCode, preferredAudioLang]);
 
 
 
@@ -685,19 +710,29 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Keyboard shortcuts (non-iOS) - YouTube-style controls:
     // Space/K: play/pause | Arrow Left/Right: ±5s | J/L: ±10s | ,/.: ±0.5s frame-step (paused)
-    // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles
+    // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles | [/]: speed
     useEffect(() => {
         if (ios) return;
 
         const handler = (event: KeyboardEvent) => {
             const active = document.activeElement;
+            // Skip if user is typing in a text input (but not range/seekbar)
             if (
                 active &&
-                (active.tagName === "INPUT" ||
-                    active.tagName === "TEXTAREA" ||
-                    (active as HTMLElement).isContentEditable)
+                (active.tagName === "TEXTAREA" ||
+                    (active as HTMLElement).isContentEditable ||
+                    (active.tagName === "INPUT" && (active as HTMLInputElement).type !== "range"))
             ) {
                 return;
+            }
+
+            // Blur focused player controls (buttons, seekbar) so shortcuts work
+            if (
+                active &&
+                active !== document.body &&
+                (active.tagName === "BUTTON" || (active as HTMLInputElement).type === "range")
+            ) {
+                (active as HTMLElement).blur();
             }
 
             switch (event.key) {
@@ -706,28 +741,32 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "K":
                     event.preventDefault();
                     togglePlay();
+                    showOsd(videoRef.current?.paused ? "▶ Play" : "⏸ Pause");
                     break;
                 case "ArrowLeft":
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 5);
+                    showOsd("« 5s");
                     break;
                 case "ArrowRight":
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 5);
+                    showOsd("» 5s");
                     break;
                 case "j":
                 case "J":
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 10);
+                    showOsd("« 10s");
                     break;
                 case "l":
                 case "L":
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 10);
+                    showOsd("» 10s");
                     break;
                 case ",":
                 case "<":
-                    // Frame step backward (when paused)
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) - 0.5);
@@ -735,11 +774,26 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     break;
                 case ".":
                 case ">":
-                    // Frame step forward (when paused)
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) + 0.5);
                     }
+                    break;
+                case "[":
+                    event.preventDefault();
+                    setPlaybackRate((prev) => {
+                        const next = Math.max(0.25, +(prev - 0.25).toFixed(2));
+                        showOsd(`Speed ${next}x`);
+                        return next;
+                    });
+                    break;
+                case "]":
+                    event.preventDefault();
+                    setPlaybackRate((prev) => {
+                        const next = Math.min(4, +(prev + 0.25).toFixed(2));
+                        showOsd(`Speed ${next}x`);
+                        return next;
+                    });
                     break;
                 case "ArrowUp":
                 case "ArrowDown": {
@@ -750,12 +804,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     const next = Math.min(Math.max(el.volume + delta, 0), 1);
                     el.volume = next;
                     el.muted = next === 0;
+                    showOsd(`Volume ${Math.round(next * 100)}%`);
                     break;
                 }
                 case "m":
                 case "M":
                     event.preventDefault();
                     toggleMute();
+                    showOsd(videoRef.current?.muted ? "� Muted" : "🔊 Unmuted");
                     break;
                 case "f":
                 case "F":
@@ -778,7 +834,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [ios, subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo]);
+    }, [ios, subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd]);
 
     // Non-iOS: if we have subtitles, "warm up" the default subtitle by hitting our proxy first.
     // This allows the proxy to convert SRT->VTT before the browser starts video playback, similar to Stremio web.
@@ -1012,6 +1068,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
+                    {/* In-player OSD for keyboard shortcut feedback */}
+                    {osdText && (
+                        <div
+                            key={osdText}
+                            className="absolute top-12 right-5 z-40 pointer-events-none animate-in fade-in slide-in-from-right-2 duration-200"
+                        >
+                            <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90">
+                                {osdText}
+                            </div>
+                        </div>
+                    )}
+
                     <VideoCodecWarning
                         show={shouldShowWarning && showCodecWarning}
                         isPlaying={isPlaying}
@@ -1135,6 +1203,65 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     </div>
 
                                     <div className="ml-auto flex items-center gap-3">
+                                        {/* Audio track selector */}
+                                        {audioTrackCount > 1 && (
+                                            <DropdownMenu
+                                                open={openMenu === "audio"}
+                                                onOpenChange={(open) =>
+                                                    setOpenMenu(open ? "audio" : null)
+                                                }>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-9 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-md border border-white/10">
+                                                        Audio
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                    <DropdownMenuContent
+                                                        align="end"
+                                                        className="min-w-[180px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                                                            Audio Tracks
+                                                        </DropdownMenuLabel>
+                                                        {Array.from({ length: audioTrackCount }, (_, i) => {
+                                                            const el = videoRef.current as (HTMLVideoElement & {
+                                                                audioTracks?: {
+                                                                    length: number;
+                                                                    [i: number]: {
+                                                                        enabled: boolean;
+                                                                        label?: string;
+                                                                        language?: string;
+                                                                    };
+                                                                };
+                                                            }) | null;
+                                                            const t = el?.audioTracks?.[i];
+                                                            const langLabel = t?.language
+                                                                ? getLanguageDisplayName(t.language)
+                                                                : "";
+                                                            const base = (t?.label ?? "").trim();
+                                                            const label =
+                                                                [langLabel, base].filter(Boolean).join(" · ") ||
+                                                                `Track ${i + 1}`;
+                                                            return (
+                                                                <DropdownMenuItem
+                                                                    key={i}
+                                                                    onClick={() => setSelectedAudioIndex(i)}
+                                                                    className={
+                                                                        selectedAudioIndex === i
+                                                                            ? "bg-primary text-primary-foreground"
+                                                                            : "focus:bg-white/10 focus:text-white"
+                                                                    }>
+                                                                    {label}
+                                                                </DropdownMenuItem>
+                                                            );
+                                                        })}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenuPortal>
+                                            </DropdownMenu>
+                                        )}
+
                                         {/* Subtitles menu (track selection only) */}
                                         {subtitles && subtitles.length > 0 && (
                                             <DropdownMenu
@@ -1265,65 +1392,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 </DropdownMenuContent>
                                             </DropdownMenuPortal>
                                         </DropdownMenu>
-
-                                        {/* Audio track selector */}
-                                        {audioTrackCount > 1 && (
-                                            <DropdownMenu
-                                                open={openMenu === "audio"}
-                                                onOpenChange={(open) =>
-                                                    setOpenMenu(open ? "audio" : null)
-                                                }>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-9 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-md border border-white/10">
-                                                        Audio
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuPortal container={containerRef.current ?? undefined}>
-                                                    <DropdownMenuContent
-                                                        align="end"
-                                                        className="min-w-[180px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
-                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
-                                                            Audio Tracks
-                                                        </DropdownMenuLabel>
-                                                        {Array.from({ length: audioTrackCount }, (_, i) => {
-                                                            const el = videoRef.current as (HTMLVideoElement & {
-                                                                audioTracks?: {
-                                                                    length: number;
-                                                                    [i: number]: {
-                                                                        enabled: boolean;
-                                                                        label?: string;
-                                                                        language?: string;
-                                                                    };
-                                                                };
-                                                            }) | null;
-                                                            const t = el?.audioTracks?.[i];
-                                                            const langLabel = t?.language
-                                                                ? getLanguageDisplayName(t.language)
-                                                                : "";
-                                                            const base = (t?.label ?? "").trim();
-                                                            const label =
-                                                                [langLabel, base].filter(Boolean).join(" · ") ||
-                                                                `Track ${i + 1}`;
-                                                            return (
-                                                                <DropdownMenuItem
-                                                                    key={i}
-                                                                    onClick={() => setSelectedAudioIndex(i)}
-                                                                    className={
-                                                                        selectedAudioIndex === i
-                                                                            ? "bg-primary text-primary-foreground"
-                                                                            : "focus:bg-white/10 focus:text-white"
-                                                                    }>
-                                                                    {label}
-                                                                </DropdownMenuItem>
-                                                            );
-                                                        })}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenuPortal>
-                                            </DropdownMenu>
-                                        )}
 
                                         {/* Open in external player */}
                                         <DropdownMenu

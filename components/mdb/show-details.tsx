@@ -192,10 +192,10 @@ const EpisodesSection = memo(function EpisodesSection({
         if (!showTraktId || !displayEpisodes) return;
         const epNumbers = displayEpisodes.map((e) => e.number);
         if (allWatched) {
-            unmarkWatched.mutate({ showTraktId, season: selectedSeason, episodes: epNumbers });
+            unmarkWatched.mutate({ showTraktId, showId: mediaId, season: selectedSeason, episodes: epNumbers });
         } else {
             const unwatched = epNumbers.filter((n) => !watchedSet.has(n));
-            markWatched.mutate({ showTraktId, season: selectedSeason, episodes: unwatched });
+            markWatched.mutate({ showTraktId, showId: mediaId, season: selectedSeason, episodes: unwatched });
         }
     };
 
@@ -261,9 +261,9 @@ const EpisodesSection = memo(function EpisodesSection({
                                   isNew={isNew}
                                   onToggleWatched={showTraktId ? () => {
                                       if (isWatched) {
-                                          unmarkWatched.mutate({ showTraktId, season: selectedSeason, episodes: [episode.number] });
+                                          unmarkWatched.mutate({ showTraktId, showId: mediaId, season: selectedSeason, episodes: [episode.number] });
                                       } else {
-                                          markWatched.mutate({ showTraktId, season: selectedSeason, episodes: [episode.number] });
+                                          markWatched.mutate({ showTraktId, showId: mediaId, season: selectedSeason, episodes: [episode.number] });
                                       }
                                   } : undefined}
                                   isTogglingWatched={markWatched.isPending || unmarkWatched.isPending}

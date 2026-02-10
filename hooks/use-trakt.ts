@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient, type TraktMedia } from "@/lib/trakt";
+import { useUserSettings } from "./use-user-settings";
 
 // Cache duration constants
 const CACHE_DURATION = {
@@ -327,7 +328,7 @@ export function useAddToHistory() {
 export function useMarkEpisodeWatched() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (params: { showTraktId: number; season: number; episodes: number[] }) =>
+        mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.addEpisodesToHistory(
                 params.episodes.map((ep) => ({
                     ids: { trakt: params.showTraktId },
@@ -335,8 +336,30 @@ export function useMarkEpisodeWatched() {
                     number: ep,
                 }))
             ),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+        onMutate: async (params) => {
+            // Optimistic update: mark episodes as watched immediately
+            await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+            const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
+            queryClient.setQueryData(["trakt", "show", "progress", params.showId], (old: Record<string, unknown> | undefined) => {
+                if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
+                const seasons = (old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }).seasons.map((s) => {
+                    if (s.number !== params.season) return s;
+                    return {
+                        ...s,
+                        episodes: s.episodes.map((ep) =>
+                            params.episodes.includes(ep.number) ? { ...ep, completed: true } : ep
+                        ),
+                    };
+                });
+                return { ...old, seasons };
+            });
+            return { prev };
+        },
+        onError: (_err, params, ctx) => {
+            if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+        },
+        onSettled: (_data, _err, params) => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
         },
     });
 }
@@ -345,7 +368,7 @@ export function useMarkEpisodeWatched() {
 export function useUnmarkEpisodeWatched() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (params: { showTraktId: number; season: number; episodes: number[] }) =>
+        mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.removeEpisodesFromHistory(
                 params.episodes.map((ep) => ({
                     ids: { trakt: params.showTraktId },
@@ -353,8 +376,29 @@ export function useUnmarkEpisodeWatched() {
                     number: ep,
                 }))
             ),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+        onMutate: async (params) => {
+            await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+            const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
+            queryClient.setQueryData(["trakt", "show", "progress", params.showId], (old: Record<string, unknown> | undefined) => {
+                if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
+                const seasons = (old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }).seasons.map((s) => {
+                    if (s.number !== params.season) return s;
+                    return {
+                        ...s,
+                        episodes: s.episodes.map((ep) =>
+                            params.episodes.includes(ep.number) ? { ...ep, completed: false } : ep
+                        ),
+                    };
+                });
+                return { ...old, seasons };
+            });
+            return { prev };
+        },
+        onError: (_err, params, ctx) => {
+            if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+        },
+        onSettled: (_data, _err, params) => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
         },
     });
 }
@@ -384,11 +428,15 @@ export function useTraktRelated(id: string, type: "movie" | "show") {
 
 // Watched progress hooks (require auth)
 export function useTraktShowProgress(showId: string) {
+    const { data: settings } = useUserSettings(true);
+    const hasAuth = !!settings?.trakt_access_token;
     return useQuery({
         queryKey: ["trakt", "show", "progress", showId],
         queryFn: () => traktClient.getShowWatchedProgress(showId),
-        staleTime: CACHE_DURATION.SHORT,
-        enabled: !!showId && !!traktClient.getAccessToken(),
+        staleTime: CACHE_DURATION.LONG,  // Watched progress rarely changes — 24h cache
+        gcTime: CACHE_DURATION.LONG,
+        enabled: !!showId && hasAuth,
+        retry: 1,  // One retry only — fail fast
     });
 }
 
