@@ -74,7 +74,15 @@ export default function SettingsPage() {
     useEffect(() => {
         const traktParam = searchParams.get("trakt");
         if (traktParam === "connected") toast.success("Trakt connected successfully");
-        else if (traktParam === "error") toast.error("Failed to connect Trakt");
+        else if (traktParam === "error") {
+            const reason = searchParams.get("reason");
+            const messages: Record<string, string> = {
+                no_code: "No authorization code received from Trakt",
+                config: "Trakt client ID or secret not configured on server",
+                exchange: "Failed to exchange authorization code with Trakt",
+            };
+            toast.error(messages[reason ?? ""] || "Failed to connect Trakt");
+        }
     }, [searchParams]);
 
     const handleTraktConnect = useCallback(() => {

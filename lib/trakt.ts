@@ -728,7 +728,13 @@ export class TraktClient {
                 grant_type: "authorization_code",
             }),
         });
-        if (!res.ok) throw new TraktError(`Token exchange failed: ${res.statusText}`, res.status);
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            throw new TraktError(
+                `Token exchange failed: ${res.status} ${res.statusText} — ${body}`,
+                res.status
+            );
+        }
         return res.json() as Promise<TraktTokenResponse>;
     }
 
@@ -753,7 +759,13 @@ export class TraktClient {
                 grant_type: "refresh_token",
             }),
         });
-        if (!res.ok) throw new TraktError(`Token refresh failed: ${res.statusText}`, res.status);
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            throw new TraktError(
+                `Token refresh failed: ${res.status} ${res.statusText} — ${body}`,
+                res.status
+            );
+        }
         return res.json() as Promise<TraktTokenResponse>;
     }
 }

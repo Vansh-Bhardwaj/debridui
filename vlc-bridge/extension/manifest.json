@@ -21,7 +21,7 @@
       "matches": [
         "http://localhost/*",
         "http://localhost:3000/*",
-        "https://debridui*.vercel.app/*",
+        "https://*.vercel.app/*",
         "https://debrid.indevs.in/*"
       ],
       "js": ["content.js"],
@@ -32,7 +32,7 @@
     "matches": [
       "http://localhost/*",
       "http://localhost:3000/*",
-      "https://debridui*.vercel.app/*",
+      "https://*.vercel.app/*",
       "https://debrid.indevs.in/*"
     ]
   },
