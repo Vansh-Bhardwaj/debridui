@@ -9,6 +9,7 @@ import { SeasonCard } from "./season-card";
 import { EpisodeCard } from "./episode-card";
 import { PeopleSection } from "./people-section";
 import { MediaHeader } from "./media-header";
+import { RelatedMedia } from "./related-media";
 import { SectionDivider } from "@/components/section-divider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, memo, useCallback, useMemo } from "react";
@@ -290,6 +291,11 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
             <section className="space-y-6">
                 <SectionDivider label="Cast & Crew" />
                 <PeopleSection mediaId={mediaId} type="shows" />
+            </section>
+
+            <section className="space-y-6">
+                <SectionDivider label="Related Shows" />
+                <RelatedMedia mediaId={mediaId} type="show" />
             </section>
         </div>
     );

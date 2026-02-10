@@ -294,6 +294,40 @@ export interface TraktCollectionItem {
 export type MediaType = "movie" | "show";
 export type MediaTypeEndpoint = "movies" | "shows";
 
+export interface TraktRatingItem {
+    rated_at: string;
+    rating: number;
+    type: "movie" | "show";
+    movie?: TraktMedia;
+    show?: TraktMedia;
+}
+
+export interface TraktFavoriteItem {
+    rank: number;
+    id: number;
+    listed_at: string;
+    notes: string | null;
+    type: "movie" | "show";
+    movie?: TraktMedia;
+    show?: TraktMedia;
+}
+
+export interface TraktCheckinResponse {
+    id: number;
+    watched_at: string;
+    sharing: { twitter: boolean; tumblr: boolean };
+    movie?: TraktMedia;
+    episode?: TraktEpisode;
+    show?: TraktMedia;
+}
+
+interface SyncIds { imdb?: string; trakt?: number }
+interface SyncItems { movies?: { ids: SyncIds }[]; shows?: { ids: SyncIds }[] }
+interface SyncRatingItems {
+    movies?: { ids: SyncIds; rating: number }[];
+    shows?: { ids: SyncIds; rating: number }[];
+}
+
 // Scrobble interfaces
 export interface TraktScrobbleMovie {
     ids: { imdb?: string; tmdb?: number; trakt?: number; slug?: string };
@@ -669,9 +703,85 @@ export class TraktClient {
         return this.makeRequest<TraktWatchlistItem[]>(`sync/watchlist/${type}/${sort}`, {}, true, extended);
     }
 
+    /** Add items to watchlist */
+    public async addToWatchlist(items: SyncItems) {
+        return this.makeRequest("sync/watchlist", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
     /** Remove items from watchlist */
-    public async removeFromWatchlist(items: { movies?: { ids: { imdb?: string; trakt?: number } }[]; shows?: { ids: { imdb?: string; trakt?: number } }[] }) {
+    public async removeFromWatchlist(items: SyncItems) {
         return this.makeRequest("sync/watchlist/remove", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    // ── Favorites Methods (require auth) ─────────────────────────────────
+
+    /** Get user's favorites */
+    public async getFavorites(
+        type: "movies" | "shows" = "movies",
+        extended = "full,images"
+    ): Promise<TraktFavoriteItem[]> {
+        return this.makeRequest<TraktFavoriteItem[]>(`sync/favorites/${type}`, {}, true, extended);
+    }
+
+    /** Add items to favorites */
+    public async addToFavorites(items: SyncItems) {
+        return this.makeRequest("sync/favorites", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    /** Remove items from favorites */
+    public async removeFromFavorites(items: SyncItems) {
+        return this.makeRequest("sync/favorites/remove", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    // ── Ratings Methods (require auth) ───────────────────────────────────
+
+    /** Get user's ratings */
+    public async getRatings(
+        type: "movies" | "shows" = "movies",
+        extended = "full,images"
+    ): Promise<TraktRatingItem[]> {
+        return this.makeRequest<TraktRatingItem[]>(`sync/ratings/${type}`, {}, true, extended);
+    }
+
+    /** Add ratings */
+    public async addRatings(items: SyncRatingItems) {
+        return this.makeRequest("sync/ratings", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    /** Remove ratings */
+    public async removeRatings(items: SyncItems) {
+        return this.makeRequest("sync/ratings/remove", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    // ── History Methods (require auth) ───────────────────────────────────
+
+    /** Add items to watched history */
+    public async addToHistory(items: SyncItems) {
+        return this.makeRequest("sync/history", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    // ── Checkin Methods (require auth) ───────────────────────────────────
+
+    /** Check into a movie or episode */
+    public async checkin(item: { movie?: { ids: SyncIds }; episode?: { ids: SyncIds } }): Promise<TraktCheckinResponse> {
+        return this.makeRequest<TraktCheckinResponse>("checkin", { method: "POST", body: JSON.stringify(item) }, true);
+    }
+
+    /** Delete active checkin */
+    public async deleteCheckin() {
+        return this.makeRequest("checkin", { method: "DELETE" }, true);
+    }
+
+    // ── Related Content ──────────────────────────────────────────────────
+
+    /** Get related movies */
+    public async getRelatedMovies(id: string, limit = 10, extended = "full,images"): Promise<TraktMedia[]> {
+        return this.makeRequest<TraktMedia[]>(`movies/${id}/related?limit=${limit}`, {}, false, extended);
+    }
+
+    /** Get related shows */
+    public async getRelatedShows(id: string, limit = 10, extended = "full,images"): Promise<TraktMedia[]> {
+        return this.makeRequest<TraktMedia[]>(`shows/${id}/related?limit=${limit}`, {}, false, extended);
     }
 
     // ── Calendar Methods (require auth) ─────────────────────────────────

@@ -10,8 +10,8 @@ export function useFileExplorer() {
     const searchParams = useSearchParams();
     const [currentPage, setCurrentPage] = useState(1);
 
-    const sortBy = searchParams.get("sort_by") || "date";
-    const sortOrder = (searchParams.get("sort_order") as "asc" | "desc") || "desc";
+    const sortBy = searchParams.get("sort_by") || (typeof window !== "undefined" && localStorage.getItem("file-sort-by")) || "date";
+    const sortOrder = (searchParams.get("sort_order") as "asc" | "desc") || (typeof window !== "undefined" && localStorage.getItem("file-sort-order") as "asc" | "desc") || "desc";
 
     // Calculate pagination values
     const offset = useMemo(() => (currentPage - 1) * PAGE_SIZE, [currentPage]);

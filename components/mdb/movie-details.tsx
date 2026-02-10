@@ -4,6 +4,7 @@ import { type TraktMedia } from "@/lib/trakt";
 import { PeopleSection } from "./people-section";
 import { Sources } from "./sources";
 import { MediaHeader } from "./media-header";
+import { RelatedMedia } from "./related-media";
 import { SectionDivider } from "@/components/section-divider";
 import { memo } from "react";
 
@@ -29,6 +30,11 @@ export const MovieDetails = memo(function MovieDetails({ media, mediaId }: Movie
             <section className="space-y-6">
                 <SectionDivider label="Cast & Crew" />
                 <PeopleSection mediaId={mediaId} type="movies" />
+            </section>
+
+            <section className="space-y-6">
+                <SectionDivider label="Related Movies" />
+                <RelatedMedia mediaId={mediaId} type="movie" />
             </section>
         </div>
     );

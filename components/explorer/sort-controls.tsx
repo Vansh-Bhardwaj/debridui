@@ -12,14 +12,16 @@ export function SortControls() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
-    const sortBy = searchParams.get("sort_by") || "date";
-    const sortOrder = (searchParams.get("sort_order") as "asc" | "desc") || "desc";
+    const sortBy = searchParams.get("sort_by") || (typeof window !== "undefined" && localStorage.getItem("file-sort-by")) || "date";
+    const sortOrder = (searchParams.get("sort_order") as "asc" | "desc") || (typeof window !== "undefined" && localStorage.getItem("file-sort-order") as "asc" | "desc") || "desc";
 
     const updateURLParams = useCallback(
         (newSortBy: string, newSortOrder: "asc" | "desc") => {
             const params = new URLSearchParams(searchParams.toString());
             params.set("sort_by", newSortBy);
             params.set("sort_order", newSortOrder);
+            localStorage.setItem("file-sort-by", newSortBy);
+            localStorage.setItem("file-sort-order", newSortOrder);
             router.push(`${pathname}?${params.toString()}`);
         },
         [searchParams, pathname, router]

@@ -37,6 +37,7 @@ export function FileListRow({ file, autoExpand = false }: FileListRowProps) {
             <FileListItem
                 file={file}
                 isSelected={isSelected}
+                isExpanded={isExpanded}
                 canExpand={file.status === "completed" || file.status === "seeding"}
                 onToggleSelect={handleSelectFile}
                 onToggleExpand={() => setIsExpanded(!isExpanded)}

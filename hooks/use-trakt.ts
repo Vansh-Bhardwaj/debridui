@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { traktClient } from "@/lib/trakt";
+import { traktClient, type TraktMedia } from "@/lib/trakt";
 
 // Cache duration constants
 const CACHE_DURATION = {
@@ -188,6 +188,164 @@ export function useRemoveFromWatchlist() {
     });
 }
 
+export function useAddToWatchlist() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.addToWatchlist({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+        },
+    });
+}
+
+// Favorites hooks
+export function useTraktFavoritesMovies() {
+    return useQuery({
+        queryKey: ["trakt", "favorites", "movies"],
+        queryFn: () => traktClient.getFavorites("movies"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useTraktFavoritesShows() {
+    return useQuery({
+        queryKey: ["trakt", "favorites", "shows"],
+        queryFn: () => traktClient.getFavorites("shows"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useAddToFavorites() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.addToFavorites({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "favorites"] });
+        },
+    });
+}
+
+export function useRemoveFromFavorites() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.removeFromFavorites({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "favorites"] });
+        },
+    });
+}
+
+// Ratings hooks
+export function useTraktRatingsMovies() {
+    return useQuery({
+        queryKey: ["trakt", "ratings", "movies"],
+        queryFn: () => traktClient.getRatings("movies"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useTraktRatingsShows() {
+    return useQuery({
+        queryKey: ["trakt", "ratings", "shows"],
+        queryFn: () => traktClient.getRatings("shows"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useAddRating() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number; rating: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.addRatings({ [key]: [{ ids, rating: params.rating }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "ratings"] });
+        },
+    });
+}
+
+export function useRemoveRating() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.removeRatings({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "ratings"] });
+        },
+    });
+}
+
+// History hooks
+export function useAddToHistory() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.addToHistory({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+        },
+    });
+}
+
+// Checkin hooks
+export function useCheckin() {
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movie" : "episode";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.checkin({ [key]: { ids } });
+        },
+    });
+}
+
+// Related content hooks
+export function useTraktRelated(id: string, type: "movie" | "show") {
+    return useQuery<TraktMedia[]>({
+        queryKey: ["trakt", "related", type, id],
+        queryFn: () => (type === "movie" ? traktClient.getRelatedMovies(id) : traktClient.getRelatedShows(id)),
+        staleTime: CACHE_DURATION.LONG,
+        enabled: !!id,
+    });
+}
+
 // Calendar hooks (require auth)
 export function useTraktCalendarShows(days = 14) {
     return useQuery({
@@ -202,6 +360,19 @@ export function useTraktCalendarMovies(days = 30) {
     return useQuery({
         queryKey: ["trakt", "calendar", "movies", days],
         queryFn: () => traktClient.getCalendarMovies(undefined, days),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+/** Recently aired episodes from shows the user watches (past N days) */
+export function useTraktRecentEpisodes(days = 7) {
+    return useQuery({
+        queryKey: ["trakt", "calendar", "recent-episodes", days],
+        queryFn: () => {
+            const startDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+            return traktClient.getCalendarShows(startDate, days);
+        },
         staleTime: CACHE_DURATION.SHORT,
         enabled: !!traktClient.getAccessToken(),
     });

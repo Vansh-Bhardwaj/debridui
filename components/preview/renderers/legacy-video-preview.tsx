@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
-import { getLanguageDisplayName } from "@/lib/utils/subtitles";
+import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
+import { useSettingsStore } from "@/lib/stores/settings";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -124,6 +125,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [playbackRate, setPlaybackRate] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
 
+    // User's preferred subtitle language from settings
+    const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
+
     // Manual subtitle rendering (bypasses Windows OS caption override)
     const [parsedCues, setParsedCues] = useState<SubtitleCue[][]>([]);
     const [activeCueText, setActiveCueText] = useState<string>("");
@@ -218,30 +222,30 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         }
 
-        // Auto-enable first subtitle track if available (prefer English)
-        if (!ios && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1) {
-            const englishIndex = subtitles.findIndex((s) => s.lang.toLowerCase() === "eng" || s.lang.toLowerCase() === "en");
-            const firstAddonSub = englishIndex !== -1 ? englishIndex : subtitles.findIndex((s) => s.url);
+        // Auto-enable subtitle track matching user's preferred language
+        if (!ios && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
+            const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
+            const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
-            if (firstAddonSub !== -1) {
-                setActiveSubtitleIndex(firstAddonSub);
+            if (bestIndex !== -1) {
+                setActiveSubtitleIndex(bestIndex);
             }
         }
 
         onLoad?.();
-    }, [onLoad, startFromSeconds, initialProgress, subtitles, ios, activeSubtitleIndex]);
+    }, [onLoad, startFromSeconds, initialProgress, subtitles, ios, activeSubtitleIndex, preferredSubLang]);
 
     // Watch for subtitles arriving later (e.g. from async fetch)
     useEffect(() => {
-        if (!ios && subtitles?.length && activeSubtitleIndex === -1 && !isLoading) {
-            const englishIndex = subtitles.findIndex((s) => s.lang.toLowerCase() === "eng" || s.lang.toLowerCase() === "en");
-            const firstAddonSub = englishIndex !== -1 ? englishIndex : subtitles.findIndex((s) => s.url);
+        if (!ios && subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
+            const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
+            const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
-            if (firstAddonSub !== -1) {
-                setActiveSubtitleIndex(firstAddonSub);
+            if (bestIndex !== -1) {
+                setActiveSubtitleIndex(bestIndex);
             }
         }
-    }, [ios, subtitles, activeSubtitleIndex, isLoading]);
+    }, [ios, subtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
 
     const handleError = useCallback(() => {
         setIsLoading(false);

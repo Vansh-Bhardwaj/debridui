@@ -12,6 +12,7 @@ import { Badge } from "../ui/badge";
 interface FileListItemProps {
     file: DebridFile;
     isSelected: boolean | "indeterminate";
+    isExpanded?: boolean;
     canExpand: boolean;
     onToggleSelect: (checked: boolean | "indeterminate") => void;
     onToggleExpand: () => void;
@@ -132,6 +133,7 @@ const TimeDisplay = memo(function TimeDisplay({
 export const FileListItem = memo(function FileListItem({
     file,
     isSelected,
+    isExpanded,
     canExpand,
     onToggleSelect,
     onToggleExpand,
@@ -147,7 +149,21 @@ export const FileListItem = memo(function FileListItem({
                     canExpand && "cursor-pointer hover:bg-muted/30",
                     className
                 )}
-                onClick={canExpand ? onToggleExpand : undefined}>
+                {...(canExpand
+                    ? {
+                          role: "button",
+                          tabIndex: 0,
+                          "aria-expanded": isExpanded,
+                          onClick: onToggleExpand,
+                          onKeyDown: (e: React.KeyboardEvent) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  onToggleExpand();
+                              }
+                          },
+                      }
+                    : {})}
+            >
                 <div className="shrink-0 px-1">
                     <Checkbox
                         checked={isSelected}

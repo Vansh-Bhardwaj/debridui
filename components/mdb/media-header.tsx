@@ -9,6 +9,7 @@ import { ArrowUpRightIcon, Play, Star } from "lucide-react";
 import { WatchButton } from "@/components/common/watch-button";
 import { usePreviewStore } from "@/lib/stores/preview";
 import { FileType } from "@/lib/types";
+import { MediaActions } from "./media-actions";
 
 interface MediaHeaderProps {
     media: TraktMedia;
@@ -96,6 +97,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                     Watch Trailer
                                 </Button>
                             )}
+                            <MediaActions media={media} type={type} variant="full" />
                         </div>
                     </div>
 
@@ -161,6 +163,11 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         {/* Stats */}
                         <MediaStats media={media} type={type} />
 
+                        {/* Trakt Actions (inline icons for desktop) */}
+                        <div className="hidden md:block">
+                            <MediaActions media={media} type={type} />
+                        </div>
+
                         {/* External Links */}
                         {media.ids && (
                             <div className="flex flex-wrap items-center gap-5 pt-2">
@@ -225,7 +232,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         )}
 
                         {/* Mobile Action Buttons */}
-                        <div className="flex md:hidden flex-wrap gap-2 pt-2">
+                        <div className="flex md:hidden flex-wrap items-center gap-2 pt-2">
                             {type === "movie" && media.ids?.imdb && (
                                 <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
                                     <Button className="gap-2">
@@ -247,6 +254,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                     Trailer
                                 </Button>
                             )}
+                            <MediaActions media={media} type={type} />
                         </div>
                     </div>
                 </div>

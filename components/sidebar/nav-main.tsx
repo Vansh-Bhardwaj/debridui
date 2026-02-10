@@ -19,6 +19,7 @@ export function NavMain({
         icon?: LucideIcon;
         isActive?: boolean;
         action?: string;
+        badge?: React.ReactNode;
         items?: {
             title: string;
             url: string;
@@ -56,11 +57,13 @@ export function NavMain({
                                     <>
                                         {item.icon && <item.icon />}
                                         <span>{item.title}</span>
+                                        {item.badge}
                                     </>
                                 ) : (
                                     <Link href={item.url} onClick={() => setOpenMobile(false)}>
                                         {item.icon && <item.icon />}
                                         <span>{item.title}</span>
+                                        {item.badge}
                                     </Link>
                                 )}
                             </SidebarMenuButton>

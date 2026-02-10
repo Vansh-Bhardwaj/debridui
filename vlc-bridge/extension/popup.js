@@ -25,8 +25,15 @@ function toast(message, type = "success") {
 
 let currentStatus = null;
 let subDelay = 0;
+let audioDelay = 0;
 let loopActive = false;
 let shuffleActive = false;
+
+// Smooth progress interpolation
+let progressAnimFrame = null;
+let interpStart = null;
+let interpStartTime = 0;
+let interpRate = 1;
 
 // ── Status Refresh ───────────────────────────────────────────────────────────
 
@@ -45,6 +52,8 @@ async function refreshStatus() {
       player.classList.remove("hidden");
       disconnected.classList.add("hidden");
       updatePlayer(res.data);
+      // Start smooth progress animation when playing
+      if (res.data.state === "playing") startProgressAnimation();
       return;
     }
   } catch {}
@@ -68,12 +77,14 @@ function updatePlayer(s) {
   const stateMap = { playing: "Playing", paused: "Paused", stopped: "Stopped" };
   $("#media-state").textContent = stateMap[s.state] || s.state;
 
-  // Progress
+  // Progress — store for interpolation
+  interpStart = s.time;
+  interpStartTime = performance.now();
+  interpRate = s.state === "playing" ? (s.rate || 1) : 0;
+
+  // Update progress display
   const pct = s.length > 0 ? (s.time / s.length) * 100 : 0;
-  $("#progress-fill").style.width = `${pct}%`;
-  $("#progress-thumb").style.left = `${pct}%`;
-  $("#time-current").textContent = formatTime(s.time);
-  $("#time-total").textContent = formatTime(s.length);
+  setProgressUI(pct, s.time, s.length);
 
   // Play/Pause icon
   const isPlaying = s.state === "playing";
@@ -83,13 +94,13 @@ function updatePlayer(s) {
   // Volume
   const volPct = Math.round((s.volume / 256) * 100);
   $("#volume-slider").value = volPct;
+  updateVolumeSliderFill(volPct);
   $("#volume-label").textContent = `${volPct}%`;
 
   // Playback speed
   if (s.rate !== undefined) {
     const rate = parseFloat(s.rate);
     const speedSelect = $("#select-speed");
-    // Find closest option
     const closest = [...speedSelect.options].reduce((prev, opt) =>
       Math.abs(parseFloat(opt.value) - rate) < Math.abs(parseFloat(prev.value) - rate) ? opt : prev
     );
@@ -106,8 +117,134 @@ function updatePlayer(s) {
     $("#btn-shuffle").classList.toggle("active", shuffleActive);
   }
 
+  // VLC art
+  updateArt();
+
+  // Stream quality badge
+  updateQualityBadge(s);
+
   // Audio/subtitle tracks
   updateTracks(s);
+}
+
+// ── Progress helpers ─────────────────────────────────────────────────────────
+
+function setProgressUI(pct, time, total) {
+  $("#progress-fill").style.width = `${pct}%`;
+  $("#progress-thumb").style.left = `${pct}%`;
+  $("#time-current").textContent = formatTime(time);
+  $("#time-total").textContent = formatTime(total);
+}
+
+function animateProgress() {
+  if (!currentStatus || currentStatus.state !== "playing" || !currentStatus.length) {
+    progressAnimFrame = null;
+    return;
+  }
+  const elapsed = (performance.now() - interpStartTime) / 1000;
+  const interpolated = (interpStart || 0) + elapsed * interpRate;
+  const clamped = Math.min(interpolated, currentStatus.length);
+  const pct = (clamped / currentStatus.length) * 100;
+  setProgressUI(pct, clamped, currentStatus.length);
+  progressAnimFrame = requestAnimationFrame(animateProgress);
+}
+
+function startProgressAnimation() {
+  if (progressAnimFrame) cancelAnimationFrame(progressAnimFrame);
+  progressAnimFrame = requestAnimationFrame(animateProgress);
+}
+
+// ── VLC Art ──────────────────────────────────────────────────────────────────
+
+let lastArtUrl = "";
+
+async function updateArt() {
+  try {
+    const res = await send("getArt");
+    if (res.success && res.data) {
+      const artUrl = res.data;
+      if (artUrl !== lastArtUrl) {
+        lastArtUrl = artUrl;
+        const img = $("#np-art-img");
+        img.src = artUrl;
+        img.onload = () => img.classList.remove("hidden");
+        img.onerror = () => { img.classList.add("hidden"); lastArtUrl = ""; };
+      }
+    } else {
+      $("#np-art-img").classList.add("hidden");
+      lastArtUrl = "";
+    }
+  } catch {
+    $("#np-art-img").classList.add("hidden");
+    lastArtUrl = "";
+  }
+}
+
+// ── Stream Quality Badge ─────────────────────────────────────────────────────
+
+function updateQualityBadge(s) {
+  const info = s.information?.category;
+  if (!info) return;
+
+  const parts = [];
+
+  // Find video stream for resolution
+  for (const [key, val] of Object.entries(info)) {
+    if (!val || key === "meta" || val.Type !== "Video") continue;
+    // Resolution from Display_resolution or Decoded_format
+    const res = val.Display_resolution || val.Decoded_format || "";
+    const match = res.match(/(\d{3,4})x(\d{3,4})/);
+    if (match) {
+      const h = parseInt(match[2]);
+      if (h >= 2160) parts.push("4K");
+      else if (h >= 1440) parts.push("1440p");
+      else if (h >= 1080) parts.push("1080p");
+      else if (h >= 720) parts.push("720p");
+      else parts.push(`${h}p`);
+    }
+    break;
+  }
+
+  // Find audio stream for codec + channels
+  for (const [key, val] of Object.entries(info)) {
+    if (!val || key === "meta" || val.Type !== "Audio") continue;
+    const codec = val.Codec || "";
+    const shortCodec = parseCodecShort(codec);
+    if (shortCodec) parts.push(shortCodec);
+    const channels = val.Channels;
+    if (channels) parts.push(channels);
+    break;
+  }
+
+  const badge = $("#media-quality");
+  if (parts.length > 0) {
+    badge.textContent = parts.join(" · ");
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
+}
+
+function parseCodecShort(codec) {
+  if (/a52|ac-?3/i.test(codec)) return "AC3";
+  if (/e-?ac-?3|eac3/i.test(codec)) return "EAC3";
+  if (/dts/i.test(codec)) return "DTS";
+  if (/aac|mp4a/i.test(codec)) return "AAC";
+  if (/opus/i.test(codec)) return "Opus";
+  if (/flac/i.test(codec)) return "FLAC";
+  if (/truehd/i.test(codec)) return "TrueHD";
+  if (/h264|avc/i.test(codec)) return "H.264";
+  if (/h265|hevc/i.test(codec)) return "HEVC";
+  if (/vp9/i.test(codec)) return "VP9";
+  if (/av01|av1/i.test(codec)) return "AV1";
+  return null;
+}
+
+// ── Volume Slider Fill ───────────────────────────────────────────────────────
+
+function updateVolumeSliderFill(pct) {
+  const slider = $("#volume-slider");
+  slider.style.background = `linear-gradient(to right, #dda032 ${pct}%, var(--muted) ${pct}%)`;
 }
 
 function updateTracks(s) {
@@ -159,6 +296,15 @@ function updateTracks(s) {
   refreshStatus();
 })();
 
+// ── Collapsible Panel Toggle ─────────────────────────────────────────────────
+
+$("#panel-toggle").addEventListener("click", () => {
+  const btn = $("#panel-toggle");
+  const panel = $("#panel-content");
+  btn.classList.toggle("expanded");
+  panel.classList.toggle("visible");
+});
+
 // ── Playback Controls ────────────────────────────────────────────────────────
 
 $("#btn-play").addEventListener("click", () => send("togglePause"));
@@ -185,6 +331,7 @@ $("#volume-slider").addEventListener("input", (e) => {
   const pct = e.target.value;
   const vlcVal = Math.round((pct / 100) * 256);
   send("setVolume", { value: vlcVal });
+  updateVolumeSliderFill(parseInt(pct));
   $("#volume-label").textContent = `${pct}%`;
 });
 
@@ -194,11 +341,13 @@ $("#btn-mute").addEventListener("click", () => {
     slider.dataset.prev = slider.value;
     slider.value = 0;
     send("setVolume", { value: 0 });
+    updateVolumeSliderFill(0);
     $("#volume-label").textContent = "0%";
   } else {
     const prev = slider.dataset.prev || 100;
     slider.value = prev;
     send("setVolume", { value: Math.round((prev / 100) * 256) });
+    updateVolumeSliderFill(parseInt(prev));
     $("#volume-label").textContent = `${prev}%`;
   }
 });
@@ -220,16 +369,42 @@ $("#select-speed").addEventListener("change", (e) => {
 // Fullscreen
 $("#btn-fullscreen").addEventListener("click", () => send("fullscreen"));
 
-// Subtitle delay
-$("#btn-sub-delay-minus").addEventListener("click", () => {
-  subDelay -= 0.5;
+// Subtitle delay (Shift = ±0.1s, default = ±0.5s)
+$("#btn-sub-delay-minus").addEventListener("click", (e) => {
+  const step = e.shiftKey ? 0.1 : 0.5;
+  subDelay = Math.round((subDelay - step) * 10) / 10;
   send("setSubtitleDelay", { seconds: subDelay });
   $("#sub-delay-value").textContent = `${subDelay.toFixed(1)}s`;
 });
-$("#btn-sub-delay-plus").addEventListener("click", () => {
-  subDelay += 0.5;
+$("#btn-sub-delay-plus").addEventListener("click", (e) => {
+  const step = e.shiftKey ? 0.1 : 0.5;
+  subDelay = Math.round((subDelay + step) * 10) / 10;
   send("setSubtitleDelay", { seconds: subDelay });
   $("#sub-delay-value").textContent = `${subDelay.toFixed(1)}s`;
+});
+$("#btn-sub-delay-reset").addEventListener("click", () => {
+  subDelay = 0;
+  send("setSubtitleDelay", { seconds: 0 });
+  $("#sub-delay-value").textContent = "0.0s";
+});
+
+// Audio delay (Shift = ±0.1s, default = ±0.5s)
+$("#btn-audio-delay-minus").addEventListener("click", (e) => {
+  const step = e.shiftKey ? 0.1 : 0.5;
+  audioDelay = Math.round((audioDelay - step) * 10) / 10;
+  send("setAudioDelay", { seconds: audioDelay });
+  $("#audio-delay-value").textContent = `${audioDelay.toFixed(1)}s`;
+});
+$("#btn-audio-delay-plus").addEventListener("click", (e) => {
+  const step = e.shiftKey ? 0.1 : 0.5;
+  audioDelay = Math.round((audioDelay + step) * 10) / 10;
+  send("setAudioDelay", { seconds: audioDelay });
+  $("#audio-delay-value").textContent = `${audioDelay.toFixed(1)}s`;
+});
+$("#btn-audio-delay-reset").addEventListener("click", () => {
+  audioDelay = 0;
+  send("setAudioDelay", { seconds: 0 });
+  $("#audio-delay-value").textContent = "0.0s";
 });
 
 // Loop / Shuffle toggles
@@ -319,7 +494,58 @@ $("#btn-toggle-pw").addEventListener("click", () => {
 // ── Poll ─────────────────────────────────────────────────────────────────────
 
 setInterval(refreshStatus, 2000);
+// ── Keyboard Shortcuts ───────────────────────────────────────────────────
 
+document.addEventListener("keydown", (e) => {
+  // Skip if focused on an input/select
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+
+  switch (e.key) {
+    case " ":
+      e.preventDefault();
+      send("togglePause");
+      break;
+    case "ArrowLeft":
+      e.preventDefault();
+      if (currentStatus) send("seek", { value: Math.max(0, currentStatus.time - 10) });
+      break;
+    case "ArrowRight":
+      e.preventDefault();
+      if (currentStatus) send("seek", { value: currentStatus.time + 10 });
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      { const cur = parseInt($("#volume-slider").value);
+        const next = Math.min(200, cur + 5);
+        $("#volume-slider").value = next;
+        send("setVolume", { value: Math.round((next / 100) * 256) });
+        updateVolumeSliderFill(next);
+        $("#volume-label").textContent = `${next}%`;
+      }
+      break;
+    case "ArrowDown":
+      e.preventDefault();
+      { const cur = parseInt($("#volume-slider").value);
+        const next = Math.max(0, cur - 5);
+        $("#volume-slider").value = next;
+        send("setVolume", { value: Math.round((next / 100) * 256) });
+        updateVolumeSliderFill(next);
+        $("#volume-label").textContent = `${next}%`;
+      }
+      break;
+    case "m":
+    case "M":
+      e.preventDefault();
+      $("#btn-mute").click();
+      break;
+    case "f":
+    case "F":
+      e.preventDefault();
+      send("fullscreen");
+      break;
+  }
+});
 // ── Setup Guide ──────────────────────────────────────────────────────────────
 
 // Update setup command with saved password

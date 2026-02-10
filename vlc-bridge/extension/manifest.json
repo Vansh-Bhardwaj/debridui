@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Debrid VLC Bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Control VLC media player from DebridUI — playback controls, subtitle management, and progress sync.",
   "homepage_url": "https://github.com/Vansh-Bhardwaj/debridui",
   "permissions": [

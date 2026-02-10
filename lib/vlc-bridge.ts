@@ -61,6 +61,7 @@ export interface PlayOptions {
 
 type StatusHandler = (status: VLCStatus) => void;
 type DisconnectHandler = () => void;
+type PlaybackEndedHandler = () => void;
 
 // ── Client ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export class VLCBridgeClient {
   private pendingRequests = new Map<string, (res: BridgeResponse) => void>();
   private statusListeners = new Set<StatusHandler>();
   private disconnectListeners = new Set<DisconnectHandler>();
+  private playbackEndedListeners = new Set<PlaybackEndedHandler>();
   private requestId = 0;
 
   constructor(extensionId?: string) {
@@ -150,6 +152,9 @@ export class VLCBridgeClient {
       if (detail?.type === "disconnected") {
         for (const fn of this.disconnectListeners) fn();
       }
+      if (detail?.type === "playback-ended") {
+        for (const fn of this.playbackEndedListeners) fn();
+      }
     });
   }
 
@@ -215,6 +220,11 @@ export class VLCBridgeClient {
   onDisconnect(handler: DisconnectHandler) {
     this.disconnectListeners.add(handler);
     return () => { this.disconnectListeners.delete(handler); };
+  }
+
+  onPlaybackEnded(handler: PlaybackEndedHandler) {
+    this.playbackEndedListeners.add(handler);
+    return () => { this.playbackEndedListeners.delete(handler); };
   }
 
   // ── API Methods ────────────────────────────────────────────────────────

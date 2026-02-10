@@ -22,6 +22,7 @@ export function FileListHeader({ isAllSelected, onSelectAll, selectedCount = 0, 
             <div className="shrink-0 px-1">
                 <Checkbox
                     checked={isAllSelected}
+                    aria-label="Select all files"
                     onCheckedChange={(checked) => {
                         if (isAllSelected === "indeterminate" || isAllSelected === true) {
                             onSelectAll(false);

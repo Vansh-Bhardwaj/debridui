@@ -148,15 +148,17 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
     const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
     return (
-        <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none">
+        <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none" role="region" aria-label="Media player">
             <div className="pointer-events-auto mx-auto max-w-3xl px-4 pb-4">
                 <div className="rounded-lg border border-border/50 bg-background/95 backdrop-blur-md shadow-lg overflow-hidden">
                     {/* Collapse toggle */}
                     <button
                         onClick={() => setCollapsed((c) => !c)}
+                        aria-expanded={!collapsed}
+                        aria-label={collapsed ? "Expand player" : "Collapse player"}
                         className="flex w-full items-center gap-2 px-3 py-1.5 text-[10px] tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors border-b border-border/30"
                     >
-                        <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
+                        <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-left truncate font-medium">
                             {nowPlaying ?? "VLC"}
                         </span>
@@ -180,6 +182,8 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                     max={duration > 0 ? duration : 0}
                                     step={1}
                                     value={displayTime}
+                                    aria-label="Seek"
+                                    aria-valuetext={`${formatTime(displayTime)} of ${formatTime(duration)}`}
                                     onChange={(e) => {
                                         setIsSeeking(true);
                                         setSeekValue(Number(e.target.value));
@@ -211,6 +215,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         className="h-8 w-8 text-xs tabular-nums font-medium"
                                         onClick={() => seek(Math.max(0, currentTime - 10))}
                                         title="Rewind 10s"
+                                        aria-label="Rewind 10 seconds"
                                     >
                                         -10
                                     </Button>
@@ -220,6 +225,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         className="h-9 w-9"
                                         onClick={() => togglePause()}
                                         title={isPlaying ? "Pause" : "Play"}
+                                        aria-label={isPlaying ? "Pause" : "Play"}
                                     >
                                         {isPlaying ? (
                                             <Pause className="size-5 fill-current" />
@@ -233,6 +239,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         className="h-8 w-8 text-xs tabular-nums font-medium"
                                         onClick={() => seek(Math.min(duration, currentTime + 10))}
                                         title="Forward 10s"
+                                        aria-label="Forward 10 seconds"
                                     >
                                         +10
                                     </Button>
@@ -246,6 +253,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         className="h-8 w-8"
                                         onClick={() => setVolume(isMuted ? 256 : 0)}
                                         title={isMuted ? "Unmute" : "Mute"}
+                                        aria-label={isMuted ? "Unmute" : "Mute"}
                                     >
                                         {isMuted ? (
                                             <VolumeX className="size-4" />
@@ -259,6 +267,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         max={100}
                                         step={1}
                                         value={volume}
+                                        aria-label="Volume"
                                         onChange={(e) => {
                                             const pct = Number(e.target.value);
                                             setVolume(Math.round((pct / 100) * 256));
@@ -272,7 +281,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                     {audioTracks.length > 1 && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Audio Track">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Audio Track" aria-label="Audio Track">
                                                     <AudioLines className="size-3.5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -290,7 +299,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                     {subtitleTracks.length > 0 && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Subtitle Track">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Subtitle Track" aria-label="Subtitle Track">
                                                     <Subtitles className="size-3.5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -320,6 +329,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                                 className="h-8 w-8"
                                                 onClick={() => playPreviousEpisode(enabledAddons)}
                                                 title="Previous Episode"
+                                                aria-label="Previous Episode"
                                             >
                                                 <SkipBack className="size-3.5 fill-current" />
                                             </Button>
@@ -329,6 +339,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                                 className="h-8 w-8"
                                                 onClick={() => playNextEpisode(enabledAddons)}
                                                 title="Next Episode"
+                                                aria-label="Next Episode"
                                             >
                                                 <SkipForward className="size-3.5 fill-current" />
                                             </Button>
@@ -340,6 +351,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         className="h-8 w-8"
                                         onClick={() => vlcFullscreen()}
                                         title="VLC Fullscreen"
+                                        aria-label="Fullscreen"
                                     >
                                         <Maximize2 className="size-3.5" />
                                     </Button>
@@ -352,6 +364,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                             stopVLCProgressSync();
                                         }}
                                         title="Stop"
+                                        aria-label="Stop playback"
                                     >
                                         <X className="size-3.5" />
                                     </Button>

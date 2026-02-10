@@ -185,13 +185,28 @@ export const useVLCStore = create<VLCState>()((set, get) => ({
             if (res.success && res.data) {
                 const status = res.data as VLCStatus;
                 failCount = 0;
+                const subtitleTracks = parseTracks(status, "Subtitle");
+                const prev = get();
                 set({
                     vlcConnected: true,
                     status,
                     nowPlaying: parseNowPlaying(status),
                     audioTracks: parseTracks(status, "Audio"),
-                    subtitleTracks: parseTracks(status, "Subtitle"),
+                    subtitleTracks,
                 });
+
+                // Auto-select subtitle track matching user's preferred language (once per media)
+                if (subtitleTracks.length > 0 && prev.subtitleTracks.length === 0) {
+                    const lang = useSettingsStore.getState().settings.playback.subtitleLanguage;
+                    if (lang) {
+                        const match = subtitleTracks.find((t) =>
+                            t.name.toLowerCase().includes(lang.toLowerCase())
+                        );
+                        if (match) {
+                            getClient().setSubtitleTrack(match.id).catch(() => {});
+                        }
+                    }
+                }
             } else {
                 failCount++;
                 set({ vlcConnected: false, status: null, nowPlaying: null });

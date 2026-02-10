@@ -26,6 +26,7 @@ import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
 import { ContinueWatching } from "@/components/mdb/continue-watching";
+import { SectionErrorBoundary } from "@/components/error-boundary";
 
 const HeroCarousel = dynamic(
     () => import("@/components/mdb/hero-carousel").then((m) => ({ default: m.HeroCarousel })),
@@ -255,7 +256,9 @@ const DashboardPage = memo(function DashboardPage() {
     return (
         <div className="pb-12">
             {/* Hero Carousel */}
-            <HeroCarousel autoFocus />
+            <SectionErrorBoundary section="Hero">
+                <HeroCarousel autoFocus />
+            </SectionErrorBoundary>
 
             {/* Welcome Section */}
             <WelcomeSection onSearchClick={() => setSearchOpen(true)} />
@@ -264,13 +267,17 @@ const DashboardPage = memo(function DashboardPage() {
 
             {/* Continue Watching - shown after welcome for logged-in users with progress */}
             <div className="lg:px-6 mb-8">
-                <ContinueWatching />
+                <SectionErrorBoundary section="Continue Watching">
+                    <ContinueWatching />
+                </SectionErrorBoundary>
             </div>
 
             {/* Content Sections with lazy loading */}
             <div className="lg:px-6 space-y-16">
                 {/* Addon Catalogs — lazy-loaded per-row */}
-                <AddonCatalogs />
+                <SectionErrorBoundary section="Addon Catalogs">
+                    <AddonCatalogs />
+                </SectionErrorBoundary>
 
                 {/* Trending */}
                 <ContentSection label="Trending Now" icon={<TrendingUp className="size-3.5" />} delay={0}>

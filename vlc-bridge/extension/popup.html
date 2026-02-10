@@ -30,12 +30,18 @@
 
       <!-- Now playing -->
       <div class="now-playing">
-        <div class="np-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>
+        <div class="np-art" id="np-art">
+          <img id="np-art-img" class="np-art-img hidden" alt="" />
+          <div class="np-icon-fallback">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>
+          </div>
         </div>
         <div class="np-info">
           <p id="media-title" class="np-title">—</p>
-          <p id="media-state" class="np-state">Stopped</p>
+          <div class="np-meta">
+            <span id="media-state" class="np-state">Stopped</span>
+            <span id="media-quality" class="np-quality hidden"></span>
+          </div>
         </div>
       </div>
 
@@ -83,48 +89,64 @@
         <span id="volume-label" class="vol-label">100%</span>
       </div>
 
-      <!-- Track selectors -->
-      <div class="tracks" id="tracks-section">
-        <div class="track-row">
-          <label>Audio</label>
-          <select id="select-audio"><option value="-1">Default</option></select>
-        </div>
-        <div class="track-row">
-          <label>Subtitle</label>
-          <select id="select-sub"><option value="-1">Disabled</option></select>
-        </div>
-        <div class="track-row">
-          <label>Sub Delay</label>
-          <div class="delay-controls">
-            <button class="btn-delay" id="btn-sub-delay-minus" title="Subtitle delay -0.5s">-0.5s</button>
-            <span class="delay-value" id="sub-delay-value">0.0s</span>
-            <button class="btn-delay" id="btn-sub-delay-plus" title="Subtitle delay +0.5s">+0.5s</button>
+      <!-- Track & Advanced controls (collapsible) -->
+      <button class="panel-toggle" id="panel-toggle" title="Show track controls">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <span>Tracks &amp; Controls</span>
+      </button>
+      <div class="panel-content" id="panel-content">
+        <div class="tracks" id="tracks-section">
+          <div class="track-row">
+            <label>Audio</label>
+            <select id="select-audio"><option value="-1">Default</option></select>
+          </div>
+          <div class="track-row">
+            <label>Subtitle</label>
+            <select id="select-sub"><option value="-1">Disabled</option></select>
+          </div>
+          <div class="track-row">
+            <label>Sub Delay</label>
+            <div class="delay-controls">
+              <button class="btn-delay" id="btn-sub-delay-minus" title="-0.5s (Shift: -0.1s)">-</button>
+              <span class="delay-value" id="sub-delay-value">0.0s</span>
+              <button class="btn-delay" id="btn-sub-delay-plus" title="+0.5s (Shift: +0.1s)">+</button>
+              <button class="btn-delay btn-delay-reset" id="btn-sub-delay-reset" title="Reset to 0">↺</button>
+            </div>
+          </div>
+          <div class="track-row">
+            <label>Audio Delay</label>
+            <div class="delay-controls">
+              <button class="btn-delay" id="btn-audio-delay-minus" title="-0.5s (Shift: -0.1s)">-</button>
+              <span class="delay-value" id="audio-delay-value">0.0s</span>
+              <button class="btn-delay" id="btn-audio-delay-plus" title="+0.5s (Shift: +0.1s)">+</button>
+              <button class="btn-delay btn-delay-reset" id="btn-audio-delay-reset" title="Reset to 0">↺</button>
+            </div>
+          </div>
+          <div class="track-row">
+            <label>Speed</label>
+            <select id="select-speed">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1.0x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2.0x</option>
+            </select>
           </div>
         </div>
-        <div class="track-row">
-          <label>Speed</label>
-          <select id="select-speed">
-            <option value="0.5">0.5x</option>
-            <option value="0.75">0.75x</option>
-            <option value="1" selected>1.0x</option>
-            <option value="1.25">1.25x</option>
-            <option value="1.5">1.5x</option>
-            <option value="1.75">1.75x</option>
-            <option value="2">2.0x</option>
-          </select>
-        </div>
-      </div>
 
-      <!-- Loop / Shuffle -->
-      <div class="toggle-row">
-        <button class="toggle-btn" id="btn-loop" title="Loop">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-          <span>Loop</span>
-        </button>
-        <button class="toggle-btn" id="btn-shuffle" title="Shuffle">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-          <span>Shuffle</span>
-        </button>
+        <!-- Loop / Shuffle -->
+        <div class="toggle-row">
+          <button class="toggle-btn" id="btn-loop" title="Loop">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+            <span>Loop</span>
+          </button>
+          <button class="toggle-btn" id="btn-shuffle" title="Shuffle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+            <span>Shuffle</span>
+          </button>
+        </div>
       </div>
     </section>
 

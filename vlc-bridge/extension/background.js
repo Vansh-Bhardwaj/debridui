@@ -141,6 +141,7 @@ const handlers = {
     const status = await vlcStatus();
     vlcConnected = true;
     lastStatus = status;
+    updateBadge(status);
     return status;
   },
 
@@ -269,6 +270,24 @@ const handlers = {
     return vlcCommand("aspectratio", { val: ratio });
   },
 
+  async getArt() {
+    try {
+      const res = await vlcFetch("/art");
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!blob.size || blob.type === "text/html") return null;
+      // Convert to data URL for popup display
+      const buffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (const b of bytes) binary += String.fromCharCode(b);
+      const base64 = btoa(binary);
+      return `data:${blob.type || "image/jpeg"};base64,${base64}`;
+    } catch {
+      return null;
+    }
+  },
+
   // ── Config ──
 
   async getConfig() {
@@ -382,18 +401,42 @@ async function pollVLCStatus() {
   try {
     const status = await vlcStatus();
     vlcConnected = true;
+
+    // Detect end of playback: was playing, now stopped, and was near the end
+    const wasPlaying = lastStatus?.state === "playing";
+    const nowStopped = status.state === "stopped";
+    const nearEnd = lastStatus?.length > 0 && lastStatus.time >= lastStatus.length - 30;
+    if (wasPlaying && nowStopped && nearEnd) {
+      broadcastStatus({ type: "playback-ended" });
+    }
+
     lastStatus = status;
     broadcastStatus(status);
-
-    // Auto-detect end of playback for auto-next
-    if (status.state === "stopped" && lastStatus?.state === "playing") {
-      broadcastStatus({ type: "playback-ended", data: status });
-    }
+    updateBadge(status);
   } catch {
     if (vlcConnected) {
       vlcConnected = false;
       broadcastStatus({ type: "disconnected" });
     }
+    updateBadge(null);
+  }
+}
+
+// ── Extension Badge ────────────────────────────────────────────────────────
+
+function updateBadge(status) {
+  if (!status || !vlcConnected) {
+    chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+  if (status.state === "playing") {
+    chrome.action.setBadgeText({ text: "▶" });
+    chrome.action.setBadgeBackgroundColor({ color: "#3fb950" });
+  } else if (status.state === "paused") {
+    chrome.action.setBadgeText({ text: "⏸" });
+    chrome.action.setBadgeBackgroundColor({ color: "#dda032" });
+  } else {
+    chrome.action.setBadgeText({ text: "" });
   }
 }
 

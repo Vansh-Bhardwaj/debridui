@@ -10,11 +10,14 @@ import {
     useTraktWatchlistShows,
     useTraktCalendarShows,
     useTraktCalendarMovies,
+    useTraktRecentEpisodes,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { Bookmark, CalendarDays, Film, Tv, LinkIcon } from "lucide-react";
 import { type TraktCalendarItem } from "@/lib/trakt";
 import Link from "next/link";
+import { Bell } from "lucide-react";
+import { SectionErrorBoundary } from "@/components/error-boundary";
 
 // Group calendar items by date
 function groupByDate(items: TraktCalendarItem[]): Record<string, TraktCalendarItem[]> {
@@ -116,6 +119,16 @@ const WatchlistPage = memo(function WatchlistPage() {
     const watchlistShows = useTraktWatchlistShows();
     const calendarShows = useTraktCalendarShows();
     const calendarMovies = useTraktCalendarMovies();
+    const recentEpisodes = useTraktRecentEpisodes(7);
+
+    // Count recently aired episodes (past 7 days, only those already aired)
+    const recentCount = useMemo(() => {
+        if (!recentEpisodes.data) return 0;
+        return recentEpisodes.data.filter((item) => {
+            const aired = item.first_aired ? new Date(item.first_aired).getTime() : 0;
+            return aired > 0 && aired <= new Date().getTime();
+        }).length;
+    }, [recentEpisodes.data]);
 
     // Convert watchlist items → TraktMediaItem-compatible for MediaSection
     const movieItems = useMemo(
@@ -151,6 +164,16 @@ const WatchlistPage = memo(function WatchlistPage() {
         <div className="space-y-6">
             <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
 
+            {recentCount > 0 && (
+                <div className="flex items-center gap-2.5 rounded-sm border border-primary/20 bg-primary/5 px-3.5 py-2.5">
+                    <Bell className="size-3.5 text-primary shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                        <span className="text-foreground font-medium">{recentCount} episode{recentCount !== 1 ? "s" : ""}</span>{" "}
+                        aired in the last 7 days from shows you watch
+                    </p>
+                </div>
+            )}
+
             <Tabs defaultValue="watchlist">
                 <TabsList variant="line">
                     <TabsTrigger value="watchlist" className="gap-1.5">
@@ -164,48 +187,56 @@ const WatchlistPage = memo(function WatchlistPage() {
                 </TabsList>
 
                 <TabsContent value="watchlist" className="space-y-8 pt-6">
-                    <MediaSection
-                        title="Movies"
-                        items={movieItems}
-                        isLoading={watchlistMovies.isLoading}
-                        error={watchlistMovies.error}
-                        rows={2}
-                    />
-                    <MediaSection
-                        title="TV Shows"
-                        items={showItems}
-                        isLoading={watchlistShows.isLoading}
-                        error={watchlistShows.error}
-                        rows={2}
-                    />
+                    <SectionErrorBoundary section="Watchlist Movies">
+                        <MediaSection
+                            title="Movies"
+                            items={movieItems}
+                            isLoading={watchlistMovies.isLoading}
+                            error={watchlistMovies.error}
+                            rows={2}
+                        />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary section="Watchlist Shows">
+                        <MediaSection
+                            title="TV Shows"
+                            items={showItems}
+                            isLoading={watchlistShows.isLoading}
+                            error={watchlistShows.error}
+                            rows={2}
+                        />
+                    </SectionErrorBoundary>
                 </TabsContent>
 
                 <TabsContent value="calendar" className="space-y-10 pt-6">
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Tv className="size-4 text-primary" />
-                            <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Shows</h2>
+                    <SectionErrorBoundary section="Calendar Shows">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Tv className="size-4 text-primary" />
+                                <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Shows</h2>
+                            </div>
+                            <CalendarSection
+                                items={calendarShows.data}
+                                isLoading={calendarShows.isLoading}
+                                error={calendarShows.error}
+                                emptyMessage="No upcoming shows in your calendar"
+                            />
                         </div>
-                        <CalendarSection
-                            items={calendarShows.data}
-                            isLoading={calendarShows.isLoading}
-                            error={calendarShows.error}
-                            emptyMessage="No upcoming shows in your calendar"
-                        />
-                    </div>
+                    </SectionErrorBoundary>
 
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Film className="size-4 text-primary" />
-                            <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Movies</h2>
+                    <SectionErrorBoundary section="Calendar Movies">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Film className="size-4 text-primary" />
+                                <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Movies</h2>
+                            </div>
+                            <CalendarSection
+                                items={calendarMovies.data}
+                                isLoading={calendarMovies.isLoading}
+                                error={calendarMovies.error}
+                                emptyMessage="No upcoming movies in your calendar"
+                            />
                         </div>
-                        <CalendarSection
-                            items={calendarMovies.data}
-                            isLoading={calendarMovies.isLoading}
-                            error={calendarMovies.error}
-                            emptyMessage="No upcoming movies in your calendar"
-                        />
-                    </div>
+                    </SectionErrorBoundary>
                 </TabsContent>
             </Tabs>
         </div>
