@@ -9,6 +9,21 @@ function isSafeHttpUrl(value: string): boolean {
     }
 }
 
+/**
+ * Decode raw bytes to text, trying UTF-8 first (most common), falling back
+ * to Windows-1252/Latin-1 when the bytes aren't valid UTF-8.
+ * Fixes Mojibake like â™ª → ♪ caused by upstream Content-Type lying about charset.
+ */
+function decodeSubtitleBytes(buf: ArrayBuffer): string {
+    const utf8 = new TextDecoder("utf-8", { fatal: true });
+    try {
+        return utf8.decode(buf);
+    } catch {
+        // Not valid UTF-8 — fall back to Windows-1252 (superset of Latin-1)
+        return new TextDecoder("windows-1252").decode(buf);
+    }
+}
+
 function srtToVtt(srt: string): string {
     // Minimal SRT -> WebVTT conversion (good enough for most addon SRTs).
     // Browsers are far more consistent with VTT than SRT in <track>.
@@ -63,7 +78,8 @@ export async function GET(req: Request) {
 
     // Raw mode: return upstream content as-is (for VLC and other external players)
     if (raw) {
-        const text = await upstream.text();
+        const buf = await upstream.arrayBuffer();
+        const text = decodeSubtitleBytes(buf);
         const ext = text.trimStart().startsWith("WEBVTT") ? "vtt" : "srt";
         const filename = lang ? `${lang}.${ext}` : `subtitle.${ext}`;
         return new NextResponse(text, {
@@ -87,7 +103,9 @@ export async function GET(req: Request) {
 
     // Always return VTT to maximize browser compatibility with <track>.
     if (isVtt) {
-        return new NextResponse(upstream.body, {
+        const buf = await upstream.arrayBuffer();
+        const text = decodeSubtitleBytes(buf);
+        return new NextResponse(text, {
             status: 200,
             headers: {
                 "content-type": "text/vtt; charset=utf-8",
@@ -99,7 +117,8 @@ export async function GET(req: Request) {
 
     // For SRT-ish responses, convert to VTT.
     if (isSrt) {
-        const text = await upstream.text();
+        const buf = await upstream.arrayBuffer();
+        const text = decodeSubtitleBytes(buf);
         const vtt = text.trimStart().startsWith("WEBVTT") ? text : srtToVtt(text);
         return new NextResponse(vtt, {
             status: 200,
@@ -112,7 +131,8 @@ export async function GET(req: Request) {
     }
 
     // Unknown type: pass through as text, but still label VTT if it looks like it.
-    const text = await upstream.text();
+    const buf = await upstream.arrayBuffer();
+    const text = decodeSubtitleBytes(buf);
     const asVtt = text.trimStart().startsWith("WEBVTT") ? text : srtToVtt(text);
     return new NextResponse(asVtt, {
         status: 200,

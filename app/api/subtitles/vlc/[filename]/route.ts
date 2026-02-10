@@ -9,6 +9,15 @@ function isSafeHttpUrl(value: string): boolean {
     }
 }
 
+/** Decode raw bytes: try UTF-8 first, fall back to Windows-1252 */
+function decodeSubtitleBytes(buf: ArrayBuffer): string {
+    try {
+        return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    } catch {
+        return new TextDecoder("windows-1252").decode(buf);
+    }
+}
+
 /**
  * Subtitle proxy for VLC — returns raw subtitle content with a descriptive filename
  * in the URL path so VLC can detect the language and type.
@@ -39,7 +48,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
         );
     }
 
-    const text = await upstream.text();
+    const buf = await upstream.arrayBuffer();
+    const text = decodeSubtitleBytes(buf);
     const isSrt = !text.trimStart().startsWith("WEBVTT");
 
     return new NextResponse(text, {
