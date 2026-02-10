@@ -3,7 +3,7 @@
 import { type TraktMedia, type TraktEpisode, type TraktSeason } from "@/lib/trakt";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
-import { useTraktShowSeasons, useTraktShowEpisodes } from "@/hooks/use-trakt";
+import { useTraktShowSeasons, useTraktShowEpisodes, useTraktCalendarShows } from "@/hooks/use-trakt";
 import { useTMDBSeriesEpisodeGroups, useTMDBEpisodeGroupDetails } from "@/hooks/use-tmdb";
 import { SeasonCard } from "./season-card";
 import { EpisodeCard } from "./episode-card";
@@ -15,6 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
+import { CalendarDays, Tv } from "lucide-react";
+import { traktClient } from "@/lib/trakt";
+import Link from "next/link";
 
 function tmdbEpisodeToTrakt(ep: TMDBEpisodeGroupEpisode): TraktEpisode {
     return {
@@ -34,6 +37,111 @@ interface ShowDetailsProps {
     media: TraktMedia;
     mediaId: string;
 }
+
+/** Shows the next upcoming episode and show status */
+const NextEpisodeBanner = memo(function NextEpisodeBanner({ media }: { media: TraktMedia }) {
+    const hasAuth = !!traktClient.getAccessToken();
+    const { data: calendar } = useTraktCalendarShows(30);
+    const traktId = media.ids?.trakt;
+
+    const nextEpisode = useMemo(() => {
+        if (!calendar || !traktId) return null;
+        return calendar
+            .filter(
+                (item) =>
+                    item.show?.ids?.trakt === traktId &&
+                    item.first_aired &&
+                    new Date(item.first_aired).getTime() > new Date().getTime()
+            )
+            .sort(
+                (a, b) =>
+                    new Date(a.first_aired!).getTime() - new Date(b.first_aired!).getTime()
+            )[0] ?? null;
+    }, [calendar, traktId]);
+
+    const lastAired = useMemo(() => {
+        if (!calendar || !traktId) return null;
+        return calendar
+            .filter(
+                (item) =>
+                    item.show?.ids?.trakt === traktId &&
+                    item.first_aired &&
+                    new Date(item.first_aired).getTime() <= new Date().getTime()
+            )
+            .sort(
+                (a, b) =>
+                    new Date(b.first_aired!).getTime() - new Date(a.first_aired!).getTime()
+            )[0] ?? null;
+    }, [calendar, traktId]);
+
+    const status = media.status;
+    const showStatus = status
+        ? status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+        : null;
+
+    // Nothing to show if no status and no calendar data
+    if (!showStatus && !nextEpisode && !lastAired) return null;
+    if (!hasAuth && !showStatus) return null;
+
+    const formatEpDate = (iso: string) => {
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = d.getTime() - now.getTime();
+        const days = Math.ceil(diff / 86400000);
+        if (days === 0) return "Today";
+        if (days === 1) return "Tomorrow";
+        if (days > 1 && days <= 7) return `in ${days} days`;
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    };
+
+    return (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+            {/* Show status pill */}
+            {showStatus && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Tv className="size-3" />
+                    {showStatus}
+                    {media.aired_episodes != null && (
+                        <span className="text-border">· {media.aired_episodes} episodes</span>
+                    )}
+                </span>
+            )}
+
+            {/* Next episode */}
+            {nextEpisode?.episode && nextEpisode.first_aired && (
+                <Link
+                    href={`?season=${nextEpisode.episode.season}`}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs hover:bg-primary/10 transition-colors">
+                    <CalendarDays className="size-3 text-primary" />
+                    <span className="text-muted-foreground">
+                        Next:{" "}
+                        <span className="text-foreground font-medium">
+                            S{nextEpisode.episode.season}E{nextEpisode.episode.number}
+                        </span>
+                        {" — "}
+                        {formatEpDate(nextEpisode.first_aired)}
+                    </span>
+                </Link>
+            )}
+
+            {/* Last aired (only if no next episode) */}
+            {!nextEpisode && lastAired?.episode && lastAired.first_aired && (
+                <Link
+                    href={`?season=${lastAired.episode.season}`}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-border/50 px-2.5 py-1 text-xs hover:bg-muted/30 transition-colors">
+                    <CalendarDays className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                        Last aired:{" "}
+                        <span className="text-foreground">
+                            S{lastAired.episode.season}E{lastAired.episode.number}
+                        </span>
+                        {lastAired.episode.title && <> — {lastAired.episode.title}</>}
+                    </span>
+                </Link>
+            )}
+        </div>
+    );
+});
 
 const EpisodesSection = memo(function EpisodesSection({
     selectedSeason,
@@ -188,6 +296,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     return (
         <div className="space-y-12">
             <MediaHeader media={media} mediaId={mediaId} type="show" />
+
+            <NextEpisodeBanner media={media} />
 
             <section id="seasons" className="space-y-6 scroll-mt-16">
                 <SectionDivider label="Seasons & Episodes" />

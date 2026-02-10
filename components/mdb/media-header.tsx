@@ -136,6 +136,12 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                     <Badge>{media.certification}</Badge>
                                 </>
                             )}
+                            {type === "show" && media.status && (
+                                <>
+                                    <span className="text-border">·</span>
+                                    <span className="capitalize">{media.status.replace(/_/g, " ")}</span>
+                                </>
+                            )}
                         </div>
 
                         {/* Genres */}

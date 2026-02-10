@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { MediaSection } from "@/components/mdb/media-section";
 import { MediaCard } from "@/components/mdb/media-card";
@@ -13,11 +13,13 @@ import {
     useTraktRecentEpisodes,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
-import { Bookmark, CalendarDays, Film, Tv, LinkIcon } from "lucide-react";
+import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell } from "lucide-react";
 import { type TraktCalendarItem } from "@/lib/trakt";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/error-boundary";
+import { cn } from "@/lib/utils";
+import { getPosterUrl } from "@/lib/utils/media";
 
 // Group calendar items by date
 function groupByDate(items: TraktCalendarItem[]): Record<string, TraktCalendarItem[]> {
@@ -111,6 +113,118 @@ const CalendarSection = memo(function CalendarSection({
     );
 });
 
+/** Recently aired episodes — expandable editorial section */
+const RecentlyAiredSection = memo(function RecentlyAiredSection({
+    items,
+    count,
+}: {
+    items: TraktCalendarItem[];
+    count: number;
+}) {
+    const [expanded, setExpanded] = useState(false);
+
+    const sorted = useMemo(
+        () =>
+            [...items]
+                .filter((i) => {
+                    const aired = i.first_aired ? new Date(i.first_aired).getTime() : 0;
+                    return aired > 0 && aired <= new Date().getTime();
+                })
+                .sort((a, b) => {
+                    const aTime = a.first_aired ? new Date(a.first_aired).getTime() : 0;
+                    const bTime = b.first_aired ? new Date(b.first_aired).getTime() : 0;
+                    return bTime - aTime;
+                }),
+        [items]
+    );
+
+    if (count === 0) return null;
+
+    return (
+        <section className="space-y-4">
+            {/* Editorial section header */}
+            <button
+                onClick={() => setExpanded((v) => !v)}
+                className="flex items-center gap-3 w-full group"
+                aria-expanded={expanded}>
+                <div className="h-px w-6 bg-primary" />
+                <Bell className="size-3.5 text-primary" />
+                <span className="text-xs tracking-widest uppercase text-muted-foreground">
+                    {count} Recently Aired
+                </span>
+                <div className="h-px flex-1 bg-border/50" />
+                <ChevronDown
+                    className={cn(
+                        "size-3.5 text-muted-foreground transition-transform duration-300",
+                        expanded && "rotate-180"
+                    )}
+                />
+            </button>
+
+            {/* Episode cards */}
+            {expanded && (
+                <div className="grid gap-1.5">
+                    {sorted.map((item, i) => {
+                        const show = item.show;
+                        const ep = item.episode;
+                        if (!show || !ep) return null;
+                        const slug = show.ids?.slug || show.ids?.trakt;
+                        const posterUrl =
+                            getPosterUrl(show.images) ||
+                            `https://placehold.co/48x72/1a1a1a/333?text=${encodeURIComponent(show.title?.charAt(0) || "?")}`;
+                        const airedDate = item.first_aired
+                            ? formatDate(item.first_aired.split("T")[0] ?? "")
+                            : "";
+
+                        return (
+                            <Link
+                                key={`${show.ids?.trakt}-${ep.season}-${ep.number}-${i}`}
+                                href={`/shows/${slug}?season=${ep.season}`}
+                                className="group/item flex items-center gap-3.5 px-3 py-2.5 rounded-sm hover:bg-muted/30 transition-colors duration-300 animate-in fade-in-0 slide-in-from-bottom-1"
+                                style={{
+                                    animationDelay: `${Math.min(i * 40, 300)}ms`,
+                                    animationDuration: "400ms",
+                                    animationFillMode: "backwards",
+                                }}>
+                                {/* Poster thumbnail */}
+                                <div className="relative w-9 h-[54px] shrink-0 rounded-sm overflow-hidden bg-muted/30">
+                                    <Image
+                                        src={posterUrl}
+                                        alt={show.title}
+                                        fill
+                                        sizes="36px"
+                                        className="object-cover"
+                                        unoptimized
+                                    />
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0 space-y-0.5">
+                                    <p className="text-sm font-medium truncate">{show.title}</p>
+                                    <span className="text-xs text-muted-foreground truncate block">
+                                        S{String(ep.season).padStart(2, "0")}E{String(ep.number).padStart(2, "0")}
+                                        {ep.title && (
+                                            <>
+                                                <span className="text-border"> · </span>
+                                                {ep.title}
+                                            </>
+                                        )}
+                                    </span>
+                                </div>
+
+                                {/* Date badge */}
+                                <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
+                                    {airedDate}
+                                </span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            )}
+        </section>
+    );
+});
+
 const WatchlistPage = memo(function WatchlistPage() {
     const { data: settings } = useUserSettings();
     const isTraktConnected = !!settings?.trakt_access_token;
@@ -164,14 +278,8 @@ const WatchlistPage = memo(function WatchlistPage() {
         <div className="space-y-6">
             <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
 
-            {recentCount > 0 && (
-                <div className="flex items-center gap-2.5 rounded-sm border border-primary/20 bg-primary/5 px-3.5 py-2.5">
-                    <Bell className="size-3.5 text-primary shrink-0" />
-                    <p className="text-xs text-muted-foreground">
-                        <span className="text-foreground font-medium">{recentCount} episode{recentCount !== 1 ? "s" : ""}</span>{" "}
-                        aired in the last 7 days from shows you watch
-                    </p>
-                </div>
+            {recentCount > 0 && recentEpisodes.data && (
+                <RecentlyAiredSection items={recentEpisodes.data} count={recentCount} />
             )}
 
             <Tabs defaultValue="watchlist">
