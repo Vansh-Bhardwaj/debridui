@@ -73,8 +73,11 @@ export default function SettingsPage() {
     const searchParams = useSearchParams();
     useEffect(() => {
         const traktParam = searchParams.get("trakt");
-        if (traktParam === "connected") toast.success("Trakt connected successfully");
-        else if (traktParam === "error") {
+        if (traktParam === "connected") {
+            toast.success("Trakt connected successfully");
+            // Force refetch — cached data won't have the new token
+            queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+        } else if (traktParam === "error") {
             const reason = searchParams.get("reason");
             const messages: Record<string, string> = {
                 no_code: "No authorization code received from Trakt",
