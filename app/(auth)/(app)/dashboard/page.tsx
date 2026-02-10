@@ -67,7 +67,7 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                             </a>
                         )}
                         <a
-                            href="https://github.com/viperadnan-git/debridui"
+                            href="https://github.com/Vansh-Bhardwaj/debridui"
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="GitHub"

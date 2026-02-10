@@ -277,7 +277,7 @@ export function useContinueWatching() {
             // If logged in, also fetch from server and merge
             if (isLoggedIn) {
                 try {
-                    const res = await fetch("/api/progress");
+                    const res = await fetch("/api/progress", { cache: "no-store" });
                     if (res.ok) {
                         const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & ProgressData> };
 

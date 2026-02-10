@@ -10,6 +10,7 @@ import { VLCMiniPlayer } from "@/components/vlc-mini-player";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 
 
 // App layout - requires at least one account
@@ -42,6 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <PreviewDialog />
             <PreviewRegistryLoader />
             <VLCMiniPlayer />
+            <KeyboardShortcutsDialog />
         </SearchProvider>
     );
 }

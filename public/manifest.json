@@ -1,0 +1,19 @@
+{
+  "name": "DebridUI",
+  "short_name": "DebridUI",
+  "description": "A modern debrid client with built-in playback, media discovery, and streaming.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["entertainment", "utilities"]
+}

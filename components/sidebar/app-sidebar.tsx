@@ -6,7 +6,7 @@ import { NavMain } from "@/components/sidebar/nav-main";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { AccountSwitcher } from "./account-switcher";
-import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity } from "lucide-react";
+import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity, Bookmark } from "lucide-react";
 import { useSearch } from "@/components/mdb/search-provider";
 
 const data = {
@@ -20,6 +20,11 @@ const data = {
             title: "Search",
             url: "/search",
             icon: SearchIcon,
+        },
+        {
+            title: "Watchlist",
+            url: "/watchlist",
+            icon: Bookmark,
         },
         {
             title: "Files",

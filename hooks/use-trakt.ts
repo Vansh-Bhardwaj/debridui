@@ -1,4 +1,4 @@
-import { useQuery, UseQueryResult } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient } from "@/lib/trakt";
 
 // Cache duration constants
@@ -152,3 +152,57 @@ export const useTraktPersonShows = createTraktHook(
     (slug: string) => traktClient.getPersonShows(slug),
     CACHE_DURATION.LONG
 );
+
+// Watchlist hooks (require auth — only enabled when access token is set)
+export function useTraktWatchlistMovies() {
+    return useQuery({
+        queryKey: ["trakt", "watchlist", "movies"],
+        queryFn: () => traktClient.getWatchlist("movies", "added"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useTraktWatchlistShows() {
+    return useQuery({
+        queryKey: ["trakt", "watchlist", "shows"],
+        queryFn: () => traktClient.getWatchlist("shows", "added"),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useRemoveFromWatchlist() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+            const key = params.type === "movie" ? "movies" : "shows";
+            const ids: { imdb?: string; trakt?: number } = {};
+            if (params.imdbId) ids.imdb = params.imdbId;
+            if (params.traktId) ids.trakt = params.traktId;
+            return traktClient.removeFromWatchlist({ [key]: [{ ids }] });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+        },
+    });
+}
+
+// Calendar hooks (require auth)
+export function useTraktCalendarShows(days = 14) {
+    return useQuery({
+        queryKey: ["trakt", "calendar", "shows", days],
+        queryFn: () => traktClient.getCalendarShows(undefined, days),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}
+
+export function useTraktCalendarMovies(days = 30) {
+    return useQuery({
+        queryKey: ["trakt", "calendar", "movies", days],
+        queryFn: () => traktClient.getCalendarMovies(undefined, days),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!traktClient.getAccessToken(),
+    });
+}

@@ -324,6 +324,14 @@ export interface TraktScrobbleResponse {
     show?: TraktMedia;
 }
 
+export interface TraktCalendarItem {
+    first_aired?: string;
+    released?: string;
+    episode?: TraktEpisode;
+    show?: TraktMedia;
+    movie?: TraktMedia;
+}
+
 export interface TraktTokenResponse {
     access_token: string;
     token_type: string;
@@ -648,6 +656,36 @@ export class TraktClient {
      */
     public async getPersonShows(id: string, extended = "full,images"): Promise<TraktPersonShowCredits> {
         return this.makeRequest<TraktPersonShowCredits>(`people/${id}/shows`, {}, false, extended);
+    }
+
+    // ── Watchlist Methods (require auth) ────────────────────────────────
+
+    /** Get user's watchlist — movies and shows they want to watch */
+    public async getWatchlist(
+        type: "movies" | "shows" = "movies",
+        sort: "rank" | "added" | "released" | "title" = "added",
+        extended = "full,images"
+    ): Promise<TraktWatchlistItem[]> {
+        return this.makeRequest<TraktWatchlistItem[]>(`sync/watchlist/${type}/${sort}`, {}, true, extended);
+    }
+
+    /** Remove items from watchlist */
+    public async removeFromWatchlist(items: { movies?: { ids: { imdb?: string; trakt?: number } }[]; shows?: { ids: { imdb?: string; trakt?: number } }[] }) {
+        return this.makeRequest("sync/watchlist/remove", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    // ── Calendar Methods (require auth) ─────────────────────────────────
+
+    /** Get user's personalized calendar — upcoming episodes for shows they watch */
+    public async getCalendarShows(startDate?: string, days = 14, extended = "full,images"): Promise<TraktCalendarItem[]> {
+        const start = startDate || new Date().toISOString().slice(0, 10);
+        return this.makeRequest<TraktCalendarItem[]>(`calendars/my/shows/${start}/${days}`, {}, true, extended);
+    }
+
+    /** Get user's personalized calendar — upcoming movie releases */
+    public async getCalendarMovies(startDate?: string, days = 30, extended = "full,images"): Promise<TraktCalendarItem[]> {
+        const start = startDate || new Date().toISOString().slice(0, 10);
+        return this.makeRequest<TraktCalendarItem[]>(`calendars/my/movies/${start}/${days}`, {}, true, extended);
     }
 
     // ── Scrobble Methods (require auth) ─────────────────────────────────

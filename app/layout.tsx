@@ -84,6 +84,12 @@ export const metadata: Metadata = {
         icon: "/icon.svg",
         apple: "/icon.svg",
     },
+    manifest: "/manifest.json",
+    other: {
+        "mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-status-bar-style": "black-translucent",
+    },
 };
 
 export default function RootLayout({
@@ -93,7 +99,9 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" suppressHydrationWarning>
-            <head />
+            <head>
+                <meta name="theme-color" content="#09090b" />
+            </head>
             <body className={cn("font-sans antialiased")}>
                 <Script id="polyfill-name" strategy="beforeInteractive">
                     {`
@@ -112,6 +120,9 @@ export default function RootLayout({
                 </Script>
                 <Providers>{children}</Providers>
                 <Analytics />
+                <Script id="sw-register" strategy="lazyOnload">
+                    {`if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js")}`}
+                </Script>
             </body>
         </html>
     );
