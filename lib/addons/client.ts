@@ -6,7 +6,16 @@ import {
     type CatalogResponse,
     type TvSearchParams,
 } from "./types";
-import { getProxyUrl } from "@/lib/utils";
+
+
+/** Proxy addon URL through our own API route to avoid CORS issues */
+const getAddonProxyUrl = (url: string): string => {
+    if (typeof window !== "undefined") {
+        return `/api/addon/proxy?url=${encodeURIComponent(url)}`;
+    }
+    // Server-side: no proxy needed
+    return url;
+};
 
 export interface AddonClientConfig {
     url: string;
@@ -96,7 +105,7 @@ export class AddonClient {
      * Fetch addon manifest
      */
     async fetchManifest(): Promise<AddonManifest> {
-        const url = getProxyUrl(`${this.baseUrl}/manifest.json`);
+        const url = getAddonProxyUrl(`${this.baseUrl}/manifest.json`);
         const manifest = await this.makeRequest<AddonManifest>(url);
 
         if (!manifest.id || !manifest.name) {
@@ -114,7 +123,7 @@ export class AddonClient {
             throw new AddonError("IMDB ID is required");
         }
 
-        const url = getProxyUrl(`${this.baseUrl}/stream/movie/${imdbId}.json`);
+        const url = getAddonProxyUrl(`${this.baseUrl}/stream/movie/${imdbId}.json`);
         const response = await this.makeRequest<AddonStreamResponse>(url);
 
         if (!response.streams || !Array.isArray(response.streams)) {
@@ -136,7 +145,7 @@ export class AddonClient {
             throw new AddonError("Season and episode must be positive numbers");
         }
 
-        const url = getProxyUrl(`${this.baseUrl}/stream/series/${imdbId}:${params.season}:${params.episode}.json`);
+        const url = getAddonProxyUrl(`${this.baseUrl}/stream/series/${imdbId}:${params.season}:${params.episode}.json`);
         const response = await this.makeRequest<AddonStreamResponse>(url);
 
         if (!response.streams || !Array.isArray(response.streams)) {
@@ -172,7 +181,7 @@ export class AddonClient {
         if (!imdbId?.trim()) {
             throw new AddonError("IMDB ID is required");
         }
-        const url = getProxyUrl(`${this.baseUrl}/subtitles/movie/${imdbId}.json`);
+        const url = getAddonProxyUrl(`${this.baseUrl}/subtitles/movie/${imdbId}.json`);
         const response = await this.makeRequest<AddonSubtitlesResponse>(url);
         if (!response.subtitles || !Array.isArray(response.subtitles)) {
             return { subtitles: [] };
@@ -190,7 +199,7 @@ export class AddonClient {
         if (params.season < 1 || params.episode < 1) {
             throw new AddonError("Season and episode must be positive numbers");
         }
-        const url = getProxyUrl(`${this.baseUrl}/subtitles/series/${imdbId}:${params.season}:${params.episode}.json`);
+        const url = getAddonProxyUrl(`${this.baseUrl}/subtitles/series/${imdbId}:${params.season}:${params.episode}.json`);
         const response = await this.makeRequest<AddonSubtitlesResponse>(url);
         if (!response.subtitles || !Array.isArray(response.subtitles)) {
             return { subtitles: [] };
@@ -229,7 +238,7 @@ export class AddonClient {
         }
 
         url += ".json";
-        const response = await this.makeRequest<CatalogResponse>(getProxyUrl(url));
+        const response = await this.makeRequest<CatalogResponse>(getAddonProxyUrl(url));
 
         if (!response.metas || !Array.isArray(response.metas)) {
             return { metas: [] };
@@ -247,7 +256,7 @@ export class AddonClient {
 
         try {
             // Proxying to ensure CORS compliance
-            const response = await fetch(getProxyUrl(url), {
+            const response = await fetch(getAddonProxyUrl(url), {
                 method: "GET",
                 redirect: "follow",
                 signal: controller.signal,

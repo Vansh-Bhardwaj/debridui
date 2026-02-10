@@ -63,16 +63,23 @@ export default {
         }
 
         try {
-            // Create proxy request with minimal header manipulation
+            // Create clean headers — strip browser-specific headers that cause
+            // upstream servers (e.g. Torrentio) to reject the request with 403
+            const cleanHeaders = new Headers();
+            const stripPrefixes = ["origin", "referer", "sec-", "cf-", "cookie", "host"];
+
+            for (const [key, value] of request.headers) {
+                if (!stripPrefixes.some((p) => key.toLowerCase().startsWith(p))) {
+                    cleanHeaders.set(key, value);
+                }
+            }
+
             const proxyRequest = new Request(targetUrl, {
                 method: request.method,
-                headers: request.headers,
+                headers: cleanHeaders,
                 body: request.body,
                 redirect: "follow",
             });
-
-            // Only modify essential headers
-            proxyRequest.headers.delete("host");
 
             // Fetch from upstream
             const response = await fetch(proxyRequest);

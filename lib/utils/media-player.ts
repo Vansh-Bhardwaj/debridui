@@ -179,10 +179,11 @@ const generateVlcUrl = (url: string, fileName: string): string => {
     const normalized = normalizeUrl(url);
     const platform = detectPlatform();
     if (platform === Platform.ANDROID) {
-        // Android: use intent scheme to launch VLC app directly
+        // Android: use intent with explicit action and encoded URL extra
+        // Passing URL as S.url extra avoids issues with special characters in the URI path
         const encodedTitle = encodeURIComponent(fileName);
-        const cleanUrl = normalized.replace("https://", "");
-        return `intent://${cleanUrl}#Intent;scheme=https;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle};end`;
+        const encodedUrl = encodeURIComponent(normalized);
+        return `intent:#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle};S.url=${encodedUrl};end`;
     }
     if (platform === Platform.IOS) {
         // iOS: use vlc-x-callback for proper URL handling
@@ -241,7 +242,13 @@ export const openInPlayer = ({
     }
 
     const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName);
-    window.open(playerUrl, "_self");
+
+    // On Android, use location.href for intent:// URLs — more reliable than window.open
+    if (detectPlatform() === Platform.ANDROID && playerUrl.startsWith("intent:")) {
+        window.location.href = playerUrl;
+    } else {
+        window.open(playerUrl, "_self");
+    }
 };
 
 /** Read saved progress from localStorage (mirrors use-progress logic). */
