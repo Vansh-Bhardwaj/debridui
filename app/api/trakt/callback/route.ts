@@ -54,9 +54,10 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectUri = `${getAppUrl()}/api/trakt/callback`;
+    const proxyUrl = getEnv("NEXT_PUBLIC_CORS_PROXY_URL");
 
     try {
-        const tokens = await TraktClient.exchangeCode(code, clientId, clientSecret, redirectUri);
+        const tokens = await TraktClient.exchangeCode(code, clientId, clientSecret, redirectUri, proxyUrl);
 
         const expiresAt = tokens.created_at + tokens.expires_in;
         const updates = {

@@ -715,23 +715,36 @@ export class TraktClient {
         code: string,
         clientId: string,
         clientSecret: string,
-        redirectUri: string
+        redirectUri: string,
+        proxyUrl?: string
     ): Promise<TraktTokenResponse> {
-        const res = await fetch("https://api.trakt.tv/oauth/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                code,
-                client_id: clientId,
-                client_secret: clientSecret,
-                redirect_uri: redirectUri,
-                grant_type: "authorization_code",
-            }),
+        const url = "https://api.trakt.tv/oauth/token";
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "DebridUI/1.0 (+https://github.com/Vansh-Bhardwaj/debridui)",
+            "trakt-api-version": "2",
+            "trakt-api-key": clientId,
+        };
+        const body = JSON.stringify({
+            code,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: redirectUri,
+            grant_type: "authorization_code",
         });
+
+        let res = await fetch(url, { method: "POST", headers, body });
+
+        // Cloudflare WAF may block Worker IPs — retry through CORS proxy
+        if (res.status === 403 && proxyUrl) {
+            res = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, { method: "POST", headers, body });
+        }
+
         if (!res.ok) {
-            const body = await res.text().catch(() => "");
+            const text = await res.text().catch(() => "");
             throw new TraktError(
-                `Token exchange failed: ${res.status} ${res.statusText} — ${body}`,
+                `Token exchange failed: ${res.status} ${res.statusText} — ${text}`,
                 res.status
             );
         }
@@ -746,23 +759,36 @@ export class TraktClient {
         refreshToken: string,
         clientId: string,
         clientSecret: string,
-        redirectUri: string
+        redirectUri: string,
+        proxyUrl?: string
     ): Promise<TraktTokenResponse> {
-        const res = await fetch("https://api.trakt.tv/oauth/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                refresh_token: refreshToken,
-                client_id: clientId,
-                client_secret: clientSecret,
-                redirect_uri: redirectUri,
-                grant_type: "refresh_token",
-            }),
+        const url = "https://api.trakt.tv/oauth/token";
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "DebridUI/1.0 (+https://github.com/Vansh-Bhardwaj/debridui)",
+            "trakt-api-version": "2",
+            "trakt-api-key": clientId,
+        };
+        const body = JSON.stringify({
+            refresh_token: refreshToken,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: redirectUri,
+            grant_type: "refresh_token",
         });
+
+        let res = await fetch(url, { method: "POST", headers, body });
+
+        // Cloudflare WAF may block Worker IPs — retry through CORS proxy
+        if (res.status === 403 && proxyUrl) {
+            res = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, { method: "POST", headers, body });
+        }
+
         if (!res.ok) {
-            const body = await res.text().catch(() => "");
+            const text = await res.text().catch(() => "");
             throw new TraktError(
-                `Token refresh failed: ${res.status} ${res.statusText} — ${body}`,
+                `Token refresh failed: ${res.status} ${res.statusText} — ${text}`,
                 res.status
             );
         }
