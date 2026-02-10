@@ -13,6 +13,7 @@ import { useStreamingStore } from "@/lib/stores/streaming";
 import { useUserAddons } from "@/hooks/use-addons";
 import { type Addon, type TvSearchParams } from "@/lib/addons/types";
 import Image from "next/image";
+import Link from "next/link";
 
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
@@ -110,6 +111,9 @@ function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
 
     const posterUrl = getPosterUrl(media?.images) || `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(title)}`;
 
+    const mediaSlug = media?.ids?.slug || media?.ids?.imdb;
+    const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
+
     return (
         <div className="flex-shrink-0 w-40 sm:w-48 group relative">
             <WatchButton
@@ -152,20 +156,21 @@ function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
                             {formatTime(remainingTime)} left
                         </div>
                     </div>
-
-                    <div className="mt-2 text-left">
-                        <p className="text-xs font-medium truncate group-hover:text-primary transition-colors pr-6">
-                            {displayTitle}
-                        </p>
-                        {media?.rating && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                                <Star className="size-2.5 fill-[#F5C518] text-[#F5C518]" />
-                                <span className="text-[10px] text-muted-foreground">{media.rating.toFixed(1)}</span>
-                            </div>
-                        )}
-                    </div>
                 </button>
             </WatchButton>
+
+            {/* Title + rating — links to media page */}
+            <Link href={mediaHref} className="block mt-2">
+                <p className="text-xs font-medium truncate hover:text-primary transition-colors pr-6">
+                    {displayTitle}
+                </p>
+                {media?.rating && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                        <Star className="size-2.5 fill-[#F5C518] text-[#F5C518]" />
+                        <span className="text-[10px] text-muted-foreground">{media.rating.toFixed(1)}</span>
+                    </div>
+                )}
+            </Link>
 
             {/* Remove button */}
             <button
