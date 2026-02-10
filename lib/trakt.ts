@@ -328,6 +328,31 @@ interface SyncRatingItems {
     shows?: { ids: SyncIds; rating: number }[];
 }
 
+// Watched progress types
+export interface TraktWatchedEpisode {
+    number: number;
+    completed: boolean;
+    last_watched_at: string | null;
+}
+
+export interface TraktWatchedSeason {
+    number: number;
+    title?: string;
+    aired: number;
+    completed: number;
+    episodes: TraktWatchedEpisode[];
+}
+
+export interface TraktShowWatchedProgress {
+    aired: number;
+    completed: number;
+    last_watched_at: string | null;
+    reset_at: string | null;
+    seasons: TraktWatchedSeason[];
+    next_episode?: TraktEpisode | null;
+    last_episode?: TraktEpisode | null;
+}
+
 // Scrobble interfaces
 export interface TraktScrobbleMovie {
     ids: { imdb?: string; tmdb?: number; trakt?: number; slug?: string };
@@ -753,11 +778,39 @@ export class TraktClient {
         return this.makeRequest("sync/ratings/remove", { method: "POST", body: JSON.stringify(items) }, true);
     }
 
+    // ── Watched Progress (require auth) ────────────────────────────────
+
+    /** Get watched progress for a show — which episodes the user has seen */
+    public async getShowWatchedProgress(id: string): Promise<TraktShowWatchedProgress> {
+        return this.makeRequest<TraktShowWatchedProgress>(`shows/${id}/progress/watched?hidden=false&specials=true&count_specials=false`, {}, true);
+    }
+
     // ── History Methods (require auth) ───────────────────────────────────
 
     /** Add items to watched history */
     public async addToHistory(items: SyncItems) {
         return this.makeRequest("sync/history", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    /** Remove items from watched history */
+    public async removeFromHistory(items: SyncItems) {
+        return this.makeRequest("sync/history/remove", { method: "POST", body: JSON.stringify(items) }, true);
+    }
+
+    /** Add episodes to watched history by show ID + episode numbers */
+    public async addEpisodesToHistory(episodes: { ids: SyncIds; season: number; number: number }[]) {
+        return this.makeRequest("sync/history", {
+            method: "POST",
+            body: JSON.stringify({ episodes }),
+        }, true);
+    }
+
+    /** Remove episodes from watched history */
+    public async removeEpisodesFromHistory(episodes: { ids: SyncIds; season: number; number: number }[]) {
+        return this.makeRequest("sync/history/remove", {
+            method: "POST",
+            body: JSON.stringify({ episodes }),
+        }, true);
     }
 
     // ── Checkin Methods (require auth) ───────────────────────────────────

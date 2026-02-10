@@ -323,6 +323,42 @@ export function useAddToHistory() {
     });
 }
 
+/** Mark individual episode(s) as watched */
+export function useMarkEpisodeWatched() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { showTraktId: number; season: number; episodes: number[] }) =>
+            traktClient.addEpisodesToHistory(
+                params.episodes.map((ep) => ({
+                    ids: { trakt: params.showTraktId },
+                    season: params.season,
+                    number: ep,
+                }))
+            ),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+        },
+    });
+}
+
+/** Unmark individual episode(s) as watched */
+export function useUnmarkEpisodeWatched() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (params: { showTraktId: number; season: number; episodes: number[] }) =>
+            traktClient.removeEpisodesFromHistory(
+                params.episodes.map((ep) => ({
+                    ids: { trakt: params.showTraktId },
+                    season: params.season,
+                    number: ep,
+                }))
+            ),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+        },
+    });
+}
+
 // Checkin hooks
 export function useCheckin() {
     return useMutation({
@@ -343,6 +379,16 @@ export function useTraktRelated(id: string, type: "movie" | "show") {
         queryFn: () => (type === "movie" ? traktClient.getRelatedMovies(id) : traktClient.getRelatedShows(id)),
         staleTime: CACHE_DURATION.LONG,
         enabled: !!id,
+    });
+}
+
+// Watched progress hooks (require auth)
+export function useTraktShowProgress(showId: string) {
+    return useQuery({
+        queryKey: ["trakt", "show", "progress", showId],
+        queryFn: () => traktClient.getShowWatchedProgress(showId),
+        staleTime: CACHE_DURATION.SHORT,
+        enabled: !!showId && !!traktClient.getAccessToken(),
     });
 }
 

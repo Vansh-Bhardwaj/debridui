@@ -1,9 +1,9 @@
 "use client";
 
-import { type TraktMedia, type TraktEpisode, type TraktSeason } from "@/lib/trakt";
+import { type TraktMedia, type TraktEpisode, type TraktSeason, type TraktShowWatchedProgress } from "@/lib/trakt";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
-import { useTraktShowSeasons, useTraktShowEpisodes, useTraktCalendarShows } from "@/hooks/use-trakt";
+import { useTraktShowSeasons, useTraktShowEpisodes, useTraktCalendarShows, useTraktShowProgress, useMarkEpisodeWatched, useUnmarkEpisodeWatched } from "@/hooks/use-trakt";
 import { useTMDBSeriesEpisodeGroups, useTMDBEpisodeGroupDetails } from "@/hooks/use-tmdb";
 import { SeasonCard } from "./season-card";
 import { EpisodeCard } from "./episode-card";
@@ -15,9 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
-import { CalendarDays, Tv } from "lucide-react";
+import { CalendarDays, Tv, Eye, EyeOff, Loader2 } from "lucide-react";
 import { traktClient } from "@/lib/trakt";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 function tmdbEpisodeToTrakt(ep: TMDBEpisodeGroupEpisode): TraktEpisode {
     return {
@@ -150,6 +151,8 @@ const EpisodesSection = memo(function EpisodesSection({
     media,
     label,
     preloadedEpisodes,
+    watchedProgress,
+    showTraktId,
 }: {
     selectedSeason: number;
     episodeCount?: number;
@@ -157,27 +160,76 @@ const EpisodesSection = memo(function EpisodesSection({
     media: TraktMedia;
     label?: string;
     preloadedEpisodes?: TraktEpisode[];
+    watchedProgress?: TraktShowWatchedProgress;
+    showTraktId?: number;
 }): React.ReactElement | null {
     const { data: episodes, isLoading } = useTraktShowEpisodes(mediaId, selectedSeason);
+    const markWatched = useMarkEpisodeWatched();
+    const unmarkWatched = useUnmarkEpisodeWatched();
 
     const displayEpisodes = preloadedEpisodes ?? episodes;
+
+    // Build a set of watched episode numbers for the selected season
+    const watchedSet = useMemo(() => {
+        const set = new Set<number>();
+        if (!watchedProgress?.seasons) return set;
+        const season = watchedProgress.seasons.find((s) => s.number === selectedSeason);
+        if (!season) return set;
+        for (const ep of season.episodes) {
+            if (ep.completed) set.add(ep.number);
+        }
+        return set;
+    }, [watchedProgress, selectedSeason]);
+
     if (!isLoading && !preloadedEpisodes && (!displayEpisodes || displayEpisodes.length === 0)) return null;
 
     const seasonLabel = label ?? (selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`);
     const skeletonCount = Math.min(episodeCount || 3, 20);
     const loading = !preloadedEpisodes && isLoading;
+    const allWatched = displayEpisodes ? watchedSet.size >= displayEpisodes.length : false;
+
+    const handleMarkSeasonWatched = () => {
+        if (!showTraktId || !displayEpisodes) return;
+        const epNumbers = displayEpisodes.map((e) => e.number);
+        if (allWatched) {
+            unmarkWatched.mutate({ showTraktId, season: selectedSeason, episodes: epNumbers });
+        } else {
+            const unwatched = epNumbers.filter((n) => !watchedSet.has(n));
+            markWatched.mutate({ showTraktId, season: selectedSeason, episodes: unwatched });
+        }
+    };
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-light text-muted-foreground" id="sources">
                     {seasonLabel}
                 </h3>
-                {displayEpisodes && (
+                <div className="flex items-center gap-3">
+                    {showTraktId && displayEpisodes && displayEpisodes.length > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleMarkSeasonWatched}
+                            disabled={markWatched.isPending || unmarkWatched.isPending}
+                            className="h-7 text-xs gap-1.5 text-muted-foreground">
+                            {markWatched.isPending || unmarkWatched.isPending ? (
+                                <Loader2 className="size-3 animate-spin" />
+                            ) : allWatched ? (
+                                <EyeOff className="size-3" />
+                            ) : (
+                                <Eye className="size-3" />
+                            )}
+                            {allWatched ? "Unmark All" : "Mark All Watched"}
+                        </Button>
+                    )}
                     <span className="text-xs tracking-wider uppercase text-muted-foreground">
-                        {displayEpisodes.length} Episodes
+                        {watchedSet.size > 0 && (
+                            <span className="text-emerald-400/80 normal-case">{watchedSet.size}/{displayEpisodes?.length ?? "?"} watched <span className="text-border mx-1">·</span></span>
+                        )}
+                        {displayEpisodes ? `${displayEpisodes.length} Episodes` : null}
                     </span>
-                )}
+                </div>
             </div>
             <div className="flex flex-col gap-3">
                 {loading
@@ -193,14 +245,31 @@ const EpisodesSection = memo(function EpisodesSection({
                               </div>
                           </div>
                       ))
-                    : displayEpisodes?.map((episode) => (
-                          <EpisodeCard
-                              key={`${selectedSeason}-${episode.number}`}
-                              episode={episode}
-                              imdbId={media.ids?.imdb}
-                              showTitle={media.title}
-                          />
-                      ))}
+                    : displayEpisodes?.map((episode) => {
+                          const isWatched = watchedSet.has(episode.number);
+                          // "New" = aired in last 7 days and not watched
+                          const isNew = !isWatched && !!episode.first_aired &&
+                              (new Date().getTime() - new Date(episode.first_aired).getTime()) < 7 * 86400000 &&
+                              new Date(episode.first_aired).getTime() <= new Date().getTime();
+                          return (
+                              <EpisodeCard
+                                  key={`${selectedSeason}-${episode.number}`}
+                                  episode={episode}
+                                  imdbId={media.ids?.imdb}
+                                  showTitle={media.title}
+                                  isWatched={isWatched}
+                                  isNew={isNew}
+                                  onToggleWatched={showTraktId ? () => {
+                                      if (isWatched) {
+                                          unmarkWatched.mutate({ showTraktId, season: selectedSeason, episodes: [episode.number] });
+                                      } else {
+                                          markWatched.mutate({ showTraktId, season: selectedSeason, episodes: [episode.number] });
+                                      }
+                                  } : undefined}
+                                  isTogglingWatched={markWatched.isPending || unmarkWatched.isPending}
+                              />
+                          );
+                      })}
             </div>
         </div>
     );
@@ -218,6 +287,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(partParam ? parseInt(partParam, 10) : 0);
 
     const { data: seasons, isLoading: seasonsLoading } = useTraktShowSeasons(mediaId);
+    const { data: watchedProgress } = useTraktShowProgress(mediaId);
 
     // TMDB episode groups (only when user has TMDB key configured)
     const tmdbId = media.ids?.tmdb;
@@ -332,6 +402,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                             episodeCount={episodeCount}
                             mediaId={mediaId}
                             media={media}
+                            watchedProgress={watchedProgress}
+                            showTraktId={media.ids?.trakt}
                         />
                     </>
                 )}
@@ -371,6 +443,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                                         media={media}
                                         label={filteredGroups[selectedGroupIndex]?.title}
                                         preloadedEpisodes={groupEpisodes}
+                                        watchedProgress={watchedProgress}
+                                        showTraktId={media.ids?.trakt}
                                     />
                                 </>
                             )

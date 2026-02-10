@@ -1,7 +1,7 @@
 "use client";
 
 import { type TraktEpisode } from "@/lib/trakt";
-import { ChevronDown, Play, Star } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Loader2, Play, Star } from "lucide-react";
 import { cn, formatLocalizedDate } from "@/lib/utils";
 import { memo, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -61,9 +61,13 @@ interface EpisodeCardProps {
     className?: string;
     imdbId?: string;
     showTitle?: string;
+    isWatched?: boolean;
+    isNew?: boolean;
+    onToggleWatched?: () => void;
+    isTogglingWatched?: boolean;
 }
 
-export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbId, showTitle }: EpisodeCardProps) {
+export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbId, showTitle, isWatched, isNew, onToggleWatched, isTogglingWatched }: EpisodeCardProps) {
     const [isOpen, setIsOpen] = useState(false);
 
     const episodeLabel = String(episode.number).padStart(2, "0");
@@ -83,7 +87,10 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className={cn("group", className)}>
-            <div className="rounded-sm border border-border/50 overflow-hidden">
+            <div className={cn(
+                "rounded-sm border border-border/50 overflow-hidden transition-colors duration-300",
+                isWatched && "border-border/30 opacity-75 hover:opacity-100"
+            )}>
                 <div className="flex flex-row items-start">
                     {/* Episode thumbnail - clickable to watch */}
                     {imdbId ? (
@@ -96,6 +103,18 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                     rating={episode.rating}
                                     interactive
                                 />
+                                {/* Watched/New overlay badges */}
+                                {isWatched && (
+                                    <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-emerald-400 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                        <Check className="size-2.5" />
+                                        Watched
+                                    </span>
+                                )}
+                                {isNew && !isWatched && (
+                                    <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 text-[10px] font-medium tracking-wider text-primary bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                        NEW
+                                    </span>
+                                )}
                             </button>
                         </WatchButton>
                     ) : (
@@ -106,39 +125,79 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                 episodeLabel={episodeLabel}
                                 rating={episode.rating}
                             />
+                            {isWatched && (
+                                <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-emerald-400 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                    <Check className="size-2.5" />
+                                    Watched
+                                </span>
+                            )}
+                            {isNew && !isWatched && (
+                                <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 text-[10px] font-medium tracking-wider text-primary bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                    NEW
+                                </span>
+                            )}
                         </div>
                     )}
 
                     {/* Episode details - clickable to toggle sources */}
-                    <CollapsibleTrigger asChild>
-                        <button className="flex-1 px-2.5 py-1.5 sm:p-3 md:p-4 text-left cursor-pointer min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-0.5 sm:space-y-1 min-w-0">
-                                    <h4 className="text-sm sm:text-base font-light line-clamp-1 group-hover:text-foreground/80 transition-colors">
-                                        {episode.title || `Episode ${episode.number}`}
-                                    </h4>
-                                    <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-muted-foreground">
-                                        {episode.first_aired && <span>{formatLocalizedDate(episode.first_aired)}</span>}
-                                        {episode.first_aired && episode.runtime && (
-                                            <span className="text-border">·</span>
-                                        )}
-                                        {episode.runtime && <span>{episode.runtime}m</span>}
+                    <div className="flex-1 min-w-0">
+                        <CollapsibleTrigger asChild>
+                            <button className="w-full px-2.5 py-1.5 sm:p-3 md:p-4 text-left cursor-pointer">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                                        <h4 className="text-sm sm:text-base font-light line-clamp-1 group-hover:text-foreground/80 transition-colors">
+                                            {episode.title || `Episode ${episode.number}`}
+                                        </h4>
+                                        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-muted-foreground">
+                                            {episode.first_aired && <span>{formatLocalizedDate(episode.first_aired)}</span>}
+                                            {episode.first_aired && episode.runtime && (
+                                                <span className="text-border">·</span>
+                                            )}
+                                            {episode.runtime && <span>{episode.runtime}m</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <ChevronDown
+                                            className={cn(
+                                                "size-4 text-muted-foreground transition-transform duration-300",
+                                                isOpen && "rotate-180"
+                                            )}
+                                        />
                                     </div>
                                 </div>
-                                <ChevronDown
+                                {episode.overview && (
+                                    <p className="text-[10px] sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1 sm:mt-1.5 md:mt-2">
+                                        {episode.overview}
+                                    </p>
+                                )}
+                            </button>
+                        </CollapsibleTrigger>
+
+                        {/* Watched toggle — outside collapsible trigger */}
+                        {onToggleWatched && (
+                            <div className="px-2.5 pb-1.5 sm:px-3 sm:pb-2 md:px-4 md:pb-3 -mt-1">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onToggleWatched(); }}
+                                    disabled={isTogglingWatched}
                                     className={cn(
-                                        "size-4 shrink-0 text-muted-foreground transition-transform duration-300",
-                                        isOpen && "rotate-180"
+                                        "inline-flex items-center gap-1.5 text-xs rounded-sm px-2 py-1 transition-colors duration-200",
+                                        isWatched
+                                            ? "text-emerald-400 hover:text-red-400 hover:bg-red-500/10"
+                                            : "text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/10"
                                     )}
-                                />
+                                    aria-label={isWatched ? "Mark as unwatched" : "Mark as watched"}>
+                                    {isTogglingWatched ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                    ) : isWatched ? (
+                                        <EyeOff className="size-3" />
+                                    ) : (
+                                        <Eye className="size-3" />
+                                    )}
+                                    {isWatched ? "Unmark watched" : "Mark watched"}
+                                </button>
                             </div>
-                            {episode.overview && (
-                                <p className="text-[10px] sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1 sm:mt-1.5 md:mt-2">
-                                    {episode.overview}
-                                </p>
-                            )}
-                        </button>
-                    </CollapsibleTrigger>
+                        )}
+                    </div>
                 </div>
 
                 <CollapsibleContent>
