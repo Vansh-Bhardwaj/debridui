@@ -33,6 +33,7 @@
   },
   // SECRETS - These must be set via `wrangler secret put <NAME>`:
   // - NEON_AUTH_COOKIE_SECRET (generate with: openssl rand -base64 32)
+  // - TRAKT_CLIENT_SECRET (from trakt.tv OAuth app settings)
   //
   // DATABASE_URL is NOT needed in production — Hyperdrive binding provides
   // the connection string via env.HYPERDRIVE.connectionString.
