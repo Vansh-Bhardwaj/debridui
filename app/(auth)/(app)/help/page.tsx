@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
-import { HelpCircle, ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight } from "lucide-react";
+import { HelpCircle, ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight, Keyboard } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
+import { ShortcutsHelpButton } from "./shortcuts-button";
 
 export default function HelpPage() {
     return (
@@ -111,6 +112,31 @@ export default function HelpPage() {
                                 </a>
                             </Button>
                         </div>
+                    </div>
+                </section>
+
+                {/* Divider */}
+                <div className="h-px bg-border/50" />
+
+                {/* Keyboard Shortcuts Section */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="h-px w-8 bg-primary" />
+                        <span className="text-xs tracking-widest uppercase text-muted-foreground">Quick Reference</span>
+                    </div>
+
+                    <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-start">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <Keyboard className="size-5 text-primary" />
+                                <h2 className="text-xl font-light">Keyboard Shortcuts</h2>
+                            </div>
+                            <p className="text-sm text-muted-foreground max-w-lg">
+                                Navigate faster with keyboard shortcuts. Press <kbd className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded border border-border bg-muted text-[10px] font-mono text-muted-foreground">?</kbd> anywhere to see the full list.
+                            </p>
+                        </div>
+
+                        <ShortcutsHelpButton />
                     </div>
                 </section>
             </div>

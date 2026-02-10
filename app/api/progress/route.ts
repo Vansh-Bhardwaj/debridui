@@ -19,7 +19,9 @@ export async function GET() {
             .orderBy(desc(userProgress.updatedAt))
             .limit(50); // Limit to recent 50 items
 
-        return NextResponse.json({ progress });
+        return NextResponse.json({ progress }, {
+            headers: { "Cache-Control": "private, no-store" },
+        });
     } catch (error) {
         console.error("[progress] GET error:", error);
         return NextResponse.json({ error: "Failed to fetch progress" }, { status: 500 });

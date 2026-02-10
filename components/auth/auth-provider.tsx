@@ -104,9 +104,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Sync user with database when session is detected
     // This ensures that foreign keys (like user_accounts.user_id) work
+    // Skip if already synced this browser session to reduce Worker requests
     useEffect(() => {
-        if (session) {
+        if (session && !sessionStorage.getItem("user-synced")) {
             syncUser();
+            sessionStorage.setItem("user-synced", "1");
         }
     }, [session]);
 

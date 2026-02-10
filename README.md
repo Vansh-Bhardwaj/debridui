@@ -4,7 +4,7 @@
 
 **A modern debrid client with built-in playback, continue watching, and subtitle support.**
 
-Edge-deployed on Cloudflare Workers for fast, global access.
+Installable as a PWA. Edge-deployed on Cloudflare Workers for fast, global access.
 
 <br />
 
@@ -56,6 +56,7 @@ This fork extends the original with several additions:
 - **Continue watching** — resume where you left off, on any device
 - **Subtitle integration** from Stremio addons via proxy
 - **External players** — VLC (Android/iOS/desktop), IINA, MPV, Kodi & more
+- **VLC browser extension** — send streams to VLC Desktop from the browser
 - **Smart addon filtering** — stream & subtitle addons queried separately
 - **Cancel button** on the streaming lookup toast
 
@@ -63,12 +64,13 @@ This fork extends the original with several additions:
 <td width="50%" valign="top">
 
 ### ⚡ Performance & Infrastructure
+- **PWA installable** — works offline, add to home screen
 - **Cloudflare Workers** — edge-deployed globally
 - **Hyperdrive** — connection pooling & query caching for PostgreSQL
 - **Adaptive polling** — 5–30s dynamic intervals, pauses in background
 - **Optimized DB queries** — upserts, batched reordering, ON CONFLICT
 - **Health monitoring** — public `/status` page with live checks
-- **Cache-Control headers** on API responses
+- **Keyboard shortcuts** — press `?` for the full list
 
 </td>
 </tr>
@@ -86,6 +88,7 @@ This fork extends the original with several additions:
 
 ### 🔍 Media Discovery
 - **Trakt.tv** — trending, popular, and recommended titles
+- **Trakt watchlist & calendar** — synced movies/shows with upcoming releases
 - **Stremio addon search** across all configured sources
 - **YouTube trailers** — embedded previews on media pages
 - **Detailed pages** — cast, ratings, season & episode browser
@@ -107,6 +110,10 @@ This fork extends the original with several additions:
 | Database driver | `postgres` (Postgres.js) via TCP proxy | `@neondatabase/serverless` |
 | Built-in video player | ✅ Codec detection, iOS fixes | External player links |
 | Continue watching | ✅ Cross-device progress | — |
+| PWA installable | ✅ Offline support, home screen | — |
+| Trakt watchlist/calendar | ✅ Synced with tabs | — |
+| Keyboard shortcuts | ✅ Press `?` for full list | — |
+| VLC browser extension | ✅ Send streams to VLC Desktop | — |
 | Subtitle support | ✅ Proxy-based from addons | — |
 | Addon filtering | ✅ Manifest-based capability check | All addons queried |
 | VLC iOS | ✅ Platform-specific URLs | Single scheme |
