@@ -129,6 +129,7 @@ export interface Addon {
     url: string;
     enabled: boolean;
     order: number;
+    showCatalogs: boolean;
 }
 
 export interface TvSearchParams {

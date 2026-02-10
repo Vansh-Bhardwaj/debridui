@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Film, Captions } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
@@ -19,6 +19,7 @@ import { RESOLUTIONS, SOURCE_QUALITIES } from "@/lib/addons/parser";
 import { Resolution, SourceQuality } from "@/lib/addons/types";
 import { MediaPlayer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { del } from "idb-keyval";
 import { queryClient } from "@/lib/query-client";
 import { toast } from "sonner";
@@ -29,6 +30,9 @@ import { SectionDivider } from "@/components/section-divider";
 import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/lib/utils/media-player";
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
 import { cn } from "@/lib/utils";
+import { useUserSettings, useSaveUserSettings, useDisconnectTrakt, hydrateSettingsFromServer } from "@/hooks/use-user-settings";
+import { useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 
 // Build timestamp - injected at build time via next.config.ts, fallback to current time in dev
 const BUILD_TIME = process.env.NEXT_PUBLIC_BUILD_TIME || new Date().toISOString();
@@ -56,6 +60,39 @@ export default function SettingsPage() {
     const downloadLinkMaxAgePresets = getPresets("downloadLinkMaxAge") || [];
     const streaming = get("streaming");
     const playback = get("playback");
+    const tmdbApiKey = get("tmdbApiKey");
+
+    // Server-side settings sync
+    const { data: serverSettings } = useUserSettings();
+    const { mutate: saveSettings } = useSaveUserSettings();
+    const { mutate: disconnectTrakt, isPending: isDisconnecting } = useDisconnectTrakt();
+
+    const isTraktConnected = !!serverSettings?.trakt_access_token;
+
+    // Show toast when returning from Trakt OAuth flow
+    const searchParams = useSearchParams();
+    useEffect(() => {
+        const traktParam = searchParams.get("trakt");
+        if (traktParam === "connected") toast.success("Trakt connected successfully");
+        else if (traktParam === "error") toast.error("Failed to connect Trakt");
+    }, [searchParams]);
+
+    const handleTraktConnect = useCallback(() => {
+        const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
+        if (!clientId) { toast.error("Trakt client ID not configured"); return; }
+        const redirectUri = `${window.location.origin}/api/trakt/callback`;
+        const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+        window.location.href = url;
+    }, []);
+
+    useEffect(() => {
+        hydrateSettingsFromServer(serverSettings ?? null);
+    }, [serverSettings]);
+
+    const handleTmdbKeyChange = (value: string) => {
+        set("tmdbApiKey", value);
+        saveSettings({ tmdb_api_key: value || undefined });
+    };
 
     const updateStreaming = (updates: Partial<StreamingSettings>) => {
         set("streaming", { ...streaming, ...updates });
@@ -548,6 +585,123 @@ export default function SettingsPage() {
                             onCheckedChange={(checked) => updatePlayback({ autoNextEpisode: checked })}
                         />
                     </div>
+
+                    {/* Subtitle Language */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Captions className="size-4 text-muted-foreground shrink-0" />
+                                <Label className="text-sm">Subtitle Language</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Only show subtitles in this language
+                            </p>
+                        </div>
+                        <Select
+                            value={playback.subtitleLanguage}
+                            onValueChange={(v) => updatePlayback({ subtitleLanguage: v })}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="english">English</SelectItem>
+                                <SelectItem value="spanish">Spanish</SelectItem>
+                                <SelectItem value="french">French</SelectItem>
+                                <SelectItem value="german">German</SelectItem>
+                                <SelectItem value="italian">Italian</SelectItem>
+                                <SelectItem value="portuguese">Portuguese</SelectItem>
+                                <SelectItem value="russian">Russian</SelectItem>
+                                <SelectItem value="japanese">Japanese</SelectItem>
+                                <SelectItem value="korean">Korean</SelectItem>
+                                <SelectItem value="hindi">Hindi</SelectItem>
+                                <SelectItem value="arabic">Arabic</SelectItem>
+                                <SelectItem value="chinese">Chinese</SelectItem>
+                                <SelectItem value="dutch">Dutch</SelectItem>
+                                <SelectItem value="polish">Polish</SelectItem>
+                                <SelectItem value="turkish">Turkish</SelectItem>
+                                <SelectItem value="swedish">Swedish</SelectItem>
+                                <SelectItem value="czech">Czech</SelectItem>
+                                <SelectItem value="romanian">Romanian</SelectItem>
+                                <SelectItem value="greek">Greek</SelectItem>
+                                <SelectItem value="thai">Thai</SelectItem>
+                                <SelectItem value="vietnamese">Vietnamese</SelectItem>
+                                <SelectItem value="indonesian">Indonesian</SelectItem>
+                                <SelectItem value="ukrainian">Ukrainian</SelectItem>
+                                <SelectItem value="norwegian">Norwegian</SelectItem>
+                                <SelectItem value="danish">Danish</SelectItem>
+                                <SelectItem value="finnish">Finnish</SelectItem>
+                                <SelectItem value="hebrew">Hebrew</SelectItem>
+                                <SelectItem value="hungarian">Hungarian</SelectItem>
+                                <SelectItem value="bulgarian">Bulgarian</SelectItem>
+                                <SelectItem value="croatian">Croatian</SelectItem>
+                                <SelectItem value="serbian">Serbian</SelectItem>
+                                <SelectItem value="malay">Malay</SelectItem>
+                                <SelectItem value="slovak">Slovak</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+            </section>
+
+            {/* Integrations Section */}
+            <section className="space-y-4">
+                <SectionDivider label="Integrations" />
+
+                {/* Trakt */}
+                <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                    <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <svg className="size-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-3.5l6-4.5-6-4.5v9z"/></svg>
+                            <Label className="text-sm">Trakt Scrobble</Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {isTraktConnected
+                                ? "Connected — playback will be scrobbled to your Trakt profile"
+                                : "Track your watch history automatically on Trakt.tv"}
+                        </p>
+                    </div>
+                    {isTraktConnected ? (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => disconnectTrakt()}
+                            disabled={isDisconnecting}
+                        >
+                            Disconnect
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTraktConnect}
+                        >
+                            Connect
+                        </Button>
+                    )}
+                </div>
+
+                {/* TMDB */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                        <Film className="size-4 text-muted-foreground" />
+                        <Label htmlFor="tmdb-api-key" className="text-sm">
+                            TMDB API Key
+                        </Label>
+                    </div>
+                    <Input
+                        id="tmdb-api-key"
+                        type="password"
+                        placeholder="Enter your TMDB API key"
+                        value={tmdbApiKey}
+                        onChange={(e) => handleTmdbKeyChange(e.target.value)}
+                        className="max-w-md"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Enables episode grouping for TV shows. Get a free key at{" "}
+                        <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">
+                            themoviedb.org
+                        </a>
+                    </p>
                 </div>
             </section>
 

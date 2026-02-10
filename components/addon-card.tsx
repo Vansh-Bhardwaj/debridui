@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Puzzle, Trash2, Share2, ArrowUp, ArrowDown } from "lucide-react";
+import { Puzzle, Trash2, Share2, ArrowUp, ArrowDown, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { addonSupportsCatalogs } from "@/lib/addons/types";
 
 interface AddonCardProps {
     addon: Addon;
     onToggle: (addon: Addon) => void;
+    onToggleCatalogs: (addon: Addon) => void;
     onRemove: (addon: Addon) => void;
     onMoveUp?: (addon: Addon) => void;
     onMoveDown?: (addon: Addon) => void;
@@ -55,8 +57,9 @@ export function AddonCardSkeleton() {
     );
 }
 
-export function AddonCard({ addon, onToggle, onRemove, onMoveUp, onMoveDown, isFirst, isLast }: AddonCardProps) {
+export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveUp, onMoveDown, isFirst, isLast }: AddonCardProps) {
     const { data: manifest, isLoading } = useAddon({ addonId: addon.id, url: addon.url });
+    const hasCatalogs = !!manifest && addonSupportsCatalogs(manifest);
 
     return (
         <div
@@ -106,13 +109,34 @@ export function AddonCard({ addon, onToggle, onRemove, onMoveUp, onMoveDown, isF
 
             {/* Row 3: Actions */}
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/50 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <Switch id={`toggle-${addon.id}`} checked={addon.enabled} onCheckedChange={() => onToggle(addon)} />
-                    <Label
-                        htmlFor={`toggle-${addon.id}`}
-                        className="text-xs cursor-pointer whitespace-nowrap text-muted-foreground">
-                        {addon.enabled ? "Enabled" : "Disabled"}
-                    </Label>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <Switch id={`toggle-${addon.id}`} checked={addon.enabled} onCheckedChange={() => onToggle(addon)} />
+                        <Label
+                            htmlFor={`toggle-${addon.id}`}
+                            className="text-xs cursor-pointer whitespace-nowrap text-muted-foreground">
+                            {addon.enabled ? "Enabled" : "Disabled"}
+                        </Label>
+                    </div>
+                    {hasCatalogs && (
+                        <div className="flex items-center gap-2">
+                            <Switch
+                                id={`catalogs-${addon.id}`}
+                                checked={addon.showCatalogs}
+                                onCheckedChange={() => onToggleCatalogs(addon)}
+                                disabled={!addon.enabled}
+                            />
+                            <Label
+                                htmlFor={`catalogs-${addon.id}`}
+                                className={cn(
+                                    "text-xs cursor-pointer whitespace-nowrap flex items-center gap-1",
+                                    addon.enabled ? "text-muted-foreground" : "text-muted-foreground/50"
+                                )}>
+                                <LayoutGrid className="size-3" />
+                                Catalogs
+                            </Label>
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                     {onMoveUp && (

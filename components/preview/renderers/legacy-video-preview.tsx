@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { LegacyPlayerSubtitleStyle } from "@/components/preview/legacy-player-subtitle-style";
 import { VideoCodecWarning } from "@/components/preview/video-codec-warning";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
+import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 
@@ -175,6 +176,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Progress tracking for continue watching
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
+    const { scrobble } = useTraktScrobble(progressKey ?? null);
     const lastProgressUpdateRef = useRef<number>(0);
     const hasSeenkedToInitialRef = useRef(false);
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
@@ -430,11 +432,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onPlay = () => {
             setIsPlaying(true);
             setIsLoading(false);
+            // Trakt scrobble start
+            const dur = video.duration || 0;
+            if (dur > 0) scrobble("start", (video.currentTime / dur) * 100);
         };
         const onPause = () => {
             setIsPlaying(false);
             // Sync progress to DB on pause
             forceSync();
+            // Trakt scrobble pause
+            const dur = video.duration || 0;
+            if (dur > 0) scrobble("pause", (video.currentTime / dur) * 100);
         };
         const onTimeUpdate = () => {
             const time = video.currentTime || 0;
@@ -460,6 +468,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setIsMuted(video.muted || video.volume === 0);
         };
         const onEnded = () => {
+            // Trakt scrobble stop (progress >= 80% → Trakt marks as watched)
+            scrobble("stop", 100);
             // Mark as completed when video ends (> 95% watched)
             if (progressKey) {
                 markCompleted();
@@ -487,7 +497,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
         };
-    }, [ios, duration, progressKey, updateProgress, forceSync, markCompleted, onNext]);
+    }, [ios, duration, progressKey, updateProgress, forceSync, markCompleted, onNext, scrobble]);
 
 
     // Keep fullscreen state in sync

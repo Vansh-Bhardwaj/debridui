@@ -143,12 +143,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
 
                 <CollapsibleContent>
                     {isOpen && imdbId && (
-                        <div className="border-t border-border/50 bg-muted/20">
-                            <div className="px-4 py-3">
-                                <span className="text-xs tracking-widest uppercase text-muted-foreground">
-                                    Available Sources
-                                </span>
-                            </div>
+                        <div className="bg-muted/20">
                             <Sources
                                 imdbId={imdbId}
                                 mediaType="show"

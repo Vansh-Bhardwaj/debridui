@@ -105,6 +105,8 @@ export interface PlaybackSettings {
     autoNextEpisode: boolean;
     /** Seconds before end to show "next episode" overlay */
     nextEpisodePromptSeconds: number;
+    /** Preferred subtitle language (e.g. "english", "spanish"). Empty = disabled. */
+    subtitleLanguage: string;
 }
 
 export function getActiveRange(settings: StreamingSettings): QualityRange {
@@ -135,6 +137,7 @@ type SettingsConfig = {
     downloadLinkMaxAge: SettingConfig<number>;
     streaming: SettingConfig<StreamingSettings>;
     playback: SettingConfig<PlaybackSettings>;
+    tmdbApiKey: SettingConfig<string>;
 };
 
 const settingsConfig: SettingsConfig = {
@@ -229,7 +232,11 @@ const settingsConfig: SettingsConfig = {
             skipIntro: 0,
             autoNextEpisode: true,
             nextEpisodePromptSeconds: 30,
+            subtitleLanguage: "english",
         },
+    },
+    tmdbApiKey: {
+        defaultValue: "",
     },
 };
 
@@ -256,6 +263,7 @@ const getDefaultSettings = (): SettingsData => {
         downloadLinkMaxAge: settingsConfig.downloadLinkMaxAge.defaultValue,
         streaming: settingsConfig.streaming.defaultValue,
         playback: settingsConfig.playback.defaultValue,
+        tmdbApiKey: settingsConfig.tmdbApiKey.defaultValue,
     };
 };
 

@@ -355,6 +355,79 @@ body {
   outline: none;
 }
 
+/* Delay controls */
+.delay-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  max-width: 200px;
+}
+
+.btn-delay {
+  height: 24px;
+  padding: 0 8px;
+  background: var(--input);
+  border: 1px solid var(--border-50);
+  border-radius: var(--radius);
+  color: var(--muted-fg);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.btn-delay:hover {
+  background: var(--muted);
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.delay-value {
+  font-size: 11px;
+  color: var(--fg);
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Toggle row (loop/shuffle) */
+.toggle-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 0 0;
+}
+
+.toggle-btn {
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border-50);
+  border-radius: var(--radius);
+  color: var(--muted-fg);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.toggle-btn:hover {
+  background: var(--muted);
+  color: var(--fg);
+}
+
+.toggle-btn.active {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: var(--primary);
+}
+
 /* ─── Empty State ────────────────────────────────────────── */
 
 .empty-state {

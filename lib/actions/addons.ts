@@ -5,9 +5,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { addons } from "@/lib/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
+import { z } from "zod";
+import { addonSchema, addonOrderUpdateSchema } from "@/lib/schemas";
+import { type CreateAddon } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 import { v7 as uuidv7 } from "uuid";
-import { type Addon } from "@/lib/addons/types";
 
 /**
  * Get all user addons from database
@@ -27,13 +29,14 @@ export async function getUserAddons() {
 /**
  * Add a new addon — single query using subquery for order calculation
  */
-export async function addAddon(addon: Omit<Addon, "id" | "order">) {
+export async function addAddon(data: CreateAddon) {
     const { data: session } = await auth.getSession();
 
     if (!session) {
         redirect("/login");
     }
 
+    const validated = addonSchema.parse(data);
     const newId = uuidv7();
 
     // Single INSERT with subquery for order — saves 1 DB query vs SELECT MAX + INSERT
@@ -42,9 +45,9 @@ export async function addAddon(addon: Omit<Addon, "id" | "order">) {
         .values({
             id: newId,
             userId: session.user.id,
-            name: addon.name,
-            url: addon.url,
-            enabled: addon.enabled,
+            name: validated.name,
+            url: validated.url,
+            enabled: validated.enabled,
             order: sql`(SELECT COALESCE(MAX(${addons.order}), -1) + 1 FROM ${addons} WHERE ${addons.userId} = ${session.user.id})`,
         })
         .returning();
@@ -57,7 +60,8 @@ export async function addAddon(addon: Omit<Addon, "id" | "order">) {
         url: result.url,
         enabled: result.enabled,
         order: result.order,
-    } satisfies Addon;
+        showCatalogs: result.showCatalogs,
+    };
 }
 
 /**
@@ -70,7 +74,8 @@ export async function removeAddon(addonId: string) {
         redirect("/login");
     }
 
-    await db.delete(addons).where(and(eq(addons.id, addonId), eq(addons.userId, session.user.id)));
+    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
+    await db.delete(addons).where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
 
     revalidatePath("/", "layout");
     return { success: true };
@@ -86,10 +91,35 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
         redirect("/login");
     }
 
+    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
+    const validatedEnabled = z.boolean({ message: "Enabled must be a boolean" }).parse(enabled);
+
     await db
         .update(addons)
-        .set({ enabled })
-        .where(and(eq(addons.id, addonId), eq(addons.userId, session.user.id)));
+        .set({ enabled: validatedEnabled })
+        .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
+
+    revalidatePath("/", "layout");
+    return { success: true };
+}
+
+/**
+ * Toggle addon catalog visibility on the dashboard
+ */
+export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean) {
+    const { data: session } = await auth.getSession();
+
+    if (!session) {
+        redirect("/login");
+    }
+
+    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
+    const validatedShow = z.boolean({ message: "showCatalogs must be a boolean" }).parse(showCatalogs);
+
+    await db
+        .update(addons)
+        .set({ showCatalogs: validatedShow })
+        .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
 
     revalidatePath("/", "layout");
     return { success: true };
@@ -108,14 +138,16 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
         redirect("/login");
     }
 
-    if (updates.length === 0) {
+    const validated = addonOrderUpdateSchema.parse(updates);
+
+    if (validated.length === 0) {
         revalidatePath("/", "layout");
         return { success: true };
     }
 
     // Build a single UPDATE with CASE WHEN for all updates
-    const ids = updates.map((u) => u.id);
-    const caseClauses = updates.map((u) => sql`WHEN ${addons.id} = ${u.id} THEN ${u.order}`);
+    const ids = validated.map((u) => u.id);
+    const caseClauses = validated.map((u) => sql`WHEN ${addons.id} = ${u.id} THEN ${u.order}`);
 
     await db
         .update(addons)

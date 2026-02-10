@@ -294,6 +294,45 @@ export interface TraktCollectionItem {
 export type MediaType = "movie" | "show";
 export type MediaTypeEndpoint = "movies" | "shows";
 
+// Scrobble interfaces
+export interface TraktScrobbleMovie {
+    ids: { imdb?: string; tmdb?: number; trakt?: number; slug?: string };
+}
+
+export interface TraktScrobbleEpisode {
+    ids: { imdb?: string; tmdb?: number; trakt?: number; tvdb?: number };
+}
+
+export interface TraktScrobbleShow {
+    ids: { imdb?: string; tmdb?: number; trakt?: number; slug?: string };
+}
+
+export interface TraktScrobbleRequest {
+    movie?: TraktScrobbleMovie;
+    episode?: TraktScrobbleEpisode;
+    show?: TraktScrobbleShow;
+    progress: number; // 0-100
+}
+
+export interface TraktScrobbleResponse {
+    id: number;
+    action: "start" | "pause" | "scrobble";
+    progress: number;
+    sharing: { twitter: boolean; tumblr: boolean };
+    movie?: TraktMedia;
+    episode?: TraktEpisode;
+    show?: TraktMedia;
+}
+
+export interface TraktTokenResponse {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    refresh_token: string;
+    scope: string;
+    created_at: number;
+}
+
 // Configuration interface
 export interface TraktClientConfig {
     clientId: string;
@@ -609,6 +648,113 @@ export class TraktClient {
      */
     public async getPersonShows(id: string, extended = "full,images"): Promise<TraktPersonShowCredits> {
         return this.makeRequest<TraktPersonShowCredits>(`people/${id}/shows`, {}, false, extended);
+    }
+
+    // ── Scrobble Methods (require auth) ─────────────────────────────────
+
+    /**
+     * Start scrobbling — call when playback starts or resumes
+     */
+    public async scrobbleStart(request: TraktScrobbleRequest): Promise<TraktScrobbleResponse> {
+        return this.makeRequest<TraktScrobbleResponse>(
+            "scrobble/start",
+            { method: "POST", body: JSON.stringify(request) },
+            true
+        );
+    }
+
+    /**
+     * Pause scrobbling — call when playback is paused
+     */
+    public async scrobblePause(request: TraktScrobbleRequest): Promise<TraktScrobbleResponse> {
+        return this.makeRequest<TraktScrobbleResponse>(
+            "scrobble/pause",
+            { method: "POST", body: JSON.stringify(request) },
+            true
+        );
+    }
+
+    /**
+     * Stop scrobbling — call when playback stops. If progress >= 80%, Trakt marks it as watched.
+     */
+    public async scrobbleStop(request: TraktScrobbleRequest): Promise<TraktScrobbleResponse> {
+        return this.makeRequest<TraktScrobbleResponse>(
+            "scrobble/stop",
+            { method: "POST", body: JSON.stringify(request) },
+            true
+        );
+    }
+
+    /**
+     * Build a scrobble request payload from an IMDB ID and progress percentage.
+     */
+    public static buildScrobbleRequest(
+        imdbId: string,
+        type: "movie" | "show",
+        progress: number,
+        season?: number,
+        episode?: number
+    ): TraktScrobbleRequest {
+        if (type === "movie") {
+            return { movie: { ids: { imdb: imdbId } }, progress };
+        }
+        return {
+            episode: { ids: { imdb: imdbId } },
+            ...(season !== undefined && episode !== undefined
+                ? { show: { ids: { imdb: imdbId } } }
+                : {}),
+            progress,
+        };
+    }
+
+    /**
+     * Exchange an OAuth authorization code for access + refresh tokens.
+     * Must be called server-side (needs client secret).
+     */
+    public static async exchangeCode(
+        code: string,
+        clientId: string,
+        clientSecret: string,
+        redirectUri: string
+    ): Promise<TraktTokenResponse> {
+        const res = await fetch("https://api.trakt.tv/oauth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                code,
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: redirectUri,
+                grant_type: "authorization_code",
+            }),
+        });
+        if (!res.ok) throw new TraktError(`Token exchange failed: ${res.statusText}`, res.status);
+        return res.json() as Promise<TraktTokenResponse>;
+    }
+
+    /**
+     * Refresh an expired access token.
+     * Must be called server-side (needs client secret).
+     */
+    public static async refreshToken(
+        refreshToken: string,
+        clientId: string,
+        clientSecret: string,
+        redirectUri: string
+    ): Promise<TraktTokenResponse> {
+        const res = await fetch("https://api.trakt.tv/oauth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                refresh_token: refreshToken,
+                client_id: clientId,
+                client_secret: clientSecret,
+                redirect_uri: redirectUri,
+                grant_type: "refresh_token",
+            }),
+        });
+        if (!res.ok) throw new TraktError(`Token refresh failed: ${res.statusText}`, res.status);
+        return res.json() as Promise<TraktTokenResponse>;
     }
 }
 

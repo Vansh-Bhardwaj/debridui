@@ -2,16 +2,56 @@
 
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { WatchButton } from "@/components/common/watch-button";
-import { Play, X, Star } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Play, X, Star, SkipForward } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
+import { traktClient } from "@/lib/trakt";
+import { useStreamingStore } from "@/lib/stores/streaming";
+import { useUserAddons } from "@/hooks/use-addons";
+import { type Addon, type TvSearchParams } from "@/lib/addons/types";
 import Image from "next/image";
 
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
     onRemove: (key: ProgressKey) => void;
+}
+
+/** Fetch season data from Trakt to determine the correct next episode,
+ *  handling season transitions and hiding when no more episodes exist. */
+function useNextEpisode(
+    imdbId: string,
+    type: "movie" | "show",
+    season?: number,
+    episode?: number,
+): TvSearchParams | null {
+    const { data: seasons } = useQuery({
+        queryKey: ["trakt", "show", "seasons", imdbId],
+        queryFn: () => traktClient.getShowSeasons(imdbId),
+        staleTime: 24 * 60 * 60 * 1000,
+        enabled: type === "show" && !!season && !!episode,
+    });
+
+    return useMemo(() => {
+        if (!seasons || !season || !episode) return null;
+
+        const regularSeasons = seasons.filter((s) => s.number > 0).sort((a, b) => a.number - b.number);
+        const current = regularSeasons.find((s) => s.number === season);
+        if (!current) return null;
+
+        // More episodes in the current season
+        if (episode < (current.aired_episodes ?? 0)) {
+            return { season, episode: episode + 1 };
+        }
+
+        // Jump to the next season with aired episodes
+        const next = regularSeasons.find((s) => s.number > season && (s.aired_episodes ?? 0) > 0);
+        if (next) return { season: next.number, episode: 1 };
+
+        return null;
+    }, [seasons, season, episode]);
 }
 
 function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
@@ -35,6 +75,24 @@ function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
         e.stopPropagation();
         onRemove(item);
     }, [item, onRemove]);
+
+    const nextEpisode = useNextEpisode(item.imdbId, item.type, item.season, item.episode);
+    const play = useStreamingStore((s) => s.play);
+    const { data: addons = [] } = useUserAddons();
+
+    const handlePlayNext = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!nextEpisode || !media) return;
+        const enabledAddons = addons
+            .filter((a: Addon) => a.enabled)
+            .sort((a: Addon, b: Addon) => a.order - b.order)
+            .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+        play(
+            { imdbId: item.imdbId, type: item.type, title: media.title || "Unknown", tvParams: nextEpisode },
+            enabledAddons,
+        );
+    }, [nextEpisode, play, addons, item.imdbId, item.type, media]);
 
     if (loading) {
         return (
@@ -118,6 +176,18 @@ function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
             >
                 <X className="h-3.5 w-3.5" />
             </button>
+
+            {/* Next episode button */}
+            {nextEpisode && (
+                <button
+                    type="button"
+                    onClick={handlePlayNext}
+                    className="absolute top-1 left-1 p-1.5 rounded-sm bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-all hover:bg-primary hover:text-primary-foreground z-20"
+                    aria-label={`Play S${String(nextEpisode.season).padStart(2, "0")}E${String(nextEpisode.episode).padStart(2, "0")}`}
+                >
+                    <SkipForward className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
     );
 }

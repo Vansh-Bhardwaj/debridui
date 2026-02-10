@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { useUserAddons, useAddAddon, useRemoveAddon, useToggleAddon, useUpdateAddonOrders } from "@/hooks/use-addons";
+import { useUserAddons, useAddAddon, useRemoveAddon, useToggleAddon, useToggleAddonCatalogs, useUpdateAddonOrders } from "@/hooks/use-addons";
 import { AddonClient } from "@/lib/addons/client";
 import { type Addon } from "@/lib/addons/types";
+import { type CreateAddon } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export default function AddonsPage() {
     const addAddonMutation = useAddAddon();
     const removeAddonMutation = useRemoveAddon();
     const toggleAddonMutation = useToggleAddon();
+    const toggleCatalogsMutation = useToggleAddonCatalogs();
     const updateOrdersMutation = useUpdateAddonOrders();
 
     const [newAddonUrl, setNewAddonUrl] = useState("");
@@ -67,7 +69,7 @@ export default function AddonsPage() {
                 return;
             }
 
-            const newAddon: Omit<Addon, "id" | "order"> = {
+            const newAddon: CreateAddon = {
                 name: manifest.name,
                 url: addonUrl,
                 enabled: true,
@@ -100,13 +102,18 @@ export default function AddonsPage() {
         toast.success(`${addon.enabled ? "Disabled" : "Enabled"} ${addon.name} addon`);
     };
 
+    const handleToggleCatalogs = async (addon: Addon) => {
+        await toggleCatalogsMutation.mutateAsync({ addonId: addon.id, showCatalogs: !addon.showCatalogs });
+        toast.success(`${addon.showCatalogs ? "Hidden" : "Showing"} ${addon.name} catalogs on dashboard`);
+    };
+
     const handleMoveUp = async (addon: Addon) => {
         const currentIndex = sortedAddons.findIndex((a) => a.id === addon.id);
 
         if (currentIndex > 0) {
             const updates = [
-                { id: sortedAddons[currentIndex].id, order: currentIndex - 1 },
-                { id: sortedAddons[currentIndex - 1].id, order: currentIndex },
+                { id: sortedAddons[currentIndex].id, order: sortedAddons[currentIndex - 1].order },
+                { id: sortedAddons[currentIndex - 1].id, order: sortedAddons[currentIndex].order },
             ];
             await updateOrdersMutation.mutateAsync(updates);
         }
@@ -117,8 +124,8 @@ export default function AddonsPage() {
 
         if (currentIndex < sortedAddons.length - 1) {
             const updates = [
-                { id: sortedAddons[currentIndex].id, order: currentIndex + 1 },
-                { id: sortedAddons[currentIndex + 1].id, order: currentIndex },
+                { id: sortedAddons[currentIndex].id, order: sortedAddons[currentIndex + 1].order },
+                { id: sortedAddons[currentIndex + 1].id, order: sortedAddons[currentIndex].order },
             ];
             await updateOrdersMutation.mutateAsync(updates);
         }
@@ -249,6 +256,7 @@ export default function AddonsPage() {
                                 key={addon.id}
                                 addon={addon}
                                 onToggle={handleToggleAddon}
+                                onToggleCatalogs={handleToggleCatalogs}
                                 onRemove={handleRemoveAddon}
                                 onMoveUp={handleMoveUp}
                                 onMoveDown={handleMoveDown}

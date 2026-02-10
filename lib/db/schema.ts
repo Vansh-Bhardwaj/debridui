@@ -35,6 +35,7 @@ export const addons = pgTable(
         url: text("url").notNull(),
         enabled: boolean("enabled").notNull().default(true),
         order: integer("order").notNull().default(0),
+        showCatalogs: boolean("show_catalogs").notNull().default(false),
     },
     (table) => [index("addons_userId_idx").on(table.userId)]
 );

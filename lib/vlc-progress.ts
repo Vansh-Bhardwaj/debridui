@@ -7,12 +7,14 @@
 
 import type { ProgressKey } from "@/hooks/use-progress";
 import { getVLCBridgeClient } from "@/lib/utils/media-player";
+import { traktClient, TraktClient } from "@/lib/trakt";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
 let activeSession: { key: ProgressKey; url: string } | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSyncTime = 0;
+let lastVlcState: string | null = null;
 
 const POLL_INTERVAL = 3000; // 3s for responsive progress bar
 const SERVER_SYNC_INTERVAL = 60_000; // 60s for DB writes
@@ -57,6 +59,22 @@ async function syncToServer(key: ProgressKey, progressSeconds: number, durationS
     }
 }
 
+// ── Trakt scrobble helper ──────────────────────────────────────────────────
+
+async function sendScrobble(key: ProgressKey, action: "start" | "pause" | "stop", progress: number) {
+    if (!traktClient.getAccessToken()) return;
+    const request = TraktClient.buildScrobbleRequest(
+        key.imdbId, key.type, Math.min(100, Math.max(0, progress)), key.season, key.episode
+    );
+    try {
+        if (action === "start") await traktClient.scrobbleStart(request);
+        else if (action === "pause") await traktClient.scrobblePause(request);
+        else await traktClient.scrobbleStop(request);
+    } catch {
+        // scrobble failed — non-critical
+    }
+}
+
 // ── Polling ────────────────────────────────────────────────────────────────
 
 async function poll() {
@@ -69,6 +87,18 @@ async function poll() {
 
         const { time, length, state } = res.data;
         if (length <= 0) return;
+
+        const progressPercent = (time / length) * 100;
+
+        // Trakt scrobble on state transitions
+        if (state !== lastVlcState) {
+            if (state === "playing" && lastVlcState !== "playing") {
+                sendScrobble(activeSession.key, "start", progressPercent);
+            } else if (state === "paused" && lastVlcState === "playing") {
+                sendScrobble(activeSession.key, "pause", progressPercent);
+            }
+            lastVlcState = state;
+        }
 
         // Write to localStorage on every poll
         writeLocal(activeSession.key, time, length);
@@ -87,6 +117,7 @@ async function poll() {
 
         // Playback ended — final sync and clean up
         if (state === "stopped" && time === 0 && length > 0) {
+            sendScrobble(activeSession.key, "stop", 100);
             syncToServer(activeSession.key, length, length);
             stopVLCProgressSync();
         }
@@ -102,6 +133,7 @@ export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
     stopVLCProgressSync();
     activeSession = { key: progressKey, url };
     lastSyncTime = 0;
+    lastVlcState = null;
     pollTimer = setInterval(poll, POLL_INTERVAL);
     // Immediate first poll
     poll();
@@ -115,14 +147,18 @@ export function stopVLCProgressSync() {
     }
     // Final sync if we have an active session
     if (activeSession) {
+        const key = activeSession.key;
         const bridge = getVLCBridgeClient();
         bridge.getStatus().then((res) => {
-            if (res.success && res.data && activeSession) {
-                syncToServer(activeSession.key, res.data.time, res.data.length);
+            if (res.success && res.data) {
+                const pct = res.data.length > 0 ? (res.data.time / res.data.length) * 100 : 0;
+                sendScrobble(key, "stop", pct);
+                syncToServer(key, res.data.time, res.data.length);
             }
         }).catch(() => {});
     }
     activeSession = null;
+    lastVlcState = null;
 }
 
 /** Whether a VLC progress sync session is active. */

@@ -24,6 +24,9 @@ function toast(message, type = "success") {
 }
 
 let currentStatus = null;
+let subDelay = 0;
+let loopActive = false;
+let shuffleActive = false;
 
 // ── Status Refresh ───────────────────────────────────────────────────────────
 
@@ -81,6 +84,27 @@ function updatePlayer(s) {
   const volPct = Math.round((s.volume / 256) * 100);
   $("#volume-slider").value = volPct;
   $("#volume-label").textContent = `${volPct}%`;
+
+  // Playback speed
+  if (s.rate !== undefined) {
+    const rate = parseFloat(s.rate);
+    const speedSelect = $("#select-speed");
+    // Find closest option
+    const closest = [...speedSelect.options].reduce((prev, opt) =>
+      Math.abs(parseFloat(opt.value) - rate) < Math.abs(parseFloat(prev.value) - rate) ? opt : prev
+    );
+    speedSelect.value = closest.value;
+  }
+
+  // Loop / Random state
+  if (s.loop !== undefined) {
+    loopActive = s.loop;
+    $("#btn-loop").classList.toggle("active", loopActive);
+  }
+  if (s.random !== undefined) {
+    shuffleActive = s.random;
+    $("#btn-shuffle").classList.toggle("active", shuffleActive);
+  }
 
   // Audio/subtitle tracks
   updateTracks(s);
@@ -186,6 +210,39 @@ $("#select-audio").addEventListener("change", (e) => {
 
 $("#select-sub").addEventListener("change", (e) => {
   send("setSubtitleTrack", { id: parseInt(e.target.value) });
+});
+
+// Playback speed
+$("#select-speed").addEventListener("change", (e) => {
+  send("setPlaybackRate", { rate: parseFloat(e.target.value) });
+});
+
+// Fullscreen
+$("#btn-fullscreen").addEventListener("click", () => send("fullscreen"));
+
+// Subtitle delay
+$("#btn-sub-delay-minus").addEventListener("click", () => {
+  subDelay -= 0.5;
+  send("setSubtitleDelay", { seconds: subDelay });
+  $("#sub-delay-value").textContent = `${subDelay.toFixed(1)}s`;
+});
+$("#btn-sub-delay-plus").addEventListener("click", () => {
+  subDelay += 0.5;
+  send("setSubtitleDelay", { seconds: subDelay });
+  $("#sub-delay-value").textContent = `${subDelay.toFixed(1)}s`;
+});
+
+// Loop / Shuffle toggles
+$("#btn-loop").addEventListener("click", () => {
+  send("setLoop");
+  loopActive = !loopActive;
+  $("#btn-loop").classList.toggle("active", loopActive);
+});
+
+$("#btn-shuffle").addEventListener("click", () => {
+  send("setRandom");
+  shuffleActive = !shuffleActive;
+  $("#btn-shuffle").classList.toggle("active", shuffleActive);
 });
 
 // ── Actions ──────────────────────────────────────────────────────────────────

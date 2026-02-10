@@ -1,12 +1,14 @@
 import { useQuery, useQueryClient, useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { TraktMediaItem } from "@/lib/trakt";
-import { getUserAddons, addAddon, removeAddon, toggleAddon, updateAddonOrders } from "@/lib/actions/addons";
+import { getUserAddons, addAddon, removeAddon, toggleAddon, toggleAddonCatalogs, updateAddonOrders } from "@/lib/actions/addons";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams, catalogMetasToMediaItems } from "@/lib/addons/parser";
 import { type Addon, type AddonManifest, type AddonSource, type AddonSubtitle, type TvSearchParams, addonSupportsStreams, addonSupportsSubtitles, addonSupportsCatalogs } from "@/lib/addons/types";
-import { getSubtitleLabel, isEnglishSubtitle } from "@/lib/utils/subtitles";
+import { type CreateAddon } from "@/lib/types";
+import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { useToastMutation } from "@/lib/utils/mutation-factory";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 const USER_ADDONS_KEY = ["user-addons"];
 
@@ -64,7 +66,7 @@ export function useAddAddon() {
     const queryClient = useQueryClient();
 
     return useToastMutation(
-        (addon: Omit<Addon, "id" | "order">) => addAddon(addon),
+        (addon: CreateAddon) => addAddon(addon),
         { error: "Failed to add addon" },
         {
             onSuccess: (newAddon) => {
@@ -129,6 +131,41 @@ export function useToggleAddon() {
 
                 queryClient.setQueryData<Addon[]>(USER_ADDONS_KEY, (old = []) => {
                     return old.map((addon) => (addon.id === addonId ? { ...addon, enabled } : addon));
+                });
+
+                return { previousAddons };
+            },
+            onError: (_error, _variables, context) => {
+                if (context?.previousAddons) {
+                    queryClient.setQueryData(USER_ADDONS_KEY, context.previousAddons);
+                }
+            },
+            onSettled: () => queryClient.invalidateQueries({ queryKey: USER_ADDONS_KEY }),
+        }
+    );
+}
+
+/**
+ * Toggle addon catalog visibility on dashboard
+ */
+export function useToggleAddonCatalogs() {
+    const queryClient = useQueryClient();
+
+    return useToastMutation<
+        { success: boolean },
+        { addonId: string; showCatalogs: boolean },
+        { previousAddons: Addon[] | undefined }
+    >(
+        ({ addonId, showCatalogs }) => toggleAddonCatalogs(addonId, showCatalogs),
+        { error: "Failed to toggle catalogs" },
+        {
+            onMutate: async ({ addonId, showCatalogs }) => {
+                await queryClient.cancelQueries({ queryKey: USER_ADDONS_KEY });
+
+                const previousAddons = queryClient.getQueryData<Addon[]>(USER_ADDONS_KEY);
+
+                queryClient.setQueryData<Addon[]>(USER_ADDONS_KEY, (old = []) => {
+                    return old.map((addon) => (addon.id === addonId ? { ...addon, showCatalogs } : addon));
                 });
 
                 return { previousAddons };
@@ -318,6 +355,7 @@ interface UseAddonSubtitlesOptions {
  */
 export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubtitlesOptions) {
     const { data: addons = [] } = useUserAddons();
+    const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     const enabledAddons = useMemo(
         () => addons.filter((a: Addon) => a.enabled).sort((a: Addon, b: Addon) => a.order - b.order),
         [addons]
@@ -358,8 +396,8 @@ export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubti
             const addonName = data.addonName;
             for (const sub of data.subtitles) {
                 if (!sub.url || !sub.lang) continue;
-                // Only keep English subtitles to reduce track loads and proxy conversions.
-                if (!isEnglishSubtitle(sub)) continue;
+                // Only keep subtitles matching the user's preferred language
+                if (subtitleLanguage && !isSubtitleLanguage(sub, subtitleLanguage)) continue;
                 const key = `${sub.lang}:${sub.url}`;
                 if (!byKey.has(key)) {
                     byKey.set(key, {
@@ -370,7 +408,7 @@ export function useAddonSubtitles({ imdbId, mediaType, tvParams }: UseAddonSubti
             }
         }
         return Array.from(byKey.values());
-    }, [subtitleQueries]);
+    }, [subtitleQueries, subtitleLanguage]);
 
     return {
         data: combinedSubtitles,
@@ -402,13 +440,13 @@ export function parseCatalogSlug(slug: string): { addonId: string; type: string;
 }
 
 /**
- * Get all browseable catalog definitions from enabled addons.
+ * Get all browseable catalog definitions from enabled addons with showCatalogs enabled.
  * Skips search-only catalogs (those requiring a `search` extra).
  */
 export function useAddonCatalogDefs() {
     const { data: addons = [] } = useUserAddons();
     const enabledAddons = useMemo(
-        () => addons.filter((a: Addon) => a.enabled).sort((a: Addon, b: Addon) => a.order - b.order),
+        () => addons.filter((a: Addon) => a.enabled && a.showCatalogs).sort((a: Addon, b: Addon) => a.order - b.order),
         [addons]
     );
 
