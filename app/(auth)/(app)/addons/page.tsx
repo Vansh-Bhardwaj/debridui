@@ -8,7 +8,7 @@ import { type CreateAddon } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X } from "lucide-react";
+import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X, ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { AddonCard, AddonCardSkeleton } from "@/components/addon-card";
 import { CachedBadge } from "@/components/display";
@@ -23,6 +23,29 @@ const ADDON_PRESETS = [
     {
         name: "Streaming Catalogs",
         url: "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibSxwbXAsamhzLHplZSxjcnUscGNwLHNvbnlsaXY6OjoxNzcwMjQ2NjcwMTU5OjA6MDo%3D/manifest.json",
+    },
+] as const;
+
+const CONFIGURABLE_ADDONS = [
+    {
+        name: "Comet",
+        description: "Fast torrent/debrid search addon with proxy streaming support",
+        configureUrl: "https://comet.elfhosted.com/configure",
+    },
+    {
+        name: "MediaFusion",
+        description: "Multi-language catalogs with extensive scraper and debrid support",
+        configureUrl: "https://mediafusion.elfhosted.com/configure",
+    },
+    {
+        name: "AIOStreams",
+        description: "All-in-one addon that aggregates multiple addons with advanced filtering",
+        configureUrl: "https://aiostreams.elfhosted.com/stremio/configure",
+    },
+    {
+        name: "Meteor",
+        description: "High-performance scraper with strong anime matching and multi-debrid support",
+        configureUrl: "https://meteorfortheweebs.midnightignite.me/configure",
     },
 ] as const;
 
@@ -218,6 +241,34 @@ export default function AddonsPage() {
                                 </Button>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Configurable addons — require setup on external page */}
+                    <div className="space-y-2">
+                        <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                            Configure &amp; Add
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {CONFIGURABLE_ADDONS.map((addon) => (
+                                <a
+                                    key={addon.name}
+                                    href={addon.configureUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="group flex flex-col gap-1 rounded-sm border border-border/50 px-3 py-2.5 hover:border-border hover:bg-muted/30 transition-colors">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium">{addon.name}</span>
+                                        <ExternalLink className="size-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {addon.description}
+                                    </p>
+                                </a>
+                            ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground/70">
+                            Configure on the addon&apos;s page, copy the manifest URL, then paste it above
+                        </p>
                     </div>
                 </div>
             </section>

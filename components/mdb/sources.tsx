@@ -4,7 +4,7 @@ import { useState, useMemo, memo } from "react";
 import { type AddonSource, type TvSearchParams } from "@/lib/addons/types";
 import { useAddonSources, useAddonSubtitles } from "@/hooks/use-addons";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, HardDriveDownloadIcon, Trash2Icon, DownloadIcon, AlertTriangle, PlayIcon } from "lucide-react";
+import { Plus, Loader2, HardDriveDownloadIcon, Trash2Icon, DownloadIcon, AlertTriangle, PlayIcon, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { toast } from "sonner";
@@ -204,7 +204,7 @@ export const SourceRow = memo(function SourceRow({
 });
 
 export function Sources({ imdbId, mediaType = "movie", tvParams, className, mediaTitle }: SourcesProps) {
-    const { data: sources, isLoading, failedAddons } = useAddonSources({ imdbId, mediaType, tvParams });
+    const { data: sources, isLoading, failedAddons, retry } = useAddonSources({ imdbId, mediaType, tvParams });
     const { data: subtitles } = useAddonSubtitles({ imdbId, mediaType, tvParams });
 
     const [addonFilter, setAddonFilter] = useState("all");
@@ -254,9 +254,13 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                 )}
 
                 {!isLoading && filtered?.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                    <div className="flex flex-col items-center justify-center py-12 text-center px-4 gap-3">
                         <p className="text-sm text-muted-foreground">No sources available</p>
-                        <p className="text-xs text-muted-foreground/70 mt-1">Configure addons to fetch sources</p>
+                        <p className="text-xs text-muted-foreground/70">Configure addons to fetch sources</p>
+                        <Button variant="outline" size="sm" onClick={retry}>
+                            <RefreshCw className="size-4" />
+                            Retry
+                        </Button>
                     </div>
                 )}
 
@@ -276,6 +280,10 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     <div className="flex items-center justify-center gap-2 px-4 py-3 bg-yellow-500/10 border-t border-border/50">
                         <AlertTriangle className="size-4.5 text-yellow-600" />
                         <span className="text-xs text-yellow-600">Failed: {failedAddons.join(", ")}</span>
+                        <Button variant="outline" size="sm" className="h-6 text-xs ml-1" onClick={retry}>
+                            <RefreshCw className="size-3" />
+                            Retry
+                        </Button>
                     </div>
                 )}
             </div>

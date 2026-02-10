@@ -266,6 +266,7 @@ async function fetchAddonSources(
  */
 export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSourcesOptions) {
     const { data: addons = [] } = useUserAddons();
+    const queryClient = useQueryClient();
 
     // Stable reference for enabled addons list
     const enabledAddons = useMemo(() => addons.filter((a: Addon) => a.enabled).sort((a: Addon, b: Addon) => a.order - b.order), [addons]);
@@ -334,10 +335,20 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
     // Loading state: true if manifests or ANY source query is still loading
     const isLoading = manifestQueries.some((q) => q.isLoading) || queries.some((q) => q.isLoading);
 
+    // Retry: invalidate all source caches for this content and refetch
+    const retry = () => {
+        for (const addon of streamAddons) {
+            queryClient.removeQueries({
+                queryKey: ["addon", addon.id, "sources", imdbId, mediaType, tvParams],
+            });
+        }
+    };
+
     return {
         data: combinedData,
         isLoading,
         failedAddons,
+        retry,
     };
 }
 

@@ -314,13 +314,16 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
 
                 const cached = queryClient.getQueryData<AddonSource[]>(queryKey);
-                if (cached) return cached;
+                if (cached?.length) return cached;
 
                 try {
                     const client = new AddonClient({ url: addon.url });
                     const response = await client.fetchStreams(imdbId, type, tvParams);
                     const parsed = parseStreams(response.streams, addon.id, addon.name);
-                    queryClient.setQueryData(queryKey, parsed);
+                    // Only cache non-empty results so retries can re-fetch
+                    if (parsed.length > 0) {
+                        queryClient.setQueryData(queryKey, parsed);
+                    }
                     return parsed;
                 } catch {
                     return [] as AddonSource[];
