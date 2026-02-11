@@ -202,8 +202,8 @@ export function useProgress(key: ProgressKey | null) {
         // Delete from server if logged in
         if (isLoggedIn) {
             const params = new URLSearchParams({ imdbId: key.imdbId });
-            if (key.season !== undefined) params.set("season", String(key.season));
-            if (key.episode !== undefined) params.set("episode", String(key.episode));
+            if (key.season != null) params.set("season", String(key.season));
+            if (key.episode != null) params.set("episode", String(key.episode));
 
             fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
         }

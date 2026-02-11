@@ -175,15 +175,18 @@ const normalizeUrl = (url: string): string => {
     return trimmed;
 };
 
-const generateVlcUrl = (url: string, fileName: string): string => {
+const generateVlcUrl = (url: string, fileName: string, subtitleUrl?: string): string => {
     const normalized = normalizeUrl(url);
     const platform = detectPlatform();
     if (platform === Platform.ANDROID) {
-        // Android: use intent with explicit action and encoded URL extra
-        // Passing URL as S.url extra avoids issues with special characters in the URI path
+        // Android: video URL must be the intent data for VLC to play it.
+        // S.title sets the display name, S.subtitles_location loads external subtitles.
         const encodedTitle = encodeURIComponent(fileName);
-        const encodedUrl = encodeURIComponent(normalized);
-        return `intent:#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle};S.url=${encodedUrl};end`;
+        let intent = `intent:${normalized}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodedTitle}`;
+        if (subtitleUrl) {
+            intent += `;S.subtitles_location=${encodeURIComponent(subtitleUrl)}`;
+        }
+        return intent + ";end";
     }
     if (platform === Platform.IOS) {
         // iOS: use vlc-x-callback for proper URL handling
@@ -198,12 +201,12 @@ const generateMxPlayerUrl = (url: string, packageName: string, fileName: string)
     return `intent:${url}#Intent;type=video/*;package=${packageName};S.title=${encodedTitle};end`;
 };
 
-type PlayerUrlGenerator = (url: string, fileName: string) => string;
+type PlayerUrlGenerator = (url: string, fileName: string, subtitleUrl?: string) => string;
 
 const PLAYER_URLS: Record<Exclude<MediaPlayer, MediaPlayer.BROWSER>, PlayerUrlGenerator> = {
     [MediaPlayer.IINA]: (url) => `iina://weblink?url=${encodeURIComponent(url)}`,
     [MediaPlayer.INFUSE]: (url) => `infuse://x-callback-url/play?url=${encodeURIComponent(url)}`,
-    [MediaPlayer.VLC]: (url, fileName) => generateVlcUrl(url, fileName),
+    [MediaPlayer.VLC]: (url, fileName, subtitleUrl) => generateVlcUrl(url, fileName, subtitleUrl),
     [MediaPlayer.MPV]: (url) => `mpv://${encodeURIComponent(url)}`,
     [MediaPlayer.POTPLAYER]: (url) => `potplayer://${encodeURIComponent(url)}`,
     [MediaPlayer.KODI]: (url) => `kodi://${encodeURIComponent(url)}`,
@@ -241,7 +244,9 @@ export const openInPlayer = ({
         return;
     }
 
-    const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName);
+    // Pass first subtitle URL for players that support it (e.g. VLC Android)
+    const firstSubtitle = subtitles?.[0];
+    const playerUrl = PLAYER_URLS[selectedPlayer](url, fileName, firstSubtitle);
 
     // On Android, use location.href for intent:// URLs — more reliable than window.open
     if (detectPlatform() === Platform.ANDROID && playerUrl.startsWith("intent:")) {

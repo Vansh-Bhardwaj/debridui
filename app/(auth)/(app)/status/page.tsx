@@ -22,6 +22,7 @@ import { detectCodecSupport, isIOS, isSafari, type CodecSupport } from "@/lib/ut
 import { useVLCStore } from "@/lib/stores/vlc";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { MediaPlayer } from "@/lib/types";
+import { isMobileOrTablet } from "@/lib/utils/media-player";
 import type { CheckStatus, HealthResponse } from "@/lib/health";
 
 type StatusMeta = {
@@ -299,10 +300,11 @@ const VLCBridgeCard = memo(function VLCBridgeCard() {
     const stopPolling = useVLCStore((s) => s.stopPolling);
 
     const isVLC = mediaPlayer === MediaPlayer.VLC;
+    const isMobile = typeof navigator !== "undefined" && isMobileOrTablet();
 
-    // Auto-detect and poll when card is visible
+    // Auto-detect and poll when card is visible (desktop only)
     useEffect(() => {
-        if (!isVLC) return;
+        if (!isVLC || isMobile) return;
         if (!extensionDetected && !detecting) {
             detect().then((found) => {
                 if (found) startPolling();
@@ -311,7 +313,7 @@ const VLCBridgeCard = memo(function VLCBridgeCard() {
             startPolling();
         }
         return () => stopPolling();
-    }, [isVLC, extensionDetected, detecting, detect, startPolling, stopPolling]);
+    }, [isVLC, isMobile, extensionDetected, detecting, detect, startPolling, stopPolling]);
 
     // Overall status
     const overallStatus: CheckStatus = detecting
@@ -340,45 +342,53 @@ const VLCBridgeCard = memo(function VLCBridgeCard() {
                     VLC Bridge
                 </CardTitle>
                 <CardDescription>
-                    {isVLC ? "Extension-based VLC integration" : "Set player to VLC to enable"}
+                    {isMobile ? "Desktop only — not available on mobile" : isVLC ? "Extension-based VLC integration" : "Set player to VLC to enable"}
                 </CardDescription>
                 <CardAction>
                     <StatusBadge status={overallStatus} />
                 </CardAction>
             </CardHeader>
             <CardContent className="space-y-2">
-                <ServiceRow
-                    label="Extension"
-                    status={detecting ? "degraded" : extensionDetected ? "ok" : "error"}
-                />
-                <ServiceRow
-                    label="VLC Connection"
-                    status={vlcConnected ? "ok" : extensionDetected ? "error" : undefined}
-                />
-                {vlcConnected && (
+                {isMobile ? (
+                    <div className="text-xs text-muted-foreground">
+                        VLC Bridge requires a Chrome/Edge desktop extension. On mobile, VLC is launched directly via intent and plays files without bridge integration.
+                    </div>
+                ) : (
                     <>
-                        <KeyValue label="State" value={stateLabel} />
-                        {nowPlaying && <KeyValue label="Now Playing" value={nowPlaying} />}
-                        {status && status.length > 0 && (
-                            <KeyValue
-                                label="Progress"
-                                value={`${formatTime(status.time)} / ${formatTime(status.length)}`}
-                            />
+                        <ServiceRow
+                            label="Extension"
+                            status={detecting ? "degraded" : extensionDetected ? "ok" : "error"}
+                        />
+                        <ServiceRow
+                            label="VLC Connection"
+                            status={vlcConnected ? "ok" : extensionDetected ? "error" : undefined}
+                        />
+                        {vlcConnected && (
+                            <>
+                                <KeyValue label="State" value={stateLabel} />
+                                {nowPlaying && <KeyValue label="Now Playing" value={nowPlaying} />}
+                                {status && status.length > 0 && (
+                                    <KeyValue
+                                        label="Progress"
+                                        value={`${formatTime(status.time)} / ${formatTime(status.length)}`}
+                                    />
+                                )}
+                            </>
+                        )}
+                        {!extensionDetected && isVLC && !detecting && (
+                            <div className="pt-2">
+                                <Button variant="outline" size="sm" onClick={() => detect()}>
+                                    <RefreshCw className="size-3 mr-1.5" />
+                                    Retry Detection
+                                </Button>
+                            </div>
+                        )}
+                        {!isVLC && (
+                            <div className="text-xs text-muted-foreground pt-1">
+                                Change your media player to VLC in Settings to enable the bridge integration.
+                            </div>
                         )}
                     </>
-                )}
-                {!extensionDetected && isVLC && !detecting && (
-                    <div className="pt-2">
-                        <Button variant="outline" size="sm" onClick={() => detect()}>
-                            <RefreshCw className="size-3 mr-1.5" />
-                            Retry Detection
-                        </Button>
-                    </div>
-                )}
-                {!isVLC && (
-                    <div className="text-xs text-muted-foreground pt-1">
-                        Change your media player to VLC in Settings to enable the bridge integration.
-                    </div>
                 )}
             </CardContent>
         </Card>

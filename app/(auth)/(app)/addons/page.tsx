@@ -83,9 +83,15 @@ export default function AddonsPage() {
         try {
             const client = new AddonClient({ url: addonUrl });
             const manifest = await client.fetchManifest();
+            const normalizedUrl = client.getBaseUrl();
 
-            // Check if addon URL already exists
-            const addonExists = serverAddons.some((addon: Addon) => addon.url === addonUrl);
+            // Check if addon URL already exists (compare normalized base URLs)
+            const addonExists = serverAddons.some((addon: Addon) => {
+                try {
+                    const existing = new AddonClient({ url: addon.url });
+                    return existing.getBaseUrl() === normalizedUrl;
+                } catch { return false; }
+            });
             if (addonExists) {
                 toast.error(`${manifest.name} addon is already added`);
                 setValidating(false);
@@ -94,7 +100,7 @@ export default function AddonsPage() {
 
             const newAddon: CreateAddon = {
                 name: manifest.name,
-                url: addonUrl,
+                url: normalizedUrl,
                 enabled: true,
             };
 

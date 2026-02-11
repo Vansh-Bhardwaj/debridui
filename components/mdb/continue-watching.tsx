@@ -223,8 +223,8 @@ export function ContinueWatching() {
 
         // Remove from server
         const params = new URLSearchParams({ imdbId: key.imdbId });
-        if (key.season !== undefined) params.set("season", String(key.season));
-        if (key.episode !== undefined) params.set("episode", String(key.episode));
+        if (key.season != null && !isNaN(key.season)) params.set("season", String(key.season));
+        if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
         fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
     }, []);
 

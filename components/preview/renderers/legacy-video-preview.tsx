@@ -162,6 +162,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [triedTranscodeFallback, setTriedTranscodeFallback] = useState(false);
     const [useDirectUrl, _setUseDirectUrl] = useState(false);
 
+    // Track if we've tried server-side URL resolution (for addon redirect URLs)
+    const triedUrlResolveRef = useRef(false);
+
     // Final URL: if user requested direct, use download URL; otherwise use smart selection
     const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
 
@@ -291,6 +294,47 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         }
         
+        // For addon streams (no transcoded links): try resolving URL server-side.
+        // Many addons return proxy/redirect URLs that fail in the browser's <video> element.
+        if (!triedUrlResolveRef.current && (!streamingLinks || Object.keys(streamingLinks).length === 0)) {
+            triedUrlResolveRef.current = true;
+            setIsLoading(true);
+
+            fetch(`/api/addon/resolve?url=${encodeURIComponent(downloadUrl)}`)
+                .then(r => r.ok ? r.json() as Promise<{ url?: string; status?: number }> : null)
+                .then(data => {
+                    const resolvedUrl = data?.url;
+                    if (resolvedUrl && resolvedUrl !== downloadUrl && (data?.status ?? 999) < 400) {
+                        toast.info("Retrying with resolved stream...", { duration: 2000 });
+                        const video = videoRef.current;
+                        if (video) {
+                            video.src = resolvedUrl;
+                            video.load();
+                            if (!ios) video.play().catch(() => {});
+                        }
+                        return;
+                    }
+                    // Resolution didn't produce a different URL — show error
+                    setError(true);
+                    setIsLoading(false);
+                    toast.error("Failed to load video", {
+                        description: "The video could not be loaded. Try an external player like VLC.",
+                        duration: 5000,
+                    });
+                    onError?.(new Error("Failed to load video"));
+                })
+                .catch(() => {
+                    setError(true);
+                    setIsLoading(false);
+                    toast.error("Failed to load video", {
+                        description: "The video could not be loaded. Try an external player like VLC.",
+                        duration: 5000,
+                    });
+                    onError?.(new Error("Failed to load video"));
+                });
+            return;
+        }
+
         setError(true);
         const errorMessage = "Failed to load video";
         toast.error(errorMessage, {
@@ -300,7 +344,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             duration: 5000,
         });
         onError?.(new Error(errorMessage));
-    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, ios]);
+    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, ios, downloadUrl]);
 
     const handleTimeUpdate = useCallback(() => {
         const el = videoRef.current;

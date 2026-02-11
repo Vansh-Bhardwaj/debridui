@@ -95,12 +95,16 @@ export async function DELETE(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const imdbId = searchParams.get("imdbId");
-        const season = searchParams.get("season");
-        const episode = searchParams.get("episode");
+        const seasonRaw = searchParams.get("season");
+        const episodeRaw = searchParams.get("episode");
 
         if (!imdbId) {
             return NextResponse.json({ error: "imdbId required" }, { status: 400 });
         }
+
+        // Parse season/episode — ignore invalid values like "null", "undefined", NaN
+        const season = seasonRaw ? parseInt(seasonRaw) : NaN;
+        const episode = episodeRaw ? parseInt(episodeRaw) : NaN;
 
         // Build conditions
         const conditions = [
@@ -108,11 +112,11 @@ export async function DELETE(request: NextRequest) {
             eq(userProgress.imdbId, imdbId),
         ];
 
-        if (season !== null) {
-            conditions.push(eq(userProgress.season, parseInt(season)));
+        if (!isNaN(season)) {
+            conditions.push(eq(userProgress.season, season));
         }
-        if (episode !== null) {
-            conditions.push(eq(userProgress.episode, parseInt(episode)));
+        if (!isNaN(episode)) {
+            conditions.push(eq(userProgress.episode, episode));
         }
 
         await db.delete(userProgress).where(and(...conditions));
