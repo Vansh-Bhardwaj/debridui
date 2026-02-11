@@ -8,7 +8,6 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { addonSchema, addonOrderUpdateSchema } from "@/lib/schemas";
 import { type CreateAddon } from "@/lib/types";
-import { revalidatePath } from "next/cache";
 import { v7 as uuidv7 } from "uuid";
 
 /**
@@ -52,8 +51,6 @@ export async function addAddon(data: CreateAddon) {
         })
         .returning();
 
-    revalidatePath("/", "layout");
-
     return {
         id: result.id,
         name: result.name,
@@ -77,7 +74,6 @@ export async function removeAddon(addonId: string) {
     const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
     await db.delete(addons).where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
 
-    revalidatePath("/", "layout");
     return { success: true };
 }
 
@@ -99,7 +95,6 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
         .set({ enabled: validatedEnabled })
         .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
 
-    revalidatePath("/", "layout");
     return { success: true };
 }
 
@@ -121,7 +116,6 @@ export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean
         .set({ showCatalogs: validatedShow })
         .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
 
-    revalidatePath("/", "layout");
     return { success: true };
 }
 
@@ -141,7 +135,6 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
     const validated = addonOrderUpdateSchema.parse(updates);
 
     if (validated.length === 0) {
-        revalidatePath("/", "layout");
         return { success: true };
     }
 
@@ -156,6 +149,5 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
         })
         .where(and(eq(addons.userId, session.user.id), inArray(addons.id, ids)));
 
-    revalidatePath("/", "layout");
     return { success: true };
 }

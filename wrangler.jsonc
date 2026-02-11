@@ -37,6 +37,9 @@
   //
   // DATABASE_URL is NOT needed in production — Hyperdrive binding provides
   // the connection string via env.HYPERDRIVE.connectionString.
+  // CPU time limit — uncomment after upgrading to Workers Paid plan ($5/mo).
+  // Free plan is hard-capped at 10ms which is insufficient for Next.js SSR.
+  // "limits": { "cpu_ms": 30000 },
   "observability": {
     "logs": {
       "enabled": true

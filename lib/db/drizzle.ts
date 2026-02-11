@@ -39,14 +39,21 @@ const drizzleConfig = {
     },
 };
 
+// Cache the require'd function reference so subsequent calls skip the require() overhead
+let _getCloudflareContext: (() => CloudflareContext | null) | undefined;
+
 /**
- * Get Cloudflare context safely (returns null outside Workers / during build)
+ * Get Cloudflare context safely (returns null outside Workers / during build).
+ * Caches the require() result at module level to avoid repeated dynamic require overhead.
  */
 function getCloudflareCtx(): CloudflareContext | null {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { getCloudflareContext } = require("@opennextjs/cloudflare");
-        return getCloudflareContext() ?? null;
+        if (!_getCloudflareContext) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const mod = require("@opennextjs/cloudflare");
+            _getCloudflareContext = mod.getCloudflareContext;
+        }
+        return _getCloudflareContext!() ?? null;
     } catch {
         return null;
     }

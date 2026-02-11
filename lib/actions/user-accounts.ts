@@ -8,7 +8,6 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { createAccountSchema } from "@/lib/schemas";
 import { type CreateAccount } from "@/lib/types";
-import { revalidatePath } from "next/cache";
 import { v7 as uuidv7 } from "uuid";
 
 /**
@@ -59,7 +58,6 @@ export async function addUserAccount(data: CreateAccount) {
             })
             .returning();
 
-        revalidatePath("/", "layout");
         return account;
     } catch (error) {
         console.error("[addUserAccount] Database error:", error);
@@ -89,6 +87,5 @@ export async function removeUserAccount(accountId: string) {
         throw new Error("Account not found or unauthorized");
     }
 
-    revalidatePath("/", "layout");
     return { success: true };
 }

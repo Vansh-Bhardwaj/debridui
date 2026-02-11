@@ -11,14 +11,20 @@ import { getAppUrl, getEnv } from "@/lib/env";
  * Secrets set via `wrangler secret put` may only be available through
  * the Cloudflare context env binding, not process.env.
  */
+// Cache the require'd function to avoid repeated dynamic require overhead
+let _getCfCtx: (() => { env?: Record<string, unknown> } | null) | undefined;
+
 function getTraktSecret(): string | undefined {
     const fromEnv = getEnv("TRAKT_CLIENT_SECRET");
     if (fromEnv) return fromEnv;
 
     try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { getCloudflareContext } = require("@opennextjs/cloudflare");
-        const ctx = getCloudflareContext();
+        if (!_getCfCtx) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const mod = require("@opennextjs/cloudflare");
+            _getCfCtx = mod.getCloudflareContext;
+        }
+        const ctx = _getCfCtx!();
         const secret = ctx?.env?.TRAKT_CLIENT_SECRET;
         if (typeof secret === "string" && secret) return secret;
     } catch { /* not running on Cloudflare */ }
