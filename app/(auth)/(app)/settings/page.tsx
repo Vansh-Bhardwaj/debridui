@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
@@ -81,6 +81,7 @@ export default function SettingsPage() {
     const streaming = get("streaming");
     const playback = get("playback");
     const tmdbApiKey = get("tmdbApiKey");
+    const deviceSync = get("deviceSync");
 
     // Server-side settings sync
     const { data: serverSettings } = useUserSettings();
@@ -257,6 +258,27 @@ export default function SettingsPage() {
                             className="max-w-md"
                         />
                     </div>
+                </div>
+
+                {/* Device Sync */}
+                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10">
+                            <RefreshCw className="size-5 text-primary" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="device-sync" className="text-sm font-medium">Device Sync</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Sync playback state & controls across your devices in real-time
+                            </p>
+                        </div>
+                    </div>
+                    <Switch
+                        id="device-sync"
+                        className="shrink-0"
+                        checked={deviceSync}
+                        onCheckedChange={(checked) => set("deviceSync", checked)}
+                    />
                 </div>
             </section>
 

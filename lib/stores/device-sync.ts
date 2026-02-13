@@ -1,0 +1,357 @@
+/**
+ * Device Sync Store — cross-device playback control like Spotify Connect.
+ *
+ * Three sync layers (unified into one event stream):
+ *   1. BroadcastChannel — same browser tabs (instant, free)
+ *   2. WebSocket via Durable Object — cross-device (<100ms, free tier)
+ *   3. (Future) Local network via Tauri mDNS
+ *
+ * Integrates with:
+ *   - useStreamingStore (source playback)
+ *   - usePreviewStore (browser video player)
+ *   - useVLCStore (VLC remote control)
+ */
+
+import { create } from "zustand";
+import { DeviceSyncClient, type ConnectionStatus } from "@/lib/device-sync/client";
+import { DeviceSyncBroadcast } from "@/lib/device-sync/broadcast";
+import type {
+    DeviceInfo,
+    NowPlayingInfo,
+    ServerMessage,
+    TransferPayload,
+    RemoteAction,
+} from "@/lib/device-sync/protocol";
+import { detectDevice, getDeviceId } from "@/lib/device-sync/protocol";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { toast } from "sonner";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface DeviceSyncState {
+    // State
+    thisDevice: Pick<DeviceInfo, "id" | "name" | "deviceType" | "browser">;
+    devices: DeviceInfo[];
+    connectionStatus: ConnectionStatus;
+    enabled: boolean;
+
+    // Actions
+    connect: () => Promise<void>;
+    disconnect: () => void;
+    sendCommand: (targetId: string, action: RemoteAction, payload?: Record<string, unknown>) => void;
+    transferPlayback: (targetId: string, playback: TransferPayload) => void;
+    reportNowPlaying: (state: NowPlayingInfo | null) => void;
+    setEnabled: (enabled: boolean) => void;
+
+    // Internal
+    _handleMessage: (msg: ServerMessage) => void;
+}
+
+// ── Singleton Clients ──────────────────────────────────────────────────────
+
+let wsClient: DeviceSyncClient | null = null;
+let broadcast: DeviceSyncBroadcast | null = null;
+let tokenCache: { token: string; expiresAt: number } | null = null;
+
+const SYNC_WORKER_URL = process.env.NEXT_PUBLIC_DEVICE_SYNC_URL ?? "";
+
+async function fetchToken(): Promise<string | null> {
+    // Return cached token if still valid (refresh 1hr before expiry)
+    if (tokenCache && tokenCache.expiresAt > Date.now() + 3600_000) {
+        return tokenCache.token;
+    }
+
+    try {
+        const res = await fetch("/api/remote/token");
+        if (!res.ok) return null;
+        const data = (await res.json()) as { token: string };
+        // Token is valid 24hr, cache it
+        tokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600_000 };
+        return data.token;
+    } catch {
+        return null;
+    }
+}
+
+// ── Command Handler (processes incoming remote commands) ───────────────────
+
+function handleRemoteCommand(action: string, payload?: Record<string, unknown>) {
+    // Lazy import to avoid circular dependency issues
+    switch (action) {
+        case "play":
+        case "pause":
+        case "toggle-pause": {
+            // Try browser player first, then VLC
+            const video = document.querySelector("video");
+            if (video) {
+                if (action === "play") video.play();
+                else if (action === "pause") video.pause();
+                else if (video.paused) video.play(); else video.pause();
+            } else {
+                // VLC control — import dynamically
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    useVLCStore.getState().togglePause();
+                });
+            }
+            break;
+        }
+        case "seek": {
+            const position = payload?.position as number | undefined;
+            if (position === undefined) break;
+            const video = document.querySelector("video");
+            if (video) {
+                video.currentTime = position;
+            } else {
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    useVLCStore.getState().seek(position);
+                });
+            }
+            break;
+        }
+        case "volume": {
+            const level = payload?.level as number | undefined;
+            if (level === undefined) break;
+            const video = document.querySelector("video");
+            if (video) {
+                video.volume = Math.max(0, Math.min(1, level));
+            } else {
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    // VLC volume is 0-512 (256 = 100%)
+                    useVLCStore.getState().setVolume(Math.round(level * 256));
+                });
+            }
+            break;
+        }
+        case "stop": {
+            const video = document.querySelector("video");
+            if (video) {
+                video.pause();
+                video.currentTime = 0;
+                import("@/lib/stores/preview").then(({ usePreviewStore }) => {
+                    usePreviewStore.getState().closePreview();
+                });
+            } else {
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    useVLCStore.getState().stop();
+                });
+            }
+            break;
+        }
+        case "next":
+        case "previous": {
+            // Episode navigation handled by streaming store
+            // This requires addons to be available — emit an event for the component to handle
+            window.dispatchEvent(
+                new CustomEvent("device-sync-navigate", { detail: { direction: action } })
+            );
+            break;
+        }
+    }
+}
+
+function handleTransfer(playback: TransferPayload, fromName: string) {
+    toast.info(`Playing from ${fromName}`, {
+        description: playback.title,
+        duration: 3000,
+    });
+
+    // Open in browser preview
+    import("@/lib/stores/preview").then(({ usePreviewStore }) => {
+        import("@/lib/types").then(({ FileType }) => {
+            usePreviewStore.getState().openSinglePreview({
+                url: playback.url,
+                title: playback.title,
+                fileType: FileType.VIDEO,
+                subtitles: playback.subtitles?.map((s) => ({
+                    url: s.url,
+                    lang: s.lang,
+                    id: s.url,
+                    name: s.name,
+                })),
+                progressKey: playback.imdbId
+                    ? {
+                          imdbId: playback.imdbId,
+                          type: (playback.mediaType ?? "movie") as "movie" | "show",
+                          season: playback.season,
+                          episode: playback.episode,
+                      }
+                    : undefined,
+            });
+        });
+    });
+}
+
+// ── Store ──────────────────────────────────────────────────────────────────
+
+export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
+    thisDevice: typeof window !== "undefined" ? detectDevice() : { id: "server", name: "Server", deviceType: "desktop" as const, browser: "Node" },
+    devices: [],
+    connectionStatus: "disconnected",
+    enabled: false,
+
+    setEnabled: (enabled) => {
+        if (get().enabled === enabled) return;
+        set({ enabled });
+        // Persist via settings store (single source of truth)
+        useSettingsStore.getState().set("deviceSync", enabled);
+        if (enabled) {
+            get().connect();
+        } else {
+            get().disconnect();
+        }
+    },
+
+    connect: async () => {
+        if (!SYNC_WORKER_URL) return;
+
+        const { _handleMessage } = get();
+
+        // Start BroadcastChannel (always, even without WebSocket)
+        if (!broadcast) {
+            broadcast = new DeviceSyncBroadcast();
+            broadcast.start(_handleMessage);
+        }
+
+        // Start WebSocket connection
+        if (!wsClient) {
+            wsClient = new DeviceSyncClient({
+                syncUrl: SYNC_WORKER_URL,
+                getToken: fetchToken,
+                onMessage: (msg) => {
+                    _handleMessage(msg);
+                    // Relay WebSocket messages to other tabs
+                    broadcast?.relayToTabs(msg);
+                },
+                onStatusChange: (status) => {
+                    set({ connectionStatus: status });
+                },
+            });
+        }
+
+        await wsClient.connect();
+    },
+
+    disconnect: () => {
+        wsClient?.disconnect();
+        wsClient = null;
+
+        broadcast?.stop();
+        broadcast = null;
+
+        tokenCache = null;
+
+        set({
+            devices: [],
+            connectionStatus: "disconnected",
+        });
+    },
+
+    sendCommand: (targetId, action, payload) => {
+        wsClient?.sendCommand(targetId, action, payload);
+    },
+
+    transferPlayback: (targetId, playback) => {
+        if (!wsClient) return;
+
+        wsClient.transferTo(targetId, playback);
+
+        const target = get().devices.find((d) => d.id === targetId);
+        toast.success(`Transferred to ${target?.name ?? "device"}`, {
+            description: playback.title,
+            duration: 3000,
+        });
+    },
+
+    reportNowPlaying: (state) => {
+        wsClient?.reportNowPlaying(state);
+        broadcast?.broadcastNowPlaying(state);
+    },
+
+    _handleMessage: (msg) => {
+        switch (msg.type) {
+            case "devices": {
+                // Full device list from DO — replace local state
+                const selfId = getDeviceId();
+                set({ devices: msg.devices.filter((d) => d.id !== selfId) });
+                break;
+            }
+            case "device-joined": {
+                const selfId = getDeviceId();
+                if (msg.device.id === selfId) break;
+                set((state) => ({
+                    devices: [
+                        ...state.devices.filter((d) => d.id !== msg.device.id),
+                        msg.device,
+                    ],
+                }));
+                break;
+            }
+            case "device-left": {
+                set((state) => ({
+                    devices: state.devices.filter((d) => d.id !== msg.deviceId),
+                }));
+                break;
+            }
+            case "now-playing-update": {
+                set((state) => ({
+                    devices: state.devices.map((d) =>
+                        d.id === msg.deviceId
+                            ? {
+                                  ...d,
+                                  nowPlaying: msg.state,
+                                  isPlaying: msg.state !== null && !msg.state.paused,
+                              }
+                            : d
+                    ),
+                }));
+                break;
+            }
+            case "command": {
+                handleRemoteCommand(msg.action, msg.payload);
+                break;
+            }
+            case "transfer": {
+                handleTransfer(msg.playback, msg.fromName);
+                break;
+            }
+            case "error": {
+                console.warn("[device-sync] Error from server:", msg.message);
+                break;
+            }
+        }
+    },
+}));
+
+// ── Auto-init on module load ───────────────────────────────────────────────
+
+export function initDeviceSync() {
+    if (typeof window === "undefined") return;
+    if (!SYNC_WORKER_URL) return;
+
+    // Read enabled state from settings store (persisted via Zustand)
+    const enabled = useSettingsStore.getState().get("deviceSync");
+    if (enabled) {
+        useDeviceSyncStore.setState({ enabled: true });
+        useDeviceSyncStore.getState().connect();
+    }
+
+    // Subscribe to settings changes so toggling in settings page auto-connects/disconnects
+    let prevSync = enabled;
+    useSettingsStore.subscribe((state) => {
+        const cur = state.settings.deviceSync;
+        if (cur === prevSync) return;
+        prevSync = cur;
+        const store = useDeviceSyncStore.getState();
+        if (cur && !store.enabled) {
+            store.setEnabled(true);
+        } else if (!cur && store.enabled) {
+            store.setEnabled(false);
+        }
+    });
+
+    // Clean up on page unload
+    window.addEventListener("beforeunload", () => {
+        wsClient?.disconnect();
+        broadcast?.stop();
+    });
+}

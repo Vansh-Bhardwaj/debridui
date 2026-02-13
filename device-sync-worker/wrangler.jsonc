@@ -1,0 +1,31 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "debridui-sync",
+  "account_id": "619e665b277bead17ec2463aa5765ac5",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-02-02",
+  "compatibility_flags": ["nodejs_compat"],
+  // Durable Object binding — one DO instance per user for device sync
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DEVICE_SYNC",
+        "class_name": "DeviceSync"
+      }
+    ]
+  },
+  // SQLite-backed DO (available on free plan)
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DeviceSync"]
+    }
+  ],
+  // CORS: only allow requests from the main app
+  "vars": {
+    "ALLOWED_ORIGINS": "https://debrid.indevs.in,http://localhost:3000"
+  }
+  // SECRETS — set via `wrangler secret put`:
+  //   SYNC_TOKEN_SECRET — shared with main app for HMAC token verification
+  //                       Generate: openssl rand -base64 32
+}

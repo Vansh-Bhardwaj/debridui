@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -7,6 +8,10 @@ import { SearchButton } from "@/components/common/search-button";
 import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
 import { VLCMiniPlayer } from "@/components/vlc-mini-player";
+import { DevicePicker } from "@/components/device-sync/device-picker";
+import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
+import { DeviceSyncReporter } from "@/components/device-sync/device-sync-reporter";
+import { initDeviceSync } from "@/lib/stores/device-sync";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
@@ -34,6 +39,9 @@ function ShortcutsButton() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const { userAccounts, currentAccount, currentUser, client } = useAuth();
 
+    // Initialize device sync once on mount (reads setting from Zustand)
+    useEffect(() => { initDeviceSync(); }, []);
+
     // Single check for all required data to prevent flicker
     // AuthProvider handles redirect to /onboarding if no accounts
     const isReady = userAccounts.length > 0 && currentAccount && currentUser && client;
@@ -53,6 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <Breadcrumbs />
                             </div>
                             <div className="flex items-center gap-1">
+                                <DevicePicker />
                                 <ShortcutsButton />
                                 <SearchButton className="shrink-0" />
                             </div>
@@ -63,6 +72,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <PreviewDialog />
                 <PreviewRegistryLoader />
                 <VLCMiniPlayer />
+                <RemoteControlBanner />
+                <DeviceSyncReporter />
             </SearchProvider>
         </KeyboardShortcutsDialog>
     );

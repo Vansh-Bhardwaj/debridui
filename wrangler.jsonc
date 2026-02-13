@@ -29,7 +29,8 @@
     "NEXT_PUBLIC_CORS_PROXY_URL": "https://debridui-cors-proxy.vanshbh7102-619.workers.dev/?url=",
     "NEXT_PUBLIC_TRAKT_CLIENT_ID": "79ee7788bc9c0db05db539da4aa19b8f76dd54a8aa0c4742a3228c7dd9cef71e",
     "NEXT_PUBLIC_NEON_AUTH_URL": "https://ep-empty-scene-a1gs3bqr.neonauth.ap-southeast-1.aws.neon.tech/neondb/auth",
-    "NEON_AUTH_BASE_URL": "https://ep-empty-scene-a1gs3bqr.neonauth.ap-southeast-1.aws.neon.tech/neondb/auth"
+    "NEON_AUTH_BASE_URL": "https://ep-empty-scene-a1gs3bqr.neonauth.ap-southeast-1.aws.neon.tech/neondb/auth",
+    "NEXT_PUBLIC_DEVICE_SYNC_URL": "https://debridui-sync.vanshbh7102-619.workers.dev"
   },
   // SECRETS - These must be set via `wrangler secret put <NAME>`:
   // - NEON_AUTH_COOKIE_SECRET (generate with: openssl rand -base64 32)

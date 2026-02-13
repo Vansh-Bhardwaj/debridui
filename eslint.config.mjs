@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     'cloudflare-env.d.ts',
     'vlc-bridge/**',
+    'device-sync-worker/**',
   ]),
   // Custom rules
   {
