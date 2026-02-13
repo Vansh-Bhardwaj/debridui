@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     },
     env: {
         NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+        // Ensure NEXT_PUBLIC vars from wrangler.jsonc are inlined at build time
+        // (wrangler vars are only available at runtime on the server, not client-side)
+        NEXT_PUBLIC_DEVICE_SYNC_URL: process.env.NEXT_PUBLIC_DEVICE_SYNC_URL ?? "https://debridui-sync.vanshbh7102-619.workers.dev",
     },
     async headers() {
         return [
