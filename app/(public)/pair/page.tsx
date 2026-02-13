@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { DeviceSyncClient } from "@/lib/device-sync/client";
 import { detectDevice } from "@/lib/device-sync/protocol";
-import type { ServerMessage, TransferPayload, TrackInfo } from "@/lib/device-sync/protocol";
+import type { ServerMessage, TransferPayload, TrackInfo, QueueItem } from "@/lib/device-sync/protocol";
 import {
     Monitor,
     Smartphone,
@@ -21,6 +21,8 @@ import {
     AudioLines,
     Subtitles,
     Maximize2,
+    ListMusic,
+    Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +80,7 @@ function PairPageContent() {
     const [devices, setDevices] = useState<DeviceInfo[]>([]);
     const [_playback, setPlayback] = useState<TransferPayload | null>(null);
     const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+    const [queue, setQueue] = useState<QueueItem[]>([]);
     const clientRef = useRef<DeviceSyncClient | null>(null);
 
     const handleMessage = useCallback((msg: ServerMessage) => {
@@ -110,6 +113,9 @@ function PairPageContent() {
                     window.open(msg.playback.url, "_blank");
                 }
                 break;
+            case "queue-updated":
+                setQueue(msg.queue);
+                break;
         }
     }, []);
 
@@ -121,7 +127,11 @@ function PairPageContent() {
             getToken: async () => token,
             onMessage: handleMessage,
             onStatusChange: (status) => {
-                if (status === "connected") setState("connected");
+                if (status === "connected") {
+                    setState("connected");
+                    // Request current queue
+                    client.send({ type: "queue-get" });
+                }
             },
         });
 
@@ -260,6 +270,86 @@ function PairPageContent() {
                         ))
                     )}
                 </div>
+
+                {/* Playback Queue */}
+                {queue.length > 0 && (
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-1.5">
+                                <ListMusic className="size-3.5 text-muted-foreground" />
+                                <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                                    Queue · {queue.length}
+                                </p>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-[10px] text-muted-foreground hover:text-destructive gap-1"
+                                onClick={() => clientRef.current?.send({ type: "queue-clear" })}
+                            >
+                                <Trash2 className="size-3" />
+                                Clear
+                            </Button>
+                        </div>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {queue.map((item, i) => (
+                                <div
+                                    key={item.id}
+                                    className="flex items-center gap-2 rounded-sm border border-border/50 px-2 py-1.5 group hover:bg-muted/30 transition-colors"
+                                >
+                                    <span className="text-[10px] text-muted-foreground w-4 text-center shrink-0">
+                                        {i + 1}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs truncate">{item.title}</p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {item.addedBy}
+                                            {item.mediaType === "show" && item.season && item.episode && (
+                                                <> <span className="text-border">·</span> S{String(item.season).padStart(2, "0")}E{String(item.episode).padStart(2, "0")}</>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {effectiveSelectedId && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-6"
+                                                onClick={() => {
+                                                    if (effectiveSelectedId) {
+                                                        sendCommand(effectiveSelectedId, "stop");
+                                                        clientRef.current?.transferTo(effectiveSelectedId, {
+                                                            url: item.url,
+                                                            title: item.title,
+                                                            imdbId: item.imdbId,
+                                                            mediaType: item.mediaType,
+                                                            season: item.season,
+                                                            episode: item.episode,
+                                                            subtitles: item.subtitles,
+                                                        });
+                                                    }
+                                                    clientRef.current?.send({ type: "queue-remove", itemId: item.id });
+                                                }}
+                                                title="Play now"
+                                            >
+                                                <Play className="size-3 fill-current" />
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-6 text-muted-foreground hover:text-destructive"
+                                            onClick={() => clientRef.current?.send({ type: "queue-remove", itemId: item.id })}
+                                            title="Remove"
+                                        >
+                                            <X className="size-3" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

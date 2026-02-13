@@ -4,8 +4,13 @@
  * One instance per user. Devices connect via WebSocket, commands are relayed
  * between them in real-time. Uses Hibernation API for zero idle cost.
  *
+ * Features:
+ *   - Remote playback control (play/pause/seek/volume/tracks/fullscreen)
+ *   - Remote media browsing (request file list from target device)
+ *   - Cross-device notifications
+ *   - Shared playback queue (persisted in DO SQLite)
+ *
  * Free tier budget: 100K DO requests/day, WS messages at 20:1 billing ratio.
- * A 2-hour session with 100 commands costs ~5 billed requests.
  */
 
 import { DurableObject } from "cloudflare:workers";
@@ -28,20 +33,11 @@ interface NowPlayingInfo {
     type?: "movie" | "show";
     season?: number;
     episode?: number;
-    progress: number; // seconds
-    duration: number; // seconds
+    progress: number;
+    duration: number;
     paused: boolean;
     url?: string;
 }
-
-type ClientMessage =
-    | { type: "register"; device: Omit<DeviceInfo, "isPlaying" | "nowPlaying" | "lastSeen"> }
-    | { type: "now-playing"; state: NowPlayingInfo | null }
-    | { type: "command"; target: string; action: string; payload?: Record<string, unknown> }
-    | { type: "transfer"; target: string; playback: TransferPayload }
-    | { type: "control-claim"; target: string }
-    | { type: "control-release"; target: string }
-    | { type: "ping" };
 
 interface TransferPayload {
     url: string;
@@ -55,6 +51,61 @@ interface TransferPayload {
     durationSeconds?: number;
 }
 
+interface QueueItem {
+    id: string;
+    title: string;
+    url: string;
+    imdbId?: string;
+    mediaType?: "movie" | "show";
+    season?: number;
+    episode?: number;
+    subtitles?: Array<{ url: string; lang: string; name?: string }>;
+    addedBy: string;
+    addedAt: number;
+}
+
+interface BrowseRequest {
+    requestId: string;
+    action: "list-files" | "search";
+    query?: string;
+    offset?: number;
+    limit?: number;
+}
+
+interface BrowseResponse {
+    requestId: string;
+    files: Array<{ id: string; name: string; size: number; status: string; progress?: number; createdAt?: string }>;
+    total?: number;
+    hasMore?: boolean;
+    error?: string;
+}
+
+interface DeviceNotification {
+    id: string;
+    title: string;
+    description?: string;
+    icon?: "download" | "play" | "info" | "warning" | "error";
+    action?: { label: string; transferPayload?: TransferPayload };
+    expiresAt?: number;
+}
+
+type ClientMessage =
+    | { type: "register"; device: Omit<DeviceInfo, "isPlaying" | "nowPlaying" | "lastSeen"> }
+    | { type: "now-playing"; state: NowPlayingInfo | null }
+    | { type: "command"; target: string; action: string; payload?: Record<string, unknown> }
+    | { type: "transfer"; target: string; playback: TransferPayload }
+    | { type: "control-claim"; target: string }
+    | { type: "control-release"; target: string }
+    | { type: "browse-request"; target: string; request: BrowseRequest }
+    | { type: "browse-response"; target: string; response: BrowseResponse }
+    | { type: "notify"; notification: DeviceNotification }
+    | { type: "queue-add"; item: Omit<QueueItem, "id" | "addedAt"> }
+    | { type: "queue-remove"; itemId: string }
+    | { type: "queue-clear" }
+    | { type: "queue-reorder"; itemIds: string[] }
+    | { type: "queue-get" }
+    | { type: "ping" };
+
 type ServerMessage =
     | { type: "devices"; devices: DeviceInfo[] }
     | { type: "command"; from: string; fromName: string; action: string; payload?: Record<string, unknown> }
@@ -64,19 +115,36 @@ type ServerMessage =
     | { type: "now-playing-update"; deviceId: string; state: NowPlayingInfo | null }
     | { type: "control-claimed"; controllerId: string; controllerName: string }
     | { type: "control-released" }
+    | { type: "browse-request"; from: string; request: BrowseRequest }
+    | { type: "browse-response"; from: string; response: BrowseResponse }
+    | { type: "notification"; from: string; fromName: string; notification: DeviceNotification }
+    | { type: "queue-updated"; queue: QueueItem[] }
     | { type: "error"; message: string }
     | { type: "pong" };
 
 // ── Durable Object ────────────────────────────────────────────────────────
 
 export class DeviceSync extends DurableObject<Env> {
+    private queueInitialized = false;
+
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
 
-        // Auto-respond to pings without waking the DO (free, no billing)
         ctx.setWebSocketAutoResponse(
             new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}')
         );
+    }
+
+    private async initQueue(): Promise<void> {
+        if (this.queueInitialized) return;
+        this.ctx.storage.sql.exec(`
+            CREATE TABLE IF NOT EXISTS queue (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            )
+        `);
+        this.queueInitialized = true;
     }
 
     async fetch(request: Request): Promise<Response> {
@@ -93,10 +161,7 @@ export class DeviceSync extends DurableObject<Env> {
         const pair = new WebSocketPair();
         const [client, server] = Object.values(pair);
 
-        // Accept with hibernation — DO sleeps when idle, wakes on messages
         this.ctx.acceptWebSocket(server);
-
-        // Attach device identity to the WebSocket (persists through hibernation)
         server.serializeAttachment({ deviceId, registered: false });
 
         return new Response(null, { status: 101, webSocket: client });
@@ -135,7 +200,30 @@ export class DeviceSync extends DurableObject<Env> {
             case "control-release":
                 this.handleControl(ws, attachment, msg);
                 break;
-            // "ping" is handled by auto-response (never reaches here)
+            case "browse-request":
+                this.handleBrowseRequest(ws, attachment, msg);
+                break;
+            case "browse-response":
+                this.handleBrowseResponse(ws, attachment, msg);
+                break;
+            case "notify":
+                this.handleNotify(ws, attachment, msg);
+                break;
+            case "queue-add":
+                await this.handleQueueAdd(ws, attachment, msg);
+                break;
+            case "queue-remove":
+                await this.handleQueueRemove(msg);
+                break;
+            case "queue-clear":
+                await this.handleQueueClear();
+                break;
+            case "queue-reorder":
+                await this.handleQueueReorder(msg);
+                break;
+            case "queue-get":
+                await this.handleQueueGet(ws);
+                break;
         }
     }
 
@@ -144,14 +232,7 @@ export class DeviceSync extends DurableObject<Env> {
         if (!attachment) return;
 
         ws.close();
-
-        // Broadcast device departure to remaining connections
-        this.broadcast({
-            type: "device-left",
-            deviceId: attachment.deviceId,
-        }, ws);
-
-        // Also send updated full device list
+        this.broadcast({ type: "device-left", deviceId: attachment.deviceId }, ws);
         this.broadcastDeviceList(ws);
     }
 
@@ -163,7 +244,7 @@ export class DeviceSync extends DurableObject<Env> {
         ws.close(1011, "WebSocket error");
     }
 
-    // ── Message Handlers ───────────────────────────────────────────────
+    // ── Original Handlers ──────────────────────────────────────────────
 
     private handleRegister(
         ws: WebSocket,
@@ -178,17 +259,8 @@ export class DeviceSync extends DurableObject<Env> {
             lastSeen: Date.now(),
         };
 
-        // Store device info in attachment (survives hibernation)
-        ws.serializeAttachment({
-            deviceId: attachment.deviceId,
-            device,
-            registered: true,
-        });
-
-        // Notify everyone about the new device
+        ws.serializeAttachment({ deviceId: attachment.deviceId, device, registered: true });
         this.broadcast({ type: "device-joined", device }, ws);
-
-        // Send full device list to the newly connected device
         this.send(ws, { type: "devices", devices: this.getConnectedDevices() });
     }
 
@@ -199,7 +271,6 @@ export class DeviceSync extends DurableObject<Env> {
     ): void {
         if (!attachment.device) return;
 
-        // Update the device's now-playing state
         const updated: DeviceInfo = {
             ...attachment.device,
             isPlaying: msg.state !== null && !msg.state.paused,
@@ -208,13 +279,7 @@ export class DeviceSync extends DurableObject<Env> {
         };
 
         ws.serializeAttachment({ ...attachment, device: updated });
-
-        // Broadcast to all other devices
-        this.broadcast({
-            type: "now-playing-update",
-            deviceId: attachment.deviceId,
-            state: msg.state,
-        }, ws);
+        this.broadcast({ type: "now-playing-update", deviceId: attachment.deviceId, state: msg.state }, ws);
     }
 
     private handleCommand(
@@ -227,7 +292,6 @@ export class DeviceSync extends DurableObject<Env> {
             this.send(ws, { type: "error", message: "Target device not found" });
             return;
         }
-
         this.send(targetWs, {
             type: "command",
             from: attachment.deviceId,
@@ -247,7 +311,6 @@ export class DeviceSync extends DurableObject<Env> {
             this.send(ws, { type: "error", message: "Target device not found" });
             return;
         }
-
         this.send(targetWs, {
             type: "transfer",
             from: attachment.deviceId,
@@ -266,7 +329,6 @@ export class DeviceSync extends DurableObject<Env> {
             this.send(ws, { type: "error", message: "Target device not found" });
             return;
         }
-
         if (msg.type === "control-claim") {
             this.send(targetWs, {
                 type: "control-claimed",
@@ -276,6 +338,115 @@ export class DeviceSync extends DurableObject<Env> {
         } else {
             this.send(targetWs, { type: "control-released" });
         }
+    }
+
+    // ── Browse Handlers ────────────────────────────────────────────────
+
+    private handleBrowseRequest(
+        ws: WebSocket,
+        attachment: { deviceId: string },
+        msg: Extract<ClientMessage, { type: "browse-request" }>
+    ): void {
+        const targetWs = this.findWebSocket(msg.target);
+        if (!targetWs) {
+            this.send(ws, { type: "error", message: "Target device not found" });
+            return;
+        }
+        this.send(targetWs, { type: "browse-request", from: attachment.deviceId, request: msg.request });
+    }
+
+    private handleBrowseResponse(
+        ws: WebSocket,
+        attachment: { deviceId: string },
+        msg: Extract<ClientMessage, { type: "browse-response" }>
+    ): void {
+        const targetWs = this.findWebSocket(msg.target);
+        if (!targetWs) return;
+        this.send(targetWs, { type: "browse-response", from: attachment.deviceId, response: msg.response });
+    }
+
+    // ── Notification Handler ───────────────────────────────────────────
+
+    private handleNotify(
+        ws: WebSocket,
+        attachment: { deviceId: string; device?: DeviceInfo },
+        msg: Extract<ClientMessage, { type: "notify" }>
+    ): void {
+        // Broadcast notification to ALL devices (including sender — they may want the toast too)
+        this.broadcast({
+            type: "notification",
+            from: attachment.deviceId,
+            fromName: attachment.device?.name ?? "Unknown",
+            notification: msg.notification,
+        });
+    }
+
+    // ── Queue Handlers (persisted in DO SQLite) ────────────────────────
+
+    private async handleQueueAdd(
+        ws: WebSocket,
+        attachment: { deviceId: string; device?: DeviceInfo },
+        msg: Extract<ClientMessage, { type: "queue-add" }>
+    ): Promise<void> {
+        await this.initQueue();
+        const id = crypto.randomUUID();
+        const item: QueueItem = { ...msg.item, id, addedAt: Date.now() };
+
+        // Get max sort_order and append
+        const maxRow = this.ctx.storage.sql.exec("SELECT MAX(sort_order) as m FROM queue").toArray();
+        const maxOrder = (maxRow[0]?.m as number) ?? -1;
+
+        this.ctx.storage.sql.exec(
+            "INSERT INTO queue (id, data, sort_order) VALUES (?, ?, ?)",
+            id,
+            JSON.stringify(item),
+            maxOrder + 1
+        );
+
+        // Broadcast updated queue to all
+        await this.broadcastQueue();
+        void ws; void attachment; // Used for type narrowing
+    }
+
+    private async handleQueueRemove(msg: Extract<ClientMessage, { type: "queue-remove" }>): Promise<void> {
+        await this.initQueue();
+        this.ctx.storage.sql.exec("DELETE FROM queue WHERE id = ?", msg.itemId);
+        await this.broadcastQueue();
+    }
+
+    private async handleQueueClear(): Promise<void> {
+        await this.initQueue();
+        this.ctx.storage.sql.exec("DELETE FROM queue");
+        await this.broadcastQueue();
+    }
+
+    private async handleQueueReorder(msg: Extract<ClientMessage, { type: "queue-reorder" }>): Promise<void> {
+        await this.initQueue();
+        // Update sort_order based on the provided order
+        for (let i = 0; i < msg.itemIds.length; i++) {
+            this.ctx.storage.sql.exec(
+                "UPDATE queue SET sort_order = ? WHERE id = ?",
+                i,
+                msg.itemIds[i]
+            );
+        }
+        await this.broadcastQueue();
+    }
+
+    private async handleQueueGet(ws: WebSocket): Promise<void> {
+        await this.initQueue();
+        const queue = this.getQueue();
+        this.send(ws, { type: "queue-updated", queue });
+    }
+
+    private getQueue(): QueueItem[] {
+        const rows = this.ctx.storage.sql.exec("SELECT data FROM queue ORDER BY sort_order ASC").toArray();
+        return rows.map((r) => JSON.parse(r.data as string) as QueueItem);
+    }
+
+    private async broadcastQueue(): Promise<void> {
+        const queue = this.getQueue();
+        this.broadcast({ type: "queue-updated", queue });
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
@@ -306,7 +477,7 @@ export class DeviceSync extends DurableObject<Env> {
             try {
                 ws.send(data);
             } catch {
-                // Dead socket — will be cleaned up by webSocketClose
+                // Dead socket — cleaned up by webSocketClose
             }
         }
     }

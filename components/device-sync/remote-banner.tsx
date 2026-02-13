@@ -31,6 +31,8 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { PlaybackQueue } from "@/components/device-sync/playback-queue";
+import { RemoteFileBrowser } from "@/components/device-sync/remote-file-browser";
 
 function DeviceTypeIcon({ type, className }: { type: DeviceInfo["deviceType"]; className?: string }) {
     const props = { className: cn("size-4", className) };
@@ -266,6 +268,9 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 />
                             </div>
 
+                            {/* Playback queue */}
+                            <PlaybackQueue compact />
+
                             {/* Bottom row: track selectors + fullscreen + stop */}
                             <div className="flex items-center justify-between border-t border-border/30 pt-3">
                                 <div className="flex items-center gap-1">
@@ -356,21 +361,25 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
                     {/* Idle state (selected but nothing playing) */}
                     {!collapsed && !nowPlaying && (
-                        <div className="flex items-center justify-between px-4 py-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <Cast className="size-3.5 text-primary shrink-0" />
-                                <span className="text-xs text-muted-foreground truncate">
-                                    Browse and play content — it will play on {targetDevice.name}
-                                </span>
+                        <div className="px-4 py-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Cast className="size-3.5 text-primary shrink-0" />
+                                    <span className="text-xs text-muted-foreground truncate">
+                                        Browse and play content — it will play on {targetDevice.name}
+                                    </span>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs shrink-0"
+                                    onClick={() => setActiveTarget(null)}
+                                >
+                                    Disconnect
+                                </Button>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs shrink-0"
-                                onClick={() => setActiveTarget(null)}
-                            >
-                                Disconnect
-                            </Button>
+                            <RemoteFileBrowser targetDeviceId={targetDevice.id} />
+                            <PlaybackQueue compact />
                         </div>
                     )}
                 </div>

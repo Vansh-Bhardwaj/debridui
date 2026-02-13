@@ -52,6 +52,60 @@ export interface TransferPayload {
     durationSeconds?: number;
 }
 
+// ── Browse / Remote Media Browser ──────────────────────────────────────────
+
+/** Lightweight file info sent via the DO (no download URLs — those stay on the target). */
+export interface BrowseFileItem {
+    id: string;
+    name: string;
+    size: number;
+    status: string;
+    progress?: number;
+    createdAt?: string;
+}
+
+export interface BrowseRequest {
+    requestId: string;
+    action: "list-files" | "search";
+    query?: string;
+    offset?: number;
+    limit?: number;
+}
+
+export interface BrowseResponse {
+    requestId: string;
+    files: BrowseFileItem[];
+    total?: number;
+    hasMore?: boolean;
+    error?: string;
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+
+export interface DeviceNotification {
+    id: string;
+    title: string;
+    description?: string;
+    icon?: "download" | "play" | "info" | "warning" | "error";
+    action?: { label: string; transferPayload?: TransferPayload };
+    expiresAt?: number;
+}
+
+// ── Playback Queue ─────────────────────────────────────────────────────────
+
+export interface QueueItem {
+    id: string;
+    title: string;
+    url: string;
+    imdbId?: string;
+    mediaType?: "movie" | "show";
+    season?: number;
+    episode?: number;
+    subtitles?: Array<{ url: string; lang: string; name?: string }>;
+    addedBy: string; // device name
+    addedAt: number;
+}
+
 // ── Client → Server Messages ───────────────────────────────────────────────
 
 export type ClientMessage =
@@ -61,6 +115,14 @@ export type ClientMessage =
     | { type: "transfer"; target: string; playback: TransferPayload }
     | { type: "control-claim"; target: string }
     | { type: "control-release"; target: string }
+    | { type: "browse-request"; target: string; request: BrowseRequest }
+    | { type: "browse-response"; target: string; response: BrowseResponse }
+    | { type: "notify"; notification: DeviceNotification }
+    | { type: "queue-add"; item: Omit<QueueItem, "id" | "addedAt"> }
+    | { type: "queue-remove"; itemId: string }
+    | { type: "queue-clear" }
+    | { type: "queue-reorder"; itemIds: string[] }
+    | { type: "queue-get" }
     | { type: "ping" };
 
 export type RemoteAction =
@@ -87,6 +149,10 @@ export type ServerMessage =
     | { type: "now-playing-update"; deviceId: string; state: NowPlayingInfo | null }
     | { type: "control-claimed"; controllerId: string; controllerName: string }
     | { type: "control-released" }
+    | { type: "browse-request"; from: string; request: BrowseRequest }
+    | { type: "browse-response"; from: string; response: BrowseResponse }
+    | { type: "notification"; from: string; fromName: string; notification: DeviceNotification }
+    | { type: "queue-updated"; queue: QueueItem[] }
     | { type: "error"; message: string }
     | { type: "pong" };
 

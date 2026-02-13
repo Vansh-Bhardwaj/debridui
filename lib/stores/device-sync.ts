@@ -21,6 +21,10 @@ import type {
     ServerMessage,
     TransferPayload,
     RemoteAction,
+    BrowseRequest,
+    BrowseResponse,
+    DeviceNotification,
+    QueueItem,
 } from "@/lib/device-sync/protocol";
 import { detectDevice, getDeviceId } from "@/lib/device-sync/protocol";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -38,6 +42,12 @@ interface DeviceSyncState {
     activeTarget: string | null;
     /** When this device is being controlled by another device */
     controlledBy: { id: string; name: string } | null;
+    /** Remote browse results (controller receives these from the target) */
+    browseResults: Map<string, BrowseResponse>;
+    /** Shared playback queue (persisted in DO SQLite) */
+    queue: QueueItem[];
+    /** Pending browse request callbacks */
+    _browseCallbacks: Map<string, (response: BrowseResponse) => void>;
 
     // Actions
     connect: () => Promise<void>;
@@ -50,6 +60,32 @@ interface DeviceSyncState {
     setActiveTarget: (deviceId: string | null) => void;
     /** Attempt to play on the active target. Returns true if intercepted (remote), false if should play locally. */
     playOnTarget: (payload: TransferPayload) => boolean;
+
+    // Browse
+    /** Request file list or search from a target device. Returns a promise with the response. */
+    browseDevice: (targetId: string, request: Omit<BrowseRequest, "requestId">) => Promise<BrowseResponse>;
+    /** (Internal) Respond to a browse request from a controller (called on the target device) */
+    _respondToBrowse: (fromId: string, request: BrowseRequest) => void;
+    /** (Internal) Send browse response back via WebSocket */
+    _sendBrowseResponse: (targetId: string, response: BrowseResponse) => void;
+
+    // Notifications
+    /** Send a notification to all connected devices */
+    sendNotification: (notification: Omit<DeviceNotification, "id">) => void;
+
+    // Queue
+    /** Add an item to the shared playback queue */
+    queueAdd: (item: Omit<QueueItem, "id" | "addedAt">) => void;
+    /** Remove an item from the queue */
+    queueRemove: (itemId: string) => void;
+    /** Clear the entire queue */
+    queueClear: () => void;
+    /** Reorder the queue */
+    queueReorder: (itemIds: string[]) => void;
+    /** Get the next item from the queue (removes it) */
+    queuePlayNext: () => QueueItem | null;
+    /** Request the current queue from the server */
+    queueRefresh: () => void;
 
     // Internal
     _handleMessage: (msg: ServerMessage) => void;
@@ -238,6 +274,9 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
     enabled: false,
     activeTarget: null,
     controlledBy: null,
+    browseResults: new Map(),
+    queue: [],
+    _browseCallbacks: new Map(),
 
     setActiveTarget: (deviceId) => {
         const prev = get().activeTarget;
@@ -360,6 +399,89 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
         broadcast?.broadcastNowPlaying(state);
     },
 
+    // ── Browse ─────────────────────────────────────────────────────────
+
+    browseDevice: (targetId, request) => {
+        return new Promise<BrowseResponse>((resolve) => {
+            const requestId = crypto.randomUUID();
+            const callbacks = get()._browseCallbacks;
+
+            // Timeout after 15s
+            const timer = setTimeout(() => {
+                callbacks.delete(requestId);
+                resolve({ requestId, files: [], error: "Request timed out" });
+            }, 15000);
+
+            callbacks.set(requestId, (response) => {
+                clearTimeout(timer);
+                callbacks.delete(requestId);
+                resolve(response);
+            });
+
+            wsClient?.send({
+                type: "browse-request",
+                target: targetId,
+                request: { ...request, requestId },
+            });
+        });
+    },
+
+    _respondToBrowse: (fromId, request) => {
+        // This runs on the target device — it needs to actually fetch files from the debrid client
+        // Dispatch a custom event so the app component that has the auth context can handle it
+        window.dispatchEvent(
+            new CustomEvent<{ fromId: string; request: BrowseRequest }>(
+                "device-sync-browse",
+                { detail: { fromId, request } }
+            )
+        );
+    },
+
+    /** Send a browse response back to the requesting device (used by BrowseHandler) */
+    _sendBrowseResponse: (targetId: string, response: BrowseResponse) => {
+        wsClient?.send({ type: "browse-response", target: targetId, response });
+    },
+
+    // ── Notifications ──────────────────────────────────────────────────
+
+    sendNotification: (notification) => {
+        const id = crypto.randomUUID();
+        wsClient?.send({
+            type: "notify",
+            notification: { ...notification, id },
+        });
+    },
+
+    // ── Queue ──────────────────────────────────────────────────────────
+
+    queueAdd: (item) => {
+        wsClient?.send({ type: "queue-add", item });
+    },
+
+    queueRemove: (itemId) => {
+        wsClient?.send({ type: "queue-remove", itemId });
+    },
+
+    queueClear: () => {
+        wsClient?.send({ type: "queue-clear" });
+    },
+
+    queueReorder: (itemIds) => {
+        wsClient?.send({ type: "queue-reorder", itemIds });
+    },
+
+    queuePlayNext: () => {
+        const queue = get().queue;
+        if (queue.length === 0) return null;
+        const next = queue[0];
+        wsClient?.send({ type: "queue-remove", itemId: next.id });
+        return next;
+    },
+
+    queueRefresh: () => {
+        wsClient?.send({ type: "queue-get" });
+    },
+
     _handleMessage: (msg) => {
         switch (msg.type) {
             case "devices": {
@@ -405,6 +527,30 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                             : d
                     ),
                 }));
+
+                // Cross-device progress sync: write remote progress to localStorage
+                // so "Continue Watching" picks it up on this device
+                if (msg.state?.imdbId && msg.state.type && msg.state.duration > 0) {
+                    const np = msg.state;
+                    const percent = (np.progress / np.duration) * 100;
+                    if (percent >= 0.5 && percent <= 98) {
+                        const storageKey = np.type === "show" && np.season != null && np.episode != null
+                            ? `progress:${np.imdbId}:s${np.season}e${np.episode}`
+                            : `progress:${np.imdbId}`;
+                        try {
+                            const existing = localStorage.getItem(storageKey);
+                            const existingData = existing ? JSON.parse(existing) : null;
+                            // Only overwrite if remote is more recent
+                            if (!existingData || Date.now() > (existingData.updatedAt ?? 0)) {
+                                localStorage.setItem(storageKey, JSON.stringify({
+                                    progressSeconds: np.progress,
+                                    durationSeconds: np.duration,
+                                    updatedAt: Date.now(),
+                                }));
+                            }
+                        } catch { /* ignore quota errors */ }
+                    }
+                }
                 break;
             }
             case "command": {
@@ -425,6 +571,41 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
             }
             case "control-released": {
                 set({ controlledBy: null });
+                break;
+            }
+            case "browse-request": {
+                // A controller is asking us to list files / search
+                get()._respondToBrowse(msg.from, msg.request);
+                break;
+            }
+            case "browse-response": {
+                // We received file data back from a target device
+                const cb = get()._browseCallbacks.get(msg.response.requestId);
+                if (cb) cb(msg.response);
+                break;
+            }
+            case "notification": {
+                const n = msg.notification;
+                const toastFn =
+                    n.icon === "error" ? toast.error
+                    : n.icon === "warning" ? toast.warning
+                    : toast.info;
+                toastFn(`${n.title}`, {
+                    description: n.description ? `${msg.fromName}: ${n.description}` : `From ${msg.fromName}`,
+                    duration: 5000,
+                    action: n.action?.transferPayload ? {
+                        label: n.action.label,
+                        onClick: () => {
+                            if (n.action?.transferPayload) {
+                                handleTransfer(n.action.transferPayload, msg.fromName);
+                            }
+                        },
+                    } : undefined,
+                });
+                break;
+            }
+            case "queue-updated": {
+                set({ queue: msg.queue });
                 break;
             }
             case "error": {

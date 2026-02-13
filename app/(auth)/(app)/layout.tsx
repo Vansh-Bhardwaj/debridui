@@ -12,6 +12,7 @@ import { DevicePicker } from "@/components/device-sync/device-picker";
 import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
 import { DeviceSyncReporter } from "@/components/device-sync/device-sync-reporter";
 import { ControlledIndicator } from "@/components/device-sync/controlled-indicator";
+import { BrowseHandler } from "@/components/device-sync/browse-handler";
 import { initDeviceSync } from "@/lib/stores/device-sync";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
@@ -76,6 +77,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <VLCMiniPlayer />
                 <RemoteControlBanner />
                 <DeviceSyncReporter />
+                <BrowseHandler />
             </SearchProvider>
         </KeyboardShortcutsDialog>
     );
