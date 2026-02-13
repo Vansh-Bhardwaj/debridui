@@ -179,6 +179,26 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             }
             break;
         }
+        case "fullscreen": {
+            const video = document.querySelector("video");
+            if (video) {
+                // Try fullscreen on the video's container or the video itself
+                const container = video.closest("[data-preview]") ?? video;
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                } else {
+                    (container as HTMLElement).requestFullscreen?.().catch(() => {
+                        // Fallback to video element
+                        video.requestFullscreen?.().catch(() => {});
+                    });
+                }
+            } else {
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    useVLCStore.getState().fullscreen();
+                });
+            }
+            break;
+        }
     }
 }
 

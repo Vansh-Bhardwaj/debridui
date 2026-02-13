@@ -73,7 +73,8 @@ export type RemoteAction =
     | "next"
     | "previous"
     | "set-audio-track"
-    | "set-subtitle-track";
+    | "set-subtitle-track"
+    | "fullscreen";
 
 // ── Server → Client Messages ───────────────────────────────────────────────
 
@@ -122,24 +123,29 @@ export function detectDevice(): Pick<DeviceInfo, "id" | "name" | "deviceType" | 
     else if (ua.includes("Chrome/") && !ua.includes("Edg/")) browser = "Chrome";
     else if (ua.includes("Safari/") && !ua.includes("Chrome/")) browser = "Safari";
 
-    // Platform detection
-    if (ua.includes("Windows")) platform = "Windows";
-    else if (ua.includes("Macintosh") || ua.includes("Mac OS")) platform = "macOS";
-    else if (ua.includes("Linux") && !ua.includes("Android")) platform = "Linux";
-    else if (ua.includes("Android")) platform = "Android";
-    else if (ua.includes("iPhone") || ua.includes("iPad")) platform = "iOS";
-    else if (ua.includes("CrKey") || ua.includes("TV") || ua.includes("SmartTV")) platform = "TV";
-
-    // Device type detection
-    if (ua.includes("iPad") || (ua.includes("Android") && !ua.includes("Mobile"))) {
-        deviceType = "tablet";
-    } else if (ua.includes("Mobile") || ua.includes("iPhone") || ua.includes("Android")) {
-        deviceType = "mobile";
-    } else if (ua.includes("TV") || ua.includes("SmartTV") || ua.includes("CrKey")) {
+    // Platform detection — order matters: check iOS-specific strings before macOS,
+    // since iOS 13+ Safari with "Request Desktop Website" sends "Macintosh" in the UA.
+    if (ua.includes("iPhone")) { platform = "iOS"; deviceType = "mobile"; }
+    else if (ua.includes("iPad")) { platform = "iOS"; deviceType = "tablet"; }
+    else if (ua.includes("Android")) {
+        platform = "Android";
+        deviceType = ua.includes("Mobile") ? "mobile" : "tablet";
+    } else if (ua.includes("CrKey") || ua.includes("TV") || ua.includes("SmartTV")) {
+        platform = "TV";
         deviceType = "tv";
-    }
+    } else if (ua.includes("Windows")) { platform = "Windows"; }
+    else if (ua.includes("Macintosh") || ua.includes("Mac OS")) {
+        // iOS Safari 13+ masquerades as macOS — detect via touch support
+        if (navigator.maxTouchPoints > 1) {
+            platform = "iOS";
+            // Differentiate phone (small screen) from tablet (large screen)
+            deviceType = Math.min(screen.width, screen.height) < 768 ? "mobile" : "tablet";
+        } else {
+            platform = "macOS";
+        }
+    } else if (ua.includes("Linux")) { platform = "Linux"; }
 
-    // Use Client Hints if available
+    // Use Client Hints if available (Chromium-only — not on Safari/Firefox)
     const uaData = (navigator as NavigatorWithUAData).userAgentData;
     if (uaData) {
         if (uaData.mobile) deviceType = "mobile";
