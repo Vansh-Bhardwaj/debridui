@@ -114,7 +114,7 @@ export default function SignupForm() {
                                 </div>
                                 <span className="sr-only">DebridUI</span>
                             </Link>
-                            <h1 className="text-xl font-bold">Verify Your Email</h1>
+                            <h1 className="text-xl font-light">Verify Your Email</h1>
                             <p className="text-sm text-muted-foreground text-center">
                                 We sent a 6-digit code to <span className="font-medium text-foreground">{emailForVerification}</span>
                             </p>
@@ -166,7 +166,7 @@ export default function SignupForm() {
                             </div>
                             <span className="sr-only">DebridUI</span>
                         </Link>
-                        <h1 className="text-xl font-bold">Create an Account</h1>
+                        <h1 className="text-xl font-light">Create an Account</h1>
                         <p className="text-sm text-muted-foreground text-center">Sign up to get started</p>
                     </div>
 

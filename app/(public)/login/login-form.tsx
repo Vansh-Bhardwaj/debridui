@@ -75,7 +75,7 @@ export default function LoginForm() {
                         </div>
                         <span className="sr-only">DebridUI</span>
                     </Link>
-                    <h1 className="text-xl font-bold">Welcome Back</h1>
+                    <h1 className="text-xl font-light">Welcome Back</h1>
                     <p className="text-sm text-muted-foreground text-center">Sign in to your account</p>
                 </div>
 

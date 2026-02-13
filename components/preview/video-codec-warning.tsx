@@ -56,13 +56,13 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
             )}
         >
-            <div className="bg-yellow-500/10 backdrop-blur-md border border-yellow-500/20 rounded-xl p-4 shadow-2xl flex items-start gap-4">
-                <div className="bg-yellow-500/20 p-2 rounded-lg">
+            <div className="bg-yellow-500/10 backdrop-blur-md border border-yellow-500/20 rounded-sm p-4 shadow-2xl flex items-start gap-4">
+                <div className="bg-yellow-500/20 p-2 rounded-sm">
                     <Info className="h-5 w-5 text-yellow-500 shrink-0" />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-yellow-500">Audio/Codec compatibility issue</p>
+                    <p className="text-sm font-medium text-yellow-500">Audio/Codec compatibility issue</p>
                     <p className="text-xs text-white/80 mt-1 leading-relaxed">
                         This format may not play correctly in your browser. For full support, open in an external player.
                     </p>
@@ -70,21 +70,21 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
                         <Button
                             size="sm"
                             variant="secondary"
-                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            className="text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none"
                             onClick={() => onOpenInPlayer(MediaPlayer.VLC)}>
                             VLC
                         </Button>
                         <Button
                             size="sm"
                             variant="secondary"
-                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            className="text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none"
                             onClick={() => onOpenInPlayer(MediaPlayer.MPV)}>
                             MPV
                         </Button>
                         <Button
                             size="sm"
                             variant="secondary"
-                            className="h-7 text-[10px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none px-3"
+                            className="text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border-none"
                             onClick={() => onOpenInPlayer(MediaPlayer.IINA)}>
                             IINA
                         </Button>

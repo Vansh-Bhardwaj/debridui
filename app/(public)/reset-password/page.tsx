@@ -63,7 +63,7 @@ function ResetPasswordForm() {
         return (
             <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
                 <div className="w-full max-w-sm text-center">
-                    <h1 className="text-xl font-bold mb-2">Invalid Reset Link</h1>
+                    <h1 className="text-xl font-light mb-2">Invalid Reset Link</h1>
                     <p className="text-sm text-muted-foreground mb-6">
                         This password reset link is invalid or has expired.
                     </p>
@@ -83,7 +83,7 @@ function ResetPasswordForm() {
                         <div className="size-12 rounded-full bg-green-500/10 flex items-center justify-center">
                             <CheckCircle className="size-6 text-green-500" />
                         </div>
-                        <h1 className="text-xl font-bold">Password Reset</h1>
+                        <h1 className="text-xl font-light">Password Reset</h1>
                         <p className="text-sm text-muted-foreground">
                             Your password has been reset successfully.
                         </p>
@@ -111,7 +111,7 @@ function ResetPasswordForm() {
                             />
                         </div>
                     </Link>
-                    <h1 className="text-xl font-bold">Reset Password</h1>
+                    <h1 className="text-xl font-light">Reset Password</h1>
                     <p className="text-sm text-muted-foreground text-center">Enter your new password</p>
                 </div>
 

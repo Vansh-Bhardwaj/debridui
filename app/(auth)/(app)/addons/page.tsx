@@ -239,9 +239,9 @@ export default function AddonsPage() {
                                     onClick={() => handleAddAddon(preset.url)}
                                     disabled={validating}>
                                     {validating && !newAddonUrl.trim() ? (
-                                        <Loader2 className="size-3 animate-spin" />
+                                        <Loader2 className="size-4 animate-spin" />
                                     ) : (
-                                        <Puzzle className="size-3" />
+                                        <Puzzle className="size-4" />
                                     )}
                                     {preset.name}
                                 </Button>
@@ -264,7 +264,7 @@ export default function AddonsPage() {
                                     className="group flex flex-col gap-1 rounded-sm border border-border/50 px-3 py-2.5 hover:border-border hover:bg-muted/30 transition-colors">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium">{addon.name}</span>
-                                        <ExternalLink className="size-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                        <ExternalLink className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                                     </div>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         {addon.description}

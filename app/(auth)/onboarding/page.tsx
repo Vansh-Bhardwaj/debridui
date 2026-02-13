@@ -27,7 +27,7 @@ export default function OnboardingPage() {
                         </div>
                         <span className="sr-only">DebridUI</span>
                     </Link>
-                    <h1 className="text-xl font-bold">Setup Your Account</h1>
+                    <h1 className="text-xl font-light">Setup Your Account</h1>
                     <p className="text-sm text-muted-foreground text-center">
                         Add your debrid service account to get started
                     </p>

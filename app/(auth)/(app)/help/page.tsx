@@ -134,7 +134,7 @@ export default function HelpPage() {
                                 <h2 className="text-xl font-light">Keyboard Shortcuts</h2>
                             </div>
                             <p className="text-sm text-muted-foreground max-w-lg">
-                                Navigate faster with keyboard shortcuts. Press <kbd className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded border border-border bg-muted text-[10px] font-mono text-muted-foreground">?</kbd> anywhere to see the full list.
+                                Navigate faster with keyboard shortcuts. Press <kbd className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded border border-border/50 bg-muted text-[10px] font-mono text-muted-foreground">?</kbd> anywhere to see the full list.
                             </p>
                         </div>
 

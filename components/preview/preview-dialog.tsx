@@ -163,7 +163,7 @@ export function PreviewDialog() {
                 {/* Header */}
                 <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
                     <div className="flex-1 min-w-0 mr-4">
-                        <h2 className="text-lg font-semibold truncate">{activeTitle}</h2>
+                        <h2 className="text-lg font-light truncate">{activeTitle}</h2>
                         {/* Meta info: size, position */}
                         <div className="flex items-center gap-2 mt-1">
                             {!isSingleMode && activeFile.size && (

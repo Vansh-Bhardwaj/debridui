@@ -49,7 +49,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
 
 function Kbd({ children }: { children: string }) {
     return (
-        <kbd className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded border border-border bg-muted text-[11px] font-mono text-muted-foreground">
+        <kbd className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded border border-border/50 bg-muted text-[11px] font-mono text-muted-foreground">
             {children}
         </kbd>
     );

@@ -95,7 +95,7 @@ export function Gallery({ items, className }: GalleryProps) {
 
             {/* Screenshot Display */}
             <div
-                className="relative rounded-sm sm:rounded-lg border border-border/50 bg-muted/20 overflow-hidden touch-pan-y"
+                className="relative rounded-sm border border-border/50 bg-muted/20 overflow-hidden touch-pan-y"
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}>
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 pointer-events-none z-10" />

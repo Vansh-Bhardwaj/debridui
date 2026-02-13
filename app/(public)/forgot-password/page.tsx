@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
                         <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
                             <Mail className="size-6 text-primary" />
                         </div>
-                        <h1 className="text-xl font-bold">Check your email</h1>
+                        <h1 className="text-xl font-light">Check your email</h1>
                         <p className="text-sm text-muted-foreground">
                             We&apos;ve sent a password reset link to{" "}
                             <span className="font-medium text-foreground">{form.getValues("email")}</span>
@@ -84,7 +84,7 @@ export default function ForgotPasswordPage() {
                             />
                         </div>
                     </Link>
-                    <h1 className="text-xl font-bold">Forgot Password</h1>
+                    <h1 className="text-xl font-light">Forgot Password</h1>
                     <p className="text-sm text-muted-foreground text-center">
                         Enter your email and we&apos;ll send you a reset link
                     </p>

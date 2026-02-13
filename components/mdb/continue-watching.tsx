@@ -231,11 +231,11 @@ export function ContinueWatching() {
     if (loading) {
         return (
             <section className="mb-8">
-                <h2 className="text-lg font-semibold mb-4">Continue Watching</h2>
+                <h2 className="text-lg font-light mb-4">Continue Watching</h2>
                 <div className="flex gap-4 overflow-x-auto pb-2">
                     {[1, 2, 3].map((i) => (
                         <div key={i} className="flex-shrink-0 w-48 md:w-56">
-                            <Skeleton className="aspect-video rounded-lg" />
+                            <Skeleton className="aspect-video rounded-sm" />
                             <Skeleton className="h-4 mt-2 w-3/4" />
                         </div>
                     ))}
@@ -250,7 +250,7 @@ export function ContinueWatching() {
 
     return (
         <section className="mb-8">
-            <h2 className="text-lg font-semibold mb-4">Continue Watching</h2>
+            <h2 className="text-lg font-light mb-4">Continue Watching</h2>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
                 {items.map((item) => (
                     <ContinueWatchingItem

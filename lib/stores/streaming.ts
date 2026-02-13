@@ -48,7 +48,7 @@ interface StreamingState {
     preloadNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
 
     play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[]) => Promise<void>;
-    playSource: (source: AddonSource, title: string, options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }) => void;
+    playSource: (source: AddonSource, title: string, options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }) => Promise<void>;
     playNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
     playPreviousEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
     setEpisodeContext: (context: EpisodeContext | null) => void;
@@ -164,6 +164,28 @@ interface ShowSourceToastParams {
     onPlay: () => void;
 }
 
+/**
+ * Resolve an addon stream URL server-side by following redirect chains.
+ * Many addons (Torrentio, Comet, MediaFusion, etc.) return proxy URLs
+ * that redirect to the actual debrid download link.
+ * Returns the resolved URL, or the original URL if resolution fails.
+ */
+async function resolveStreamUrl(url: string): Promise<string> {
+    if (typeof window === "undefined") return url;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10_000);
+        const res = await fetch(`/api/addon/resolve?url=${encodeURIComponent(url)}`, {
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return url;
+        const data = (await res.json()) as { url?: string; status?: number };
+        if (data.url && (data.status ?? 999) < 400) return data.url;
+    } catch { /* resolve failed — use original */ }
+    return url;
+}
+
 function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay }: ShowSourceToastParams) {
     if (autoPlay && (isCached || allowUncached)) {
         dismissToast();
@@ -231,8 +253,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         return null;
     },
 
-    playSource: (source, title, options) => {
+    playSource: async (source, title, options) => {
         if (!source.url) return;
+
+        // Resolve addon proxy/redirect URL to the actual debrid download link
+        const playUrl = await resolveStreamUrl(source.url);
 
         const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
 
@@ -242,14 +267,14 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
         if (mediaPlayer === MediaPlayer.BROWSER) {
             usePreviewStore.getState().openSinglePreview({
-                url: source.url,
+                url: playUrl,
                 title: fileName,
                 fileType: FileType.VIDEO,
                 subtitles: options?.subtitles,
                 progressKey: options?.progressKey,
             });
         } else {
-            openInPlayer({ url: source.url, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
+            openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
         }
     },
 
