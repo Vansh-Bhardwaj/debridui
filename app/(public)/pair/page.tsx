@@ -4,10 +4,34 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { DeviceSyncClient } from "@/lib/device-sync/client";
 import { detectDevice } from "@/lib/device-sync/protocol";
-import type { ServerMessage, NowPlayingInfo, TransferPayload } from "@/lib/device-sync/protocol";
-import { Monitor, Smartphone, Tablet, Tv, Pause, Play, SkipForward, SkipBack, X, Volume2 } from "lucide-react";
+import type { ServerMessage, TransferPayload, TrackInfo } from "@/lib/device-sync/protocol";
+import {
+    Monitor,
+    Smartphone,
+    Tablet,
+    Tv,
+    Pause,
+    Play,
+    SkipForward,
+    SkipBack,
+    X,
+    Volume2,
+    VolumeX,
+    Check,
+    AudioLines,
+    Subtitles,
+    Maximize2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuPortal,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
+import { cn } from "@/lib/utils";
 
 function DeviceTypeIcon({ type, className }: { type: DeviceInfo["deviceType"]; className?: string }) {
     switch (type) {
@@ -53,6 +77,7 @@ function PairPageContent() {
     const [state, setState] = useState<ConnectionState>(isValid ? "connecting" : "invalid");
     const [devices, setDevices] = useState<DeviceInfo[]>([]);
     const [_playback, setPlayback] = useState<TransferPayload | null>(null);
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
     const clientRef = useRef<DeviceSyncClient | null>(null);
 
     const handleMessage = useCallback((msg: ServerMessage) => {
@@ -68,6 +93,7 @@ function PairPageContent() {
                 break;
             case "device-left":
                 setDevices((prev) => prev.filter((d) => d.id !== msg.deviceId));
+                setSelectedDeviceId((prev) => prev === msg.deviceId ? null : prev);
                 break;
             case "now-playing-update":
                 setDevices((prev) =>
@@ -80,7 +106,6 @@ function PairPageContent() {
                 break;
             case "transfer":
                 setPlayback(msg.playback);
-                // Open the transferred URL in a new tab or in the current page
                 if (msg.playback.url) {
                     window.open(msg.playback.url, "_blank");
                 }
@@ -102,7 +127,6 @@ function PairPageContent() {
 
         clientRef.current = client;
         client.connect().then(() => {
-            // If still connecting after 10s, show error
             setTimeout(() => {
                 if (client.status !== "connected") setState("error");
             }, 10000);
@@ -117,6 +141,9 @@ function PairPageContent() {
     const sendCommand = useCallback((targetId: string, action: RemoteAction, payload?: Record<string, unknown>) => {
         clientRef.current?.sendCommand(targetId, action, payload);
     }, []);
+
+    // Auto-select the first device if only one is online
+    const effectiveSelectedId = selectedDeviceId ?? (devices.length === 1 ? devices[0].id : null);
 
     if (state === "invalid") {
         return (
@@ -160,11 +187,12 @@ function PairPageContent() {
         );
     }
 
-    const playingDevice = devices.find((d) => d.isPlaying && d.nowPlaying);
+    const selectedDevice = effectiveSelectedId ? devices.find((d) => d.id === effectiveSelectedId) : null;
 
     return (
         <div className="min-h-screen bg-background p-4">
             <div className="mx-auto max-w-lg space-y-6 pt-8">
+                {/* Header */}
                 <div className="text-center space-y-1">
                     <h1 className="text-2xl font-light">DebridUI Remote</h1>
                     <p className="text-xs tracking-widest uppercase text-muted-foreground">
@@ -172,12 +200,11 @@ function PairPageContent() {
                     </p>
                 </div>
 
-                {/* Now playing card */}
-                {playingDevice?.nowPlaying && (
-                    <NowPlayingCard
-                        device={playingDevice}
-                        nowPlaying={playingDevice.nowPlaying}
-                        onCommand={(action, payload) => sendCommand(playingDevice.id, action, payload)}
+                {/* Full remote controller for selected device */}
+                {selectedDevice && (
+                    <RemoteController
+                        device={selectedDevice}
+                        onCommand={(action, payload) => sendCommand(selectedDevice.id, action, payload)}
                     />
                 )}
 
@@ -194,26 +221,42 @@ function PairPageContent() {
                         </div>
                     ) : (
                         devices.map((device) => (
-                            <div
+                            <button
                                 key={device.id}
-                                className="flex items-center gap-3 rounded-sm border border-border/50 p-3"
+                                onClick={() => setSelectedDeviceId(device.id)}
+                                className={cn(
+                                    "flex items-center gap-3 rounded-sm border p-3 w-full text-left transition-colors",
+                                    effectiveSelectedId === device.id
+                                        ? "border-primary/50 bg-primary/5"
+                                        : "border-border/50 hover:bg-muted/30"
+                                )}
                             >
                                 <DeviceTypeIcon
                                     type={device.deviceType}
-                                    className={`size-5 ${device.isPlaying ? "text-primary" : "text-muted-foreground"}`}
+                                    className={cn(
+                                        "size-5",
+                                        effectiveSelectedId === device.id ? "text-primary" : device.isPlaying ? "text-primary" : "text-muted-foreground"
+                                    )}
                                 />
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{device.name}</p>
+                                    <p className={cn(
+                                        "text-sm truncate",
+                                        effectiveSelectedId === device.id && "font-medium text-primary"
+                                    )}>
+                                        {device.name}
+                                    </p>
                                     {device.nowPlaying && (
                                         <p className="text-xs text-muted-foreground truncate">
                                             {device.nowPlaying.title}
                                         </p>
                                     )}
                                 </div>
-                                {device.isPlaying && (
+                                {effectiveSelectedId === device.id ? (
+                                    <Check className="size-4 text-primary shrink-0" />
+                                ) : device.isPlaying ? (
                                     <Volume2 className="size-3 text-primary animate-pulse shrink-0" />
-                                )}
-                            </div>
+                                ) : null}
+                            </button>
                         ))
                     )}
                 </div>
@@ -222,72 +265,123 @@ function PairPageContent() {
     );
 }
 
-function NowPlayingCard({
+// ── Full Remote Controller ─────────────────────────────────────────────────
+
+function RemoteController({
     device,
-    nowPlaying,
     onCommand,
 }: {
     device: DeviceInfo;
-    nowPlaying: NowPlayingInfo;
     onCommand: (action: RemoteAction, payload?: Record<string, unknown>) => void;
 }) {
-    const progressPercent =
-        nowPlaying.duration > 0
-            ? Math.min(100, (nowPlaying.progress / nowPlaying.duration) * 100)
-            : 0;
+    const nowPlaying = device.nowPlaying;
+    const [seekActive, setSeekActive] = useState(false);
+    const [seekValue, setSeekValue] = useState(0);
+    const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        onCommand("seek", { position: ratio * nowPlaying.duration });
-    };
+    const commitSeek = useCallback(
+        (position: number) => {
+            onCommand("seek", { position });
+            if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+            seekTimeoutRef.current = setTimeout(() => setSeekActive(false), 3000);
+        },
+        [onCommand],
+    );
+
+    if (!nowPlaying) {
+        return (
+            <div className="rounded-sm border border-border/50 p-6 text-center space-y-2">
+                <DeviceTypeIcon type={device.deviceType} className="size-6 text-primary mx-auto" />
+                <p className="text-sm font-medium">{device.name}</p>
+                <p className="text-xs text-muted-foreground">Nothing is playing on this device</p>
+            </div>
+        );
+    }
+
+    const isPlaying = !nowPlaying.paused;
+    const currentTime = nowPlaying.progress;
+    const duration = nowPlaying.duration;
+    const displayTime = seekActive ? seekValue : currentTime;
+    const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
+    const volume = nowPlaying.volume ?? 100;
+    const isMuted = volume === 0;
+    const audioTracks = nowPlaying.audioTracks ?? [];
+    const subtitleTracks = nowPlaying.subtitleTracks ?? [];
 
     return (
         <div className="rounded-sm border border-border/50 overflow-hidden">
-            <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <DeviceTypeIcon type={device.deviceType} className="size-3.5 text-primary" />
-                    <span>Playing on {device.name}</span>
+            <div className="p-5 space-y-5">
+                {/* Device + title */}
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <DeviceTypeIcon type={device.deviceType} className="size-3.5 text-primary" />
+                        <span>Playing on {device.name}</span>
+                    </div>
+                    <p className="text-lg font-light truncate">{nowPlaying.title}</p>
+                    {nowPlaying.type === "show" && nowPlaying.season && nowPlaying.episode && (
+                        <p className="text-xs text-muted-foreground">
+                            Season {nowPlaying.season} <span className="text-border">·</span> Episode {nowPlaying.episode}
+                        </p>
+                    )}
                 </div>
-
-                <p className="text-lg font-light truncate">{nowPlaying.title}</p>
 
                 {/* Seek bar */}
-                <div
-                    className="h-1.5 w-full rounded-full bg-muted/30 cursor-pointer group"
-                    onClick={handleSeek}
-                >
-                    <div
-                        className="h-full bg-primary rounded-full transition-all group-hover:bg-primary/80"
-                        style={{ width: `${progressPercent}%` }}
+                <div className="space-y-1.5">
+                    <input
+                        type="range"
+                        min={0}
+                        max={duration > 0 ? duration : 0}
+                        step={1}
+                        value={displayTime}
+                        aria-label="Seek"
+                        onChange={(e) => {
+                            setSeekActive(true);
+                            setSeekValue(Number(e.target.value));
+                        }}
+                        onMouseUp={() => commitSeek(seekValue)}
+                        onTouchEnd={() => commitSeek(seekValue)}
+                        className="w-full h-1.5 cursor-pointer appearance-none rounded-full accent-primary"
+                        style={{
+                            background: `linear-gradient(to right, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%)`,
+                        }}
                     />
+                    <div className="flex justify-between">
+                        <span className="text-[10px] tabular-nums text-muted-foreground">{formatTime(displayTime)}</span>
+                        <span className="text-[10px] tabular-nums text-muted-foreground">{formatTime(duration)}</span>
+                    </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{formatTime(nowPlaying.progress)}</span>
-                    <span>{formatTime(nowPlaying.duration)}</span>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center justify-center gap-2">
+                {/* Transport controls */}
+                <div className="flex items-center justify-center gap-3">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-10 text-sm tabular-nums font-medium"
+                        onClick={() => onCommand("seek", { position: Math.max(0, currentTime - 10) })}
+                        title="Rewind 10s"
+                    >
+                        -10
+                    </Button>
                     <Button
                         variant="ghost"
                         size="icon"
                         className="size-10"
                         onClick={() => onCommand("previous")}
+                        title="Previous"
                     >
-                        <SkipBack className="size-5" />
+                        <SkipBack className="size-5 fill-current" />
                     </Button>
                     <Button
-                        variant="default"
+                        variant="outline"
                         size="icon"
-                        className="size-12 rounded-full"
+                        className="size-14 rounded-full"
                         onClick={() => onCommand("toggle-pause")}
+                        title={isPlaying ? "Pause" : "Play"}
                     >
-                        {nowPlaying.paused ? (
-                            <Play className="size-6 ml-0.5" />
+                        {isPlaying ? (
+                            <Pause className="size-6 fill-current" />
                         ) : (
-                            <Pause className="size-6" />
+                            <Play className="size-6 fill-current ml-0.5" />
                         )}
                     </Button>
                     <Button
@@ -295,19 +389,132 @@ function NowPlayingCard({
                         size="icon"
                         className="size-10"
                         onClick={() => onCommand("next")}
+                        title="Next"
                     >
-                        <SkipForward className="size-5" />
+                        <SkipForward className="size-5 fill-current" />
                     </Button>
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="size-10"
-                        onClick={() => onCommand("stop")}
+                        className="size-10 text-sm tabular-nums font-medium"
+                        onClick={() => onCommand("seek", { position: Math.min(duration, currentTime + 10) })}
+                        title="Forward 10s"
                     >
-                        <X className="size-5" />
+                        +10
+                    </Button>
+                </div>
+
+                {/* Volume slider */}
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0"
+                        onClick={() => onCommand("volume", { level: isMuted ? 1 : 0 })}
+                        title={isMuted ? "Unmute" : "Mute"}
+                    >
+                        {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                    </Button>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={volume}
+                        aria-label="Volume"
+                        onChange={(e) => onCommand("volume", { level: Number(e.target.value) / 100 })}
+                        className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
+                        style={{
+                            background: `linear-gradient(to right, hsl(var(--primary)) ${volume}%, hsl(var(--muted)) ${volume}%)`,
+                        }}
+                    />
+                </div>
+
+                {/* Bottom row: tracks + fullscreen + stop */}
+                <div className="flex items-center justify-between border-t border-border/30 pt-4">
+                    <div className="flex items-center gap-1">
+                        <TrackDropdown
+                            icon={<AudioLines className="size-3.5" />}
+                            label="Audio"
+                            tracks={audioTracks}
+                            onSelect={(id) => onCommand("set-audio-track", { trackId: id })}
+                            showOff={false}
+                        />
+                        <TrackDropdown
+                            icon={<Subtitles className="size-3.5" />}
+                            label="Subtitles"
+                            tracks={subtitleTracks}
+                            onSelect={(id) => onCommand("set-subtitle-track", { trackId: id })}
+                            showOff={true}
+                        />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => onCommand("fullscreen")}
+                            title="Fullscreen"
+                        >
+                            <Maximize2 className="size-3.5" />
+                        </Button>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-muted-foreground hover:text-destructive gap-1.5"
+                        onClick={() => onCommand("stop")}
+                        title="Stop"
+                    >
+                        <X className="size-3.5" />
+                        Stop
                     </Button>
                 </div>
             </div>
         </div>
+    );
+}
+
+// ── Track Dropdown ─────────────────────────────────────────────────────────
+
+function TrackDropdown({
+    icon,
+    label,
+    tracks,
+    onSelect,
+    showOff,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    tracks: TrackInfo[];
+    onSelect: (id: number) => void;
+    showOff: boolean;
+}) {
+    if (tracks.length === 0 && !showOff) return null;
+    if (tracks.length === 0) return null;
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs">
+                    {icon}
+                    {label}
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuPortal>
+                <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
+                    {showOff && (
+                        <DropdownMenuItem onClick={() => onSelect(-1)}>Off</DropdownMenuItem>
+                    )}
+                    {tracks.map((t) => (
+                        <DropdownMenuItem
+                            key={t.id}
+                            onClick={() => onSelect(t.id)}
+                            className={cn(t.active && "text-primary font-medium")}
+                        >
+                            {t.name}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenuPortal>
+        </DropdownMenu>
     );
 }
