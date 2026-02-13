@@ -36,6 +36,8 @@ interface DeviceSyncState {
     enabled: boolean;
     /** The device ID currently selected as playback target (null = this device) */
     activeTarget: string | null;
+    /** When this device is being controlled by another device */
+    controlledBy: { id: string; name: string } | null;
 
     // Actions
     connect: () => Promise<void>;
@@ -152,6 +154,31 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             );
             break;
         }
+        case "set-audio-track": {
+            const trackId = payload?.trackId as number | undefined;
+            if (trackId === undefined) break;
+            // Audio track switching only supported via VLC
+            import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                useVLCStore.getState().setAudioTrack(trackId);
+            });
+            break;
+        }
+        case "set-subtitle-track": {
+            const trackId = payload?.trackId as number | undefined;
+            if (trackId === undefined) break;
+            const video = document.querySelector("video");
+            if (video) {
+                const tracks = video.textTracks;
+                for (let i = 0; i < tracks.length; i++) {
+                    tracks[i].mode = i === trackId ? "showing" : "hidden";
+                }
+            } else {
+                import("@/lib/stores/vlc").then(({ useVLCStore }) => {
+                    useVLCStore.getState().setSubtitleTrack(trackId);
+                });
+            }
+            break;
+        }
     }
 }
 
@@ -195,19 +222,28 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
     connectionStatus: "disconnected",
     enabled: false,
     activeTarget: null,
+    controlledBy: null,
 
     setActiveTarget: (deviceId) => {
         const prev = get().activeTarget;
         if (prev === deviceId) return;
+
+        // Release previous target
+        if (prev && wsClient) {
+            wsClient.send({ type: "control-release", target: prev });
+        }
+
         set({ activeTarget: deviceId });
 
-        if (deviceId) {
+        // Claim new target
+        if (deviceId && wsClient) {
+            wsClient.send({ type: "control-claim", target: deviceId });
             const target = get().devices.find((d) => d.id === deviceId);
             toast.info(`Playing on ${target?.name ?? "remote device"}`, {
                 description: "Content will play on the selected device",
                 duration: 2000,
             });
-        } else {
+        } else if (!deviceId) {
             toast.info("Playing on this device", { duration: 2000 });
         }
     },
@@ -362,6 +398,18 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
             }
             case "transfer": {
                 handleTransfer(msg.playback, msg.fromName);
+                break;
+            }
+            case "control-claimed": {
+                set({ controlledBy: { id: msg.controllerId, name: msg.controllerName } });
+                toast.info(`Controlled by ${msg.controllerName}`, {
+                    description: "This device is being used as a playback target",
+                    duration: 3000,
+                });
+                break;
+            }
+            case "control-released": {
+                set({ controlledBy: null });
                 break;
             }
             case "error": {

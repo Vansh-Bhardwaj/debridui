@@ -19,6 +19,12 @@ export interface DeviceInfo {
     lastSeen: number;
 }
 
+export interface TrackInfo {
+    id: number;
+    name: string;
+    active?: boolean;
+}
+
 export interface NowPlayingInfo {
     title: string;
     imdbId?: string;
@@ -29,6 +35,9 @@ export interface NowPlayingInfo {
     duration: number; // seconds
     paused: boolean;
     url?: string;
+    volume?: number; // 0-100
+    audioTracks?: TrackInfo[];
+    subtitleTracks?: TrackInfo[];
 }
 
 export interface TransferPayload {
@@ -50,6 +59,8 @@ export type ClientMessage =
     | { type: "now-playing"; state: NowPlayingInfo | null }
     | { type: "command"; target: string; action: RemoteAction; payload?: Record<string, unknown> }
     | { type: "transfer"; target: string; playback: TransferPayload }
+    | { type: "control-claim"; target: string }
+    | { type: "control-release"; target: string }
     | { type: "ping" };
 
 export type RemoteAction =
@@ -60,7 +71,9 @@ export type RemoteAction =
     | "volume"
     | "stop"
     | "next"
-    | "previous";
+    | "previous"
+    | "set-audio-track"
+    | "set-subtitle-track";
 
 // ── Server → Client Messages ───────────────────────────────────────────────
 
@@ -71,6 +84,8 @@ export type ServerMessage =
     | { type: "device-joined"; device: DeviceInfo }
     | { type: "device-left"; deviceId: string }
     | { type: "now-playing-update"; deviceId: string; state: NowPlayingInfo | null }
+    | { type: "control-claimed"; controllerId: string; controllerName: string }
+    | { type: "control-released" }
     | { type: "error"; message: string }
     | { type: "pong" };
 

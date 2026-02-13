@@ -39,6 +39,8 @@ type ClientMessage =
     | { type: "now-playing"; state: NowPlayingInfo | null }
     | { type: "command"; target: string; action: string; payload?: Record<string, unknown> }
     | { type: "transfer"; target: string; playback: TransferPayload }
+    | { type: "control-claim"; target: string }
+    | { type: "control-release"; target: string }
     | { type: "ping" };
 
 interface TransferPayload {
@@ -60,6 +62,8 @@ type ServerMessage =
     | { type: "device-joined"; device: DeviceInfo }
     | { type: "device-left"; deviceId: string }
     | { type: "now-playing-update"; deviceId: string; state: NowPlayingInfo | null }
+    | { type: "control-claimed"; controllerId: string; controllerName: string }
+    | { type: "control-released" }
     | { type: "error"; message: string }
     | { type: "pong" };
 
@@ -126,6 +130,10 @@ export class DeviceSync extends DurableObject<Env> {
                 break;
             case "transfer":
                 this.handleTransfer(ws, attachment, msg);
+                break;
+            case "control-claim":
+            case "control-release":
+                this.handleControl(ws, attachment, msg);
                 break;
             // "ping" is handled by auto-response (never reaches here)
         }
@@ -246,6 +254,28 @@ export class DeviceSync extends DurableObject<Env> {
             fromName: attachment.device?.name ?? "Unknown",
             playback: msg.playback,
         });
+    }
+
+    private handleControl(
+        ws: WebSocket,
+        attachment: { deviceId: string; device?: DeviceInfo },
+        msg: Extract<ClientMessage, { type: "control-claim" }> | Extract<ClientMessage, { type: "control-release" }>
+    ): void {
+        const targetWs = this.findWebSocket(msg.target);
+        if (!targetWs) {
+            this.send(ws, { type: "error", message: "Target device not found" });
+            return;
+        }
+
+        if (msg.type === "control-claim") {
+            this.send(targetWs, {
+                type: "control-claimed",
+                controllerId: attachment.deviceId,
+                controllerName: attachment.device?.name ?? "Unknown",
+            });
+        } else {
+            this.send(targetWs, { type: "control-released" });
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────

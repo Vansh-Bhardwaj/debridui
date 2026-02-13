@@ -12,7 +12,7 @@
 import { useEffect, useRef } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import { usePreviewStore } from "@/lib/stores/preview";
-import type { NowPlayingInfo } from "@/lib/device-sync/protocol";
+import type { NowPlayingInfo, TrackInfo } from "@/lib/device-sync/protocol";
 import { getVLCProgressSession } from "@/lib/vlc-progress";
 
 const REPORT_INTERVAL_MS = 5000; // Report every 5s during playback
@@ -36,6 +36,20 @@ export function DeviceSyncReporter() {
 
         const buildNowPlaying = (video: HTMLVideoElement): NowPlayingInfo | null => {
             if (!video.src && !video.currentSrc) return null;
+
+            // Gather subtitle tracks from <video> textTracks
+            const subtitleTracks: TrackInfo[] = [];
+            if (video.textTracks) {
+                for (let i = 0; i < video.textTracks.length; i++) {
+                    const t = video.textTracks[i];
+                    subtitleTracks.push({
+                        id: i,
+                        name: t.label || t.language || `Track ${i + 1}`,
+                        active: t.mode === "showing",
+                    });
+                }
+            }
+
             return {
                 title: directTitle || document.title || "Video",
                 imdbId: progressKey?.imdbId,
@@ -46,6 +60,8 @@ export function DeviceSyncReporter() {
                 duration: Math.round(video.duration || 0),
                 paused: video.paused,
                 url: video.currentSrc || video.src,
+                volume: Math.round(video.volume * 100),
+                subtitleTracks: subtitleTracks.length > 0 ? subtitleTracks : undefined,
             };
         };
 
@@ -114,7 +130,7 @@ export function DeviceSyncReporter() {
             if (vlcSession) {
                 import("@/lib/stores/vlc").then(({ useVLCStore }) => {
                     const vlcState = useVLCStore.getState();
-                    const { status, nowPlaying } = vlcState;
+                    const { status, nowPlaying, audioTracks, subtitleTracks } = vlcState;
                     if (status && status.length > 0) {
                         reportNowPlaying({
                             title: nowPlaying || "VLC Playback",
@@ -125,6 +141,15 @@ export function DeviceSyncReporter() {
                             progress: status.time,
                             duration: status.length,
                             paused: status.state === "paused",
+                            volume: Math.round((status.volume / 256) * 100),
+                            audioTracks: audioTracks.map((t) => ({
+                                id: t.id,
+                                name: t.name,
+                            })),
+                            subtitleTracks: subtitleTracks.map((t) => ({
+                                id: t.id,
+                                name: t.name,
+                            })),
                         });
                     }
                 });

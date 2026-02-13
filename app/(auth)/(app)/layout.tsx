@@ -11,6 +11,7 @@ import { VLCMiniPlayer } from "@/components/vlc-mini-player";
 import { DevicePicker } from "@/components/device-sync/device-picker";
 import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
 import { DeviceSyncReporter } from "@/components/device-sync/device-sync-reporter";
+import { ControlledIndicator } from "@/components/device-sync/controlled-indicator";
 import { initDeviceSync } from "@/lib/stores/device-sync";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/splash-screen";
@@ -55,6 +56,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarProvider>
                     <AppSidebar />
                     <SidebarInset className="overflow-x-hidden">
+                        <ControlledIndicator />
                         <header className="flex h-12 shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                             <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                                 <SidebarTrigger className="-ml-1 shrink-0" />
