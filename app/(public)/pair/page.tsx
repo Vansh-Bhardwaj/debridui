@@ -78,7 +78,7 @@ function PairPageContent() {
 
     const [state, setState] = useState<ConnectionState>(isValid ? "connecting" : "invalid");
     const [devices, setDevices] = useState<DeviceInfo[]>([]);
-    const [_playback, setPlayback] = useState<TransferPayload | null>(null);
+    const [, setPlayback] = useState<TransferPayload | null>(null);
     const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
     const [queue, setQueue] = useState<QueueItem[]>([]);
     const clientRef = useRef<DeviceSyncClient | null>(null);
@@ -203,7 +203,7 @@ function PairPageContent() {
         <div className="min-h-screen bg-background p-4">
             <div className="mx-auto max-w-lg space-y-6 pt-8">
                 {/* Header */}
-                <div className="text-center space-y-1">
+                <div className="text-center space-y-1 animate-in fade-in-0 slide-in-from-bottom-4" style={{ animationDuration: "600ms" }}>
                     <h1 className="text-2xl font-light">DebridUI Remote</h1>
                     <p className="text-xs tracking-widest uppercase text-muted-foreground">
                         Connected · {devices.length} device{devices.length !== 1 ? "s" : ""} online
@@ -295,7 +295,7 @@ function PairPageContent() {
                             {queue.map((item, i) => (
                                 <div
                                     key={item.id}
-                                    className="flex items-center gap-2 rounded-sm border border-border/50 px-2 py-1.5 group hover:bg-muted/30 transition-colors"
+                                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 group hover:bg-muted/30 transition-colors"
                                 >
                                     <span className="text-[10px] text-muted-foreground w-4 text-center shrink-0">
                                         {i + 1}
@@ -309,7 +309,7 @@ function PairPageContent() {
                                             )}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                         {effectiveSelectedId && (
                                             <Button
                                                 variant="ghost"
@@ -449,6 +449,7 @@ function RemoteController({
                         className="size-10 text-sm tabular-nums font-medium"
                         onClick={() => onCommand("seek", { position: Math.max(0, currentTime - 10) })}
                         title="Rewind 10s"
+                        aria-label="Rewind 10 seconds"
                     >
                         -10
                     </Button>
@@ -458,6 +459,7 @@ function RemoteController({
                         className="size-10"
                         onClick={() => onCommand("previous")}
                         title="Previous"
+                        aria-label="Previous"
                     >
                         <SkipBack className="size-5 fill-current" />
                     </Button>
@@ -467,6 +469,7 @@ function RemoteController({
                         className="size-14 rounded-full"
                         onClick={() => onCommand("toggle-pause")}
                         title={isPlaying ? "Pause" : "Play"}
+                        aria-label={isPlaying ? "Pause" : "Play"}
                     >
                         {isPlaying ? (
                             <Pause className="size-6 fill-current" />
@@ -480,6 +483,7 @@ function RemoteController({
                         className="size-10"
                         onClick={() => onCommand("next")}
                         title="Next"
+                        aria-label="Next"
                     >
                         <SkipForward className="size-5 fill-current" />
                     </Button>
@@ -489,6 +493,7 @@ function RemoteController({
                         className="size-10 text-sm tabular-nums font-medium"
                         onClick={() => onCommand("seek", { position: Math.min(duration, currentTime + 10) })}
                         title="Forward 10s"
+                        aria-label="Forward 10 seconds"
                     >
                         +10
                     </Button>
@@ -502,6 +507,7 @@ function RemoteController({
                         className="size-8 shrink-0"
                         onClick={() => onCommand("volume", { level: isMuted ? 1 : 0 })}
                         title={isMuted ? "Unmute" : "Mute"}
+                        aria-label={isMuted ? "Unmute" : "Mute"}
                     >
                         {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
                     </Button>
@@ -578,7 +584,6 @@ function TrackDropdown({
     onSelect: (id: number) => void;
     showOff: boolean;
 }) {
-    if (tracks.length === 0 && !showOff) return null;
     if (tracks.length === 0) return null;
 
     return (

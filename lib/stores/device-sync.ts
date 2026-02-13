@@ -485,17 +485,34 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
     _handleMessage: (msg) => {
         switch (msg.type) {
             case "devices": {
-                // Full device list from DO — replace local state
+                // Full device list from DO — replace local state.
+                // Deduplicate by name+deviceType, keeping the most recently seen entry.
+                // This handles phantom entries from iOS Safari (ITP clears localStorage,
+                // generating new deviceIds while old hibernated sockets linger).
                 const selfId = getDeviceId();
-                set({ devices: msg.devices.filter((d) => d.id !== selfId) });
+                const seen = new Map<string, DeviceInfo>();
+                for (const d of msg.devices) {
+                    if (d.id === selfId) continue;
+                    const key = `${d.name}::${d.deviceType}`;
+                    const existing = seen.get(key);
+                    if (!existing || d.lastSeen > existing.lastSeen) {
+                        seen.set(key, d);
+                    }
+                }
+                set({ devices: Array.from(seen.values()) });
                 break;
             }
             case "device-joined": {
                 const selfId = getDeviceId();
                 if (msg.device.id === selfId) break;
                 set((state) => ({
+                    // Filter out any existing entry with the same id OR same name+deviceType
+                    // (handles reconnection with a fresh deviceId from the same physical device)
                     devices: [
-                        ...state.devices.filter((d) => d.id !== msg.device.id),
+                        ...state.devices.filter((d) =>
+                            d.id !== msg.device.id &&
+                            !(d.name === msg.device.name && d.deviceType === msg.device.deviceType)
+                        ),
                         msg.device,
                     ],
                 }));

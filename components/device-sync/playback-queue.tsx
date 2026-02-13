@@ -10,13 +10,11 @@
 import { useEffect } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { QueueItem } from "@/lib/device-sync/protocol";
+import { usePreviewStore } from "@/lib/stores/preview";
+import { FileType } from "@/lib/types";
 import { ListMusic, X, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-function formatSize(_bytes: number): string {
-    return "";
-}
 
 interface PlaybackQueueProps {
     className?: string;
@@ -31,7 +29,6 @@ export function PlaybackQueue({ className, compact }: PlaybackQueueProps) {
     const queueRefresh = useDeviceSyncStore((s) => s.queueRefresh);
     const transferPlayback = useDeviceSyncStore((s) => s.transferPlayback);
     const activeTarget = useDeviceSyncStore((s) => s.activeTarget);
-    const thisDevice = useDeviceSyncStore((s) => s.thisDevice);
 
     // Refresh queue on mount
     useEffect(() => {
@@ -56,37 +53,30 @@ export function PlaybackQueue({ className, compact }: PlaybackQueueProps) {
             transferPlayback(activeTarget, payload);
         } else {
             // Play locally
-            import("@/lib/stores/preview").then(({ usePreviewStore }) => {
-                import("@/lib/types").then(({ FileType }) => {
-                    usePreviewStore.getState().openSinglePreview({
-                        url: payload.url,
-                        title: payload.title,
-                        fileType: FileType.VIDEO,
-                        subtitles: payload.subtitles?.map((s) => ({
-                            url: s.url,
-                            lang: s.lang,
-                            id: s.url,
-                            name: s.name,
-                        })),
-                        progressKey: payload.imdbId
-                            ? {
-                                  imdbId: payload.imdbId,
-                                  type: (payload.mediaType ?? "movie") as "movie" | "show",
-                                  season: payload.season,
-                                  episode: payload.episode,
-                              }
-                            : undefined,
-                    });
-                });
+            usePreviewStore.getState().openSinglePreview({
+                url: payload.url,
+                title: payload.title,
+                fileType: FileType.VIDEO,
+                subtitles: payload.subtitles?.map((s) => ({
+                    url: s.url,
+                    lang: s.lang,
+                    id: s.url,
+                    name: s.name,
+                })),
+                progressKey: payload.imdbId
+                    ? {
+                          imdbId: payload.imdbId,
+                          type: (payload.mediaType ?? "movie") as "movie" | "show",
+                          season: payload.season,
+                          episode: payload.episode,
+                      }
+                    : undefined,
             });
         }
 
         // Remove from queue after playing
         queueRemove(item.id);
     };
-
-    void formatSize;
-    void thisDevice;
 
     return (
         <div className={cn("space-y-2", className)}>
@@ -126,7 +116,7 @@ export function PlaybackQueue({ className, compact }: PlaybackQueueProps) {
                                 )}
                             </p>
                         </div>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <Button
                                 variant="ghost"
                                 size="icon"
