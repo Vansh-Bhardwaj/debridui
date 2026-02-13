@@ -2,7 +2,7 @@
 
 import { memo, useCallback } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
-import type { DeviceInfo, TransferPayload, RemoteAction } from "@/lib/device-sync/protocol";
+import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
 import {
     Monitor,
     Smartphone,
@@ -15,6 +15,7 @@ import {
     SkipBack,
     Cast,
     Link2,
+    Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,104 +45,61 @@ function DeviceIcon({ type, className }: { type: DeviceInfo["deviceType"]; class
     }
 }
 
-// ── Device Row ─────────────────────────────────────────────────────────────
+// ── Playback Controls (shown below the active target when it's playing) ───
 
-function DeviceRow({
+function PlaybackControls({
     device,
-    onTransfer,
     onCommand,
 }: {
     device: DeviceInfo;
-    onTransfer: (deviceId: string) => void;
     onCommand: (deviceId: string, action: RemoteAction) => void;
 }) {
+    if (!device.nowPlaying) return null;
+
     const progressPercent =
-        device.nowPlaying && device.nowPlaying.duration > 0
+        device.nowPlaying.duration > 0
             ? Math.round((device.nowPlaying.progress / device.nowPlaying.duration) * 100)
             : 0;
 
     return (
-        <div className="px-2 py-1.5">
-            <div className="flex items-center gap-2">
-                <DeviceIcon type={device.deviceType} className={device.isPlaying ? "text-primary" : "text-muted-foreground"} />
-                <div className="flex-1 min-w-0">
-                    <p className={cn("text-sm truncate", device.isPlaying && "text-primary font-medium")}>
-                        {device.name}
-                    </p>
-                    {device.nowPlaying && (
-                        <p className="text-xs text-muted-foreground truncate">
-                            {device.nowPlaying.title}
-                        </p>
-                    )}
-                </div>
-                {device.isPlaying && (
-                    <Volume2 className="size-3 text-primary animate-pulse" />
-                )}
+        <div className="px-2 pb-1.5 space-y-1">
+            <p className="text-xs text-muted-foreground truncate px-0.5">
+                {device.nowPlaying.title}
+            </p>
+            {/* Progress bar */}
+            <div className="h-1 w-full rounded-full bg-muted/50 overflow-hidden">
+                <div
+                    className="h-full bg-primary/70 rounded-full transition-all"
+                    style={{ width: `${progressPercent}%` }}
+                />
             </div>
-
-            {/* Playback controls (visible when device is playing) */}
-            {device.nowPlaying && (
-                <div className="mt-1.5 space-y-1">
-                    {/* Progress bar */}
-                    <div className="h-1 w-full rounded-full bg-muted/50 overflow-hidden">
-                        <div
-                            className="h-full bg-primary/70 rounded-full transition-all"
-                            style={{ width: `${progressPercent}%` }}
-                        />
-                    </div>
-
-                    {/* Controls */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-0.5">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-6"
-                                onClick={(e) => { e.stopPropagation(); onCommand(device.id, "previous"); }}
-                            >
-                                <SkipBack className="size-3" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-6"
-                                onClick={(e) => { e.stopPropagation(); onCommand(device.id, "toggle-pause"); }}
-                            >
-                                {device.nowPlaying.paused ? <Play className="size-3" /> : <Pause className="size-3" />}
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-6"
-                                onClick={(e) => { e.stopPropagation(); onCommand(device.id, "next"); }}
-                            >
-                                <SkipForward className="size-3" />
-                            </Button>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs px-2"
-                            onClick={(e) => { e.stopPropagation(); onTransfer(device.id); }}
-                        >
-                            Play here
-                        </Button>
-                    </div>
-                </div>
-            )}
-
-            {/* Transfer button (visible when device is idle) */}
-            {!device.nowPlaying && (
+            {/* Controls */}
+            <div className="flex items-center justify-center gap-1">
                 <Button
                     variant="ghost"
-                    size="sm"
-                    className="w-full mt-1 h-7 text-xs"
-                    onClick={(e) => { e.stopPropagation(); onTransfer(device.id); }}
+                    size="icon"
+                    className="size-7"
+                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "previous"); }}
                 >
-                    <Cast className="size-3 mr-1" />
-                    Play on this device
+                    <SkipBack className="size-3.5" />
                 </Button>
-            )}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "toggle-pause"); }}
+                >
+                    {device.nowPlaying.paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "next"); }}
+                >
+                    <SkipForward className="size-3.5" />
+                </Button>
+            </div>
         </div>
     );
 }
@@ -153,24 +111,15 @@ export const DevicePicker = memo(function DevicePicker() {
     const thisDevice = useDeviceSyncStore((s) => s.thisDevice);
     const connectionStatus = useDeviceSyncStore((s) => s.connectionStatus);
     const enabled = useDeviceSyncStore((s) => s.enabled);
+    const activeTarget = useDeviceSyncStore((s) => s.activeTarget);
+    const setActiveTarget = useDeviceSyncStore((s) => s.setActiveTarget);
     const sendCommand = useDeviceSyncStore((s) => s.sendCommand);
-    const transferPlayback = useDeviceSyncStore((s) => s.transferPlayback);
 
-    const handleTransfer = useCallback(
-        (targetDeviceId: string) => {
-            // Get current playback state from video element or VLC
-            const video = document.querySelector("video");
-            if (video && video.src) {
-                const payload: TransferPayload = {
-                    url: video.src,
-                    title: document.title || "Video",
-                    progressSeconds: Math.round(video.currentTime),
-                    durationSeconds: Math.round(video.duration || 0),
-                };
-                transferPlayback(targetDeviceId, payload);
-            }
+    const handleSelectDevice = useCallback(
+        (deviceId: string | null) => {
+            setActiveTarget(deviceId);
         },
-        [transferPlayback]
+        [setActiveTarget]
     );
 
     const handleCommand = useCallback(
@@ -180,12 +129,12 @@ export const DevicePicker = memo(function DevicePicker() {
         [sendCommand]
     );
 
-    // Don't render if feature is disabled or no sync URL configured
     if (!enabled) return null;
 
     const isConnected = connectionStatus === "connected";
     const hasDevices = devices.length > 0;
-    const playingDevice = devices.find((d) => d.isPlaying);
+    const isRemoteActive = activeTarget !== null;
+    const activeDevice = activeTarget ? devices.find((d) => d.id === activeTarget) : null;
 
     return (
         <DropdownMenu>
@@ -194,14 +143,20 @@ export const DevicePicker = memo(function DevicePicker() {
                     variant="ghost"
                     size="icon"
                     className="relative size-8"
-                    title={isConnected ? `${devices.length} device(s) online` : "Device sync"}
+                    title={
+                        isRemoteActive && activeDevice
+                            ? `Playing on ${activeDevice.name}`
+                            : isConnected
+                              ? `${devices.length} device(s) online`
+                              : "Device sync"
+                    }
                 >
-                    <Cast className="size-4" />
-                    {/* Online indicator dot */}
-                    {isConnected && hasDevices && (
+                    <Cast className={cn("size-4", isRemoteActive && "text-primary")} />
+                    {/* Indicator dot */}
+                    {isConnected && (
                         <span className={cn(
                             "absolute -top-0.5 -right-0.5 size-2 rounded-full",
-                            playingDevice ? "bg-primary animate-pulse" : "bg-green-500"
+                            isRemoteActive ? "bg-primary animate-pulse" : hasDevices ? "bg-green-500" : "bg-muted-foreground/50"
                         )} />
                     )}
                 </Button>
@@ -209,23 +164,29 @@ export const DevicePicker = memo(function DevicePicker() {
 
             <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground font-normal">
-                    Devices
+                    Play on
                 </DropdownMenuLabel>
 
-                {/* This device */}
-                <DropdownMenuItem className="focus:bg-transparent cursor-default">
-                    <div className="flex items-center gap-2">
-                        <DeviceIcon type={thisDevice.deviceType} className="text-primary" />
-                        <div>
-                            <p className="text-sm font-medium text-primary">{thisDevice.name}</p>
+                {/* This device (always first, selectable) */}
+                <DropdownMenuItem
+                    onSelect={() => handleSelectDevice(null)}
+                    className="cursor-pointer"
+                >
+                    <div className="flex items-center gap-2 flex-1">
+                        <DeviceIcon type={thisDevice.deviceType} className={!isRemoteActive ? "text-primary" : "text-muted-foreground"} />
+                        <div className="flex-1 min-w-0">
+                            <p className={cn("text-sm truncate", !isRemoteActive && "text-primary font-medium")}>
+                                {thisDevice.name}
+                            </p>
                             <p className="text-xs text-muted-foreground">This device</p>
                         </div>
+                        {!isRemoteActive && <Check className="size-4 text-primary shrink-0" />}
                     </div>
                 </DropdownMenuItem>
 
                 {/* Connection status */}
                 {!isConnected && (
-                    <DropdownMenuItem className="focus:bg-transparent cursor-default">
+                    <DropdownMenuItem className="focus:bg-transparent cursor-default" onSelect={(e) => e.preventDefault()}>
                         <p className="text-xs text-muted-foreground">
                             {connectionStatus === "connecting" ? "Connecting..." : "Disconnected"}
                         </p>
@@ -237,12 +198,38 @@ export const DevicePicker = memo(function DevicePicker() {
                     <>
                         <DropdownMenuSeparator />
                         {devices.map((device) => (
-                            <DeviceRow
-                                key={device.id}
-                                device={device}
-                                onTransfer={handleTransfer}
-                                onCommand={handleCommand}
-                            />
+                            <div key={device.id}>
+                                <DropdownMenuItem
+                                    onSelect={() => handleSelectDevice(device.id)}
+                                    className="cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <DeviceIcon
+                                            type={device.deviceType}
+                                            className={activeTarget === device.id ? "text-primary" : "text-muted-foreground"}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn("text-sm truncate", activeTarget === device.id && "text-primary font-medium")}>
+                                                {device.name}
+                                            </p>
+                                            {device.isPlaying && (
+                                                <div className="flex items-center gap-1">
+                                                    <Volume2 className="size-2.5 text-primary animate-pulse shrink-0" />
+                                                    <p className="text-xs text-muted-foreground truncate">
+                                                        {device.nowPlaying?.title}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {activeTarget === device.id && <Check className="size-4 text-primary shrink-0" />}
+                                    </div>
+                                </DropdownMenuItem>
+
+                                {/* Show playback controls under the active target if it's playing */}
+                                {activeTarget === device.id && device.nowPlaying && (
+                                    <PlaybackControls device={device} onCommand={handleCommand} />
+                                )}
+                            </div>
                         ))}
                     </>
                 )}
@@ -251,7 +238,7 @@ export const DevicePicker = memo(function DevicePicker() {
                 {isConnected && !hasDevices && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="focus:bg-transparent cursor-default">
+                        <DropdownMenuItem className="focus:bg-transparent cursor-default" onSelect={(e) => e.preventDefault()}>
                             <p className="text-xs text-muted-foreground text-center w-full py-1">
                                 No other devices online
                             </p>

@@ -62,6 +62,9 @@ export class DeviceSyncClient {
         }
 
         const url = new URL("/ws", this.options.syncUrl);
+        // WebSocket spec requires ws:// or wss:// scheme — some browsers
+        // (especially mobile Safari) reject https:// in the WebSocket constructor
+        url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
         url.searchParams.set("token", token);
         url.searchParams.set("deviceId", this.device.id);
 

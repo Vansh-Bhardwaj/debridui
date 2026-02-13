@@ -34,6 +34,8 @@ interface DeviceSyncState {
     devices: DeviceInfo[];
     connectionStatus: ConnectionStatus;
     enabled: boolean;
+    /** The device ID currently selected as playback target (null = this device) */
+    activeTarget: string | null;
 
     // Actions
     connect: () => Promise<void>;
@@ -42,6 +44,10 @@ interface DeviceSyncState {
     transferPlayback: (targetId: string, playback: TransferPayload) => void;
     reportNowPlaying: (state: NowPlayingInfo | null) => void;
     setEnabled: (enabled: boolean) => void;
+    /** Select a device as the playback target. null = play locally on this device. */
+    setActiveTarget: (deviceId: string | null) => void;
+    /** Attempt to play on the active target. Returns true if intercepted (remote), false if should play locally. */
+    playOnTarget: (payload: TransferPayload) => boolean;
 
     // Internal
     _handleMessage: (msg: ServerMessage) => void;
@@ -188,6 +194,42 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
     devices: [],
     connectionStatus: "disconnected",
     enabled: false,
+    activeTarget: null,
+
+    setActiveTarget: (deviceId) => {
+        const prev = get().activeTarget;
+        if (prev === deviceId) return;
+        set({ activeTarget: deviceId });
+
+        if (deviceId) {
+            const target = get().devices.find((d) => d.id === deviceId);
+            toast.info(`Playing on ${target?.name ?? "remote device"}`, {
+                description: "Content will play on the selected device",
+                duration: 2000,
+            });
+        } else {
+            toast.info("Playing on this device", { duration: 2000 });
+        }
+    },
+
+    playOnTarget: (payload) => {
+        const { activeTarget, enabled } = get();
+        if (!enabled || !activeTarget) return false;
+
+        // Verify target device is still online
+        const target = get().devices.find((d) => d.id === activeTarget);
+        if (!target) {
+            toast.error("Target device offline", {
+                description: "Switching playback to this device",
+                duration: 3000,
+            });
+            set({ activeTarget: null });
+            return false;
+        }
+
+        get().transferPlayback(activeTarget, payload);
+        return true;
+    },
 
     setEnabled: (enabled) => {
         if (get().enabled === enabled) return;
@@ -287,9 +329,17 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                 break;
             }
             case "device-left": {
+                const wasTarget = get().activeTarget === msg.deviceId;
                 set((state) => ({
                     devices: state.devices.filter((d) => d.id !== msg.deviceId),
+                    activeTarget: state.activeTarget === msg.deviceId ? null : state.activeTarget,
                 }));
+                if (wasTarget) {
+                    toast.info("Target device went offline", {
+                        description: "Switched playback to this device",
+                        duration: 3000,
+                    });
+                }
                 break;
             }
             case "now-playing-update": {

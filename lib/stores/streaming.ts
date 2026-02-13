@@ -259,11 +259,28 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // Resolve addon proxy/redirect URL to the actual debrid download link
         const playUrl = await resolveStreamUrl(source.url);
 
-        const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
-
         // Build descriptive filename with source metadata
         const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
         const fileName = meta ? `${title} [${meta}]` : title;
+
+        // ── Device Sync interception ───────────────────────────────────
+        // If a remote device is selected as the playback target, send
+        // the content there instead of playing locally.
+        const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
+        const syncStore = useDeviceSyncStore.getState();
+        if (syncStore.playOnTarget({
+            url: playUrl,
+            title: fileName,
+            imdbId: options?.progressKey?.imdbId,
+            mediaType: options?.progressKey?.type,
+            season: options?.progressKey?.season,
+            episode: options?.progressKey?.episode,
+            subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
+        })) {
+            return; // Sent to remote device — don't play locally
+        }
+
+        const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
 
         if (mediaPlayer === MediaPlayer.BROWSER) {
             usePreviewStore.getState().openSinglePreview({
