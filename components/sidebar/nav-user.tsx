@@ -62,7 +62,7 @@ export function NavUser() {
                                 <span className="truncate font-light">{user.name}</span>
                                 <span className="truncate text-xs text-muted-foreground">{user.email}</span>
                             </div>
-                            <ChevronsUpDown className="ml-auto size-4" />
+                            <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuPortal>
