@@ -1,4 +1,3 @@
-# Device Sync — Cross-Device Playback Control
 
 Spotify Connect-like feature for controlling playback across devices.
 
@@ -62,7 +61,8 @@ Worker deployed at: `https://debridui-sync.vanshbh7102-619.workers.dev`
 
 ### Secrets Set
 - `SYNC_TOKEN_SECRET` on both `debridui-sync` worker and `debridui` main worker
-- Same value: `VIexTNjfVlX68yamU1Dzk0fsjLmgeHJ4b1QG8+DGr4o=`
+- Generate with: `openssl rand -base64 32` (or PowerShell: `[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }) -as [byte[]])`)
+- Must be the same value on both workers
 
 ### Environment Variables
 - `NEXT_PUBLIC_DEVICE_SYNC_URL` = `https://debridui-sync.vanshbh7102-619.workers.dev` (in wrangler.jsonc + .env.local)
