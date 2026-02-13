@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { DeviceSyncClient } from "@/lib/device-sync/client";
 import { detectDevice } from "@/lib/device-sync/protocol";
@@ -32,6 +32,18 @@ function formatTime(seconds: number): string {
 type ConnectionState = "connecting" | "connected" | "error" | "invalid";
 
 export default function PairPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <PairPageContent />
+        </Suspense>
+    );
+}
+
+function PairPageContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get("token");
 
