@@ -880,6 +880,25 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return () => window.removeEventListener("keydown", handler);
     }, [ios, subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd]);
 
+    // Remote subtitle switching via device sync custom event
+    useEffect(() => {
+        const subHandler = (e: Event) => {
+            const trackId = (e as CustomEvent).detail?.trackId as number | undefined;
+            if (trackId !== undefined) {
+                setActiveSubtitleIndex(trackId);
+            }
+        };
+        const fsHandler = () => {
+            toggleFullscreen();
+        };
+        window.addEventListener("device-sync-subtitle", subHandler);
+        window.addEventListener("device-sync-fullscreen", fsHandler);
+        return () => {
+            window.removeEventListener("device-sync-subtitle", subHandler);
+            window.removeEventListener("device-sync-fullscreen", fsHandler);
+        };
+    }, [toggleFullscreen]);
+
     // Non-iOS: if we have subtitles, "warm up" the default subtitle by hitting our proxy first.
     // This allows the proxy to convert SRT->VTT before the browser starts video playback, similar to Stremio web.
     useEffect(() => {

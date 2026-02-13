@@ -168,10 +168,11 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             if (trackId === undefined) break;
             const video = document.querySelector("video");
             if (video) {
-                const tracks = video.textTracks;
-                for (let i = 0; i < tracks.length; i++) {
-                    tracks[i].mode = i === trackId ? "showing" : "hidden";
-                }
+                // The video preview uses a custom subtitle overlay (not native textTracks).
+                // Dispatch a custom event so the preview component can update its local state.
+                window.dispatchEvent(
+                    new CustomEvent("device-sync-subtitle", { detail: { trackId } })
+                );
             } else {
                 import("@/lib/stores/vlc").then(({ useVLCStore }) => {
                     useVLCStore.getState().setSubtitleTrack(trackId);
@@ -182,16 +183,10 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
         case "fullscreen": {
             const video = document.querySelector("video");
             if (video) {
-                // Try fullscreen on the video's container or the video itself
-                const container = video.closest("[data-preview]") ?? video;
-                if (document.fullscreenElement) {
-                    document.exitFullscreen().catch(() => {});
-                } else {
-                    (container as HTMLElement).requestFullscreen?.().catch(() => {
-                        // Fallback to video element
-                        video.requestFullscreen?.().catch(() => {});
-                    });
-                }
+                // Dispatch a custom event so the video preview component can handle fullscreen
+                // within its own user-gesture context (direct requestFullscreen from a
+                // WebSocket handler may be blocked by browsers)
+                window.dispatchEvent(new CustomEvent("device-sync-fullscreen"));
             } else {
                 import("@/lib/stores/vlc").then(({ useVLCStore }) => {
                     useVLCStore.getState().fullscreen();

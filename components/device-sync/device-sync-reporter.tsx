@@ -21,10 +21,11 @@ export function DeviceSyncReporter() {
     const enabled = useDeviceSyncStore((s) => s.enabled);
     const reportNowPlaying = useDeviceSyncStore((s) => s.reportNowPlaying);
 
-    // Get preview metadata for title/progress key
+    // Get preview metadata for title/progress key + subtitles
     const directTitle = usePreviewStore((s) => s.directTitle);
     const progressKey = usePreviewStore((s) => s.progressKey);
     const isOpen = usePreviewStore((s) => s.isOpen);
+    const directSubtitles = usePreviewStore((s) => s.directSubtitles);
 
     const lastReportRef = useRef(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,18 +38,12 @@ export function DeviceSyncReporter() {
         const buildNowPlaying = (video: HTMLVideoElement): NowPlayingInfo | null => {
             if (!video.src && !video.currentSrc) return null;
 
-            // Gather subtitle tracks from <video> textTracks
-            const subtitleTracks: TrackInfo[] = [];
-            if (video.textTracks) {
-                for (let i = 0; i < video.textTracks.length; i++) {
-                    const t = video.textTracks[i];
-                    subtitleTracks.push({
-                        id: i,
-                        name: t.label || t.language || `Track ${i + 1}`,
-                        active: t.mode === "showing",
-                    });
-                }
-            }
+            // Use subtitles from the preview store (custom overlay renderer)
+            // rather than native textTracks (which are disabled in our player)
+            const subtitleTracks: TrackInfo[] = directSubtitles.map((s, i) => ({
+                id: i,
+                name: s.name || s.lang || `Track ${i + 1}`,
+            }));
 
             return {
                 title: directTitle || document.title || "Video",
@@ -161,7 +156,7 @@ export function DeviceSyncReporter() {
             if (intervalRef.current) clearInterval(intervalRef.current);
             document.querySelectorAll("video").forEach(detachFromVideo);
         };
-    }, [enabled, reportNowPlaying, directTitle, progressKey]);
+    }, [enabled, reportNowPlaying, directTitle, progressKey, directSubtitles]);
 
     // ── Report null when preview closes ───────────────────────────────
 
