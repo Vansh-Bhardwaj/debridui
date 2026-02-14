@@ -125,26 +125,21 @@ type ServerMessage =
 // ── Durable Object ────────────────────────────────────────────────────────
 
 export class DeviceSync extends DurableObject<Env> {
-    private queueInitialized = false;
-
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
 
         ctx.setWebSocketAutoResponse(
             new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}')
         );
-    }
 
-    private async initQueue(): Promise<void> {
-        if (this.queueInitialized) return;
-        this.ctx.storage.sql.exec(`
+        // Initialize queue table once per DO instantiation (including post-hibernation wake)
+        ctx.storage.sql.exec(`
             CREATE TABLE IF NOT EXISTS queue (
                 id TEXT PRIMARY KEY,
                 data TEXT NOT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0
             )
         `);
-        this.queueInitialized = true;
     }
 
     async fetch(request: Request): Promise<Response> {
@@ -406,19 +401,14 @@ export class DeviceSync extends DurableObject<Env> {
         attachment: { deviceId: string; device?: DeviceInfo },
         msg: Extract<ClientMessage, { type: "queue-add" }>
     ): Promise<void> {
-        await this.initQueue();
         const id = crypto.randomUUID();
         const item: QueueItem = { ...msg.item, id, addedAt: Date.now() };
 
-        // Get max sort_order and append
-        const maxRow = this.ctx.storage.sql.exec("SELECT MAX(sort_order) as m FROM queue").toArray();
-        const maxOrder = (maxRow[0]?.m as number) ?? -1;
-
+        // Single INSERT with inline MAX subquery (1 SQLite op instead of 2)
         this.ctx.storage.sql.exec(
-            "INSERT INTO queue (id, data, sort_order) VALUES (?, ?, ?)",
+            "INSERT INTO queue (id, data, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM queue))",
             id,
-            JSON.stringify(item),
-            maxOrder + 1
+            JSON.stringify(item)
         );
 
         // Broadcast updated queue to all
@@ -427,32 +417,28 @@ export class DeviceSync extends DurableObject<Env> {
     }
 
     private async handleQueueRemove(msg: Extract<ClientMessage, { type: "queue-remove" }>): Promise<void> {
-        await this.initQueue();
         this.ctx.storage.sql.exec("DELETE FROM queue WHERE id = ?", msg.itemId);
         await this.broadcastQueue();
     }
 
     private async handleQueueClear(): Promise<void> {
-        await this.initQueue();
         this.ctx.storage.sql.exec("DELETE FROM queue");
         await this.broadcastQueue();
     }
 
     private async handleQueueReorder(msg: Extract<ClientMessage, { type: "queue-reorder" }>): Promise<void> {
-        await this.initQueue();
-        // Update sort_order based on the provided order
-        for (let i = 0; i < msg.itemIds.length; i++) {
-            this.ctx.storage.sql.exec(
-                "UPDATE queue SET sort_order = ? WHERE id = ?",
-                i,
-                msg.itemIds[i]
-            );
-        }
+        // Batch all updates in a single SQL statement (N → 1 write operation)
+        if (msg.itemIds.length === 0) return;
+        const cases = msg.itemIds.map((id, i) => `WHEN '${id}' THEN ${i}`).join(" ");
+        const placeholders = msg.itemIds.map(() => "?").join(",");
+        this.ctx.storage.sql.exec(
+            `UPDATE queue SET sort_order = CASE id ${cases} END WHERE id IN (${placeholders})`,
+            ...msg.itemIds
+        );
         await this.broadcastQueue();
     }
 
     private async handleQueueGet(ws: WebSocket): Promise<void> {
-        await this.initQueue();
         const queue = this.getQueue();
         this.send(ws, { type: "queue-updated", queue });
     }

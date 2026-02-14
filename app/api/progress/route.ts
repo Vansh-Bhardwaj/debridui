@@ -4,6 +4,29 @@ import { db } from "@/lib/db";
 import { userProgress } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+// ── Rate limiter (per-user, in-memory) ────────────────────────────────────
+// Protects Hyperdrive free tier (100K queries/day) from misbehaving clients.
+// Normal usage is 1 write/60s per user; allows burst of 5 writes/minute.
+const writeTimestamps = new Map<string, number[]>();
+const RATE_WINDOW_MS = 60_000;
+const MAX_WRITES_PER_WINDOW = 5;
+
+function isRateLimited(userId: string): boolean {
+    const now = Date.now();
+    const timestamps = writeTimestamps.get(userId) ?? [];
+    const recent = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
+    if (recent.length >= MAX_WRITES_PER_WINDOW) return true;
+    recent.push(now);
+    writeTimestamps.set(userId, recent);
+    // Periodic cleanup: remove expired entries when map grows large
+    if (writeTimestamps.size > 500) {
+        for (const [key, ts] of writeTimestamps) {
+            if (ts.every((t) => now - t >= RATE_WINDOW_MS)) writeTimestamps.delete(key);
+        }
+    }
+    return false;
+}
+
 // GET /api/progress - Fetch all user progress for continue watching
 export async function GET() {
     const { data: session } = await auth.getSession();
@@ -33,6 +56,11 @@ export async function POST(request: NextRequest) {
     const { data: session } = await auth.getSession();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Server-side rate limit: max 5 writes/minute per user
+    if (isRateLimited(session.user.id)) {
+        return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
     try {

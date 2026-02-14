@@ -22,6 +22,7 @@ import {
     Youtube,
     Star,
     BookOpen,
+    Smartphone,
     type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ const features: { category: string; icon: LucideIcon; items: { icon: LucideIcon;
         items: [
             { icon: MonitorPlay, label: "Built-in video player" },
             { icon: Timer, label: "Continue watching & resume" },
+            { icon: Smartphone, label: "Cross-device playback control" },
             { icon: Subtitles, label: "Subtitle integration" },
             { icon: Gamepad2, label: "VLC, IINA, MPV, Kodi & more" },
             { icon: Filter, label: "Smart addon filtering" },
@@ -161,7 +163,7 @@ export default function Home() {
                         />
 
                         <p className="text-muted-foreground text-xl sm:text-2xl md:text-3xl max-w-xl leading-snug font-light">
-                            A performance-focused debrid client with built-in playback, continue watching, and subtitle support — deployed at the edge.
+                            A performance-focused debrid client with built-in playback, cross-device sync, and subtitle support — deployed at the edge.
                         </p>
 
                         <div className="flex flex-wrap items-center gap-3 pt-4">
@@ -231,7 +233,7 @@ export default function Home() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
                         {[
                             { icon: MonitorPlay, label: "Built-in Player", desc: "Watch directly in your browser with codec detection" },
-                            { icon: Timer, label: "Continue Watching", desc: "Pick up where you left off on any device" },
+                            { icon: Smartphone, label: "Device Sync", desc: "Control playback across devices, Spotify Connect-style" },
                             { icon: Subtitles, label: "Subtitles", desc: "Fetched automatically from Stremio addons" },
                             { icon: Globe, label: "Edge Deployed", desc: "Cloudflare Workers for fast global access" },
                         ].map((item) => {

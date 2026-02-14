@@ -239,29 +239,48 @@ function handleTransfer(playback: TransferPayload, fromName: string) {
         duration: 3000,
     });
 
-    // Open in browser preview
-    import("@/lib/stores/preview").then(({ usePreviewStore }) => {
-        import("@/lib/types").then(({ FileType }) => {
-            usePreviewStore.getState().openSinglePreview({
-                url: playback.url,
-                title: playback.title,
-                fileType: FileType.VIDEO,
-                subtitles: playback.subtitles?.map((s) => ({
-                    url: s.url,
-                    lang: s.lang,
-                    id: s.url,
-                    name: s.name,
-                })),
-                progressKey: playback.imdbId
-                    ? {
-                          imdbId: playback.imdbId,
-                          type: (playback.mediaType ?? "movie") as "movie" | "show",
-                          season: playback.season,
-                          episode: playback.episode,
-                      }
-                    : undefined,
+    const progressKey = playback.imdbId
+        ? {
+              imdbId: playback.imdbId,
+              type: (playback.mediaType ?? "movie") as "movie" | "show",
+              season: playback.season,
+              episode: playback.episode,
+          }
+        : undefined;
+
+    // Respect the target device's media player preference
+    const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
+
+    import("@/lib/types").then(({ MediaPlayer, FileType }) => {
+        if (mediaPlayer !== MediaPlayer.BROWSER) {
+            // External player (VLC, IINA, etc.) — use openInPlayer which handles
+            // VLC bridge, progress sync, subtitle proxying, and resume
+            import("@/lib/utils/media-player").then(({ openInPlayer }) => {
+                openInPlayer({
+                    url: playback.url,
+                    fileName: playback.title,
+                    player: mediaPlayer,
+                    subtitles: playback.subtitles?.map((s) => s.url),
+                    progressKey,
+                });
             });
-        });
+        } else {
+            // Browser preview — existing behavior
+            import("@/lib/stores/preview").then(({ usePreviewStore }) => {
+                usePreviewStore.getState().openSinglePreview({
+                    url: playback.url,
+                    title: playback.title,
+                    fileType: FileType.VIDEO,
+                    subtitles: playback.subtitles?.map((s) => ({
+                        url: s.url,
+                        lang: s.lang,
+                        id: s.url,
+                        name: s.name,
+                    })),
+                    progressKey,
+                });
+            });
+        }
     });
 }
 

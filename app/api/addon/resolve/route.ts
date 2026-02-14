@@ -44,6 +44,8 @@ export async function GET(req: Request) {
             url: response.url,
             redirected: response.redirected,
             status: response.status,
+        }, {
+            headers: { "Cache-Control": "private, max-age=120" },
         });
     } catch {
         clearTimeout(timeout);
@@ -69,6 +71,8 @@ export async function GET(req: Request) {
                 url: response.url,
                 redirected: response.redirected,
                 status: response.status,
+            }, {
+                headers: { "Cache-Control": "private, max-age=120" },
             });
         } catch (error) {
             clearTimeout(timeout2);

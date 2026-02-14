@@ -84,7 +84,17 @@ const buildBuildCheck = (): BuildCheck => {
     };
 };
 
+// Cache DB connectivity check for 30s to avoid burning Hyperdrive queries
+// from external monitors or frequent status page polling
+let lastDbCheck: { result: DbCheck; timestamp: number } | null = null;
+const DB_CHECK_CACHE_TTL = 30_000;
+
 const buildDbCheck = async (): Promise<DbCheck> => {
+    // Return cached result if still fresh
+    if (lastDbCheck && Date.now() - lastDbCheck.timestamp < DB_CHECK_CACHE_TTL) {
+        return lastDbCheck.result;
+    }
+
     const connInfo = getDbConnectionInfo();
     const hasAnyConnection = connInfo.source !== "none" && connInfo.source !== "error";
 
@@ -103,22 +113,26 @@ const buildDbCheck = async (): Promise<DbCheck> => {
     try {
         await db.execute(sql`select 1 as ok`);
         const latencyMs = Date.now() - started;
-        return {
+        const result: DbCheck = {
             status: "ok",
             ok: true,
             host,
             port,
             latencyMs,
         };
+        lastDbCheck = { result, timestamp: Date.now() };
+        return result;
     } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown database error";
-        return {
+        const result: DbCheck = {
             status: "error",
             ok: false,
             host,
             port,
             error: message,
         };
+        lastDbCheck = { result, timestamp: Date.now() };
+        return result;
     }
 };
 

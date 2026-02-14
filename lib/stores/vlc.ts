@@ -323,8 +323,13 @@ export function initVLCAutoDetect() {
         });
 
         // Periodic re-detection when VLC is selected but extension not found
-        // Checks every 5s, stops once extension is detected
+        // Checks every 5s, stops after 5 minutes (60 retries) to avoid indefinite polling.
+        // The vlc-bridge-available event listener above will still catch late extension loads.
+        let retryCount = 0;
+        const MAX_RETRIES = 60; // 5 minutes at 5s intervals
         const retryDetect = () => {
+            if (retryCount >= MAX_RETRIES) return;
+            retryCount++;
             const player = useSettingsStore.getState().get("mediaPlayer");
             const store = useVLCStore.getState();
             if (player === MediaPlayer.VLC && !store.extensionDetected && !store.detecting) {
@@ -340,6 +345,8 @@ export function initVLCAutoDetect() {
                 setTimeout(retryDetect, 5000);
             }
         };
+        // Reset retry count when settings change (player toggled)
+        useSettingsStore.subscribe(() => { retryCount = 0; });
         setTimeout(retryDetect, 3000);
     }
 }

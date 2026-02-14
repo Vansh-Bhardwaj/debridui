@@ -2,7 +2,7 @@
 
 # DebridUI
 
-**A modern debrid client with built-in playback, continue watching, and subtitle support.**
+**A modern debrid client with built-in playback, cross-device sync, and subtitle support.**
 
 Installable as a PWA. Edge-deployed on Cloudflare Workers for fast, global access.
 
@@ -54,6 +54,7 @@ This fork extends the original with several additions:
 ### 🎥 Streaming & Playback
 - **Built-in video player** with codec detection and iOS fixes
 - **Continue watching** — resume where you left off, on any device
+- **Device Sync** — Spotify Connect-like cross-device playback control
 - **Subtitle integration** from Stremio addons via proxy
 - **External players** — VLC (Android/iOS/desktop), IINA, MPV, Kodi & more
 - **VLC browser extension** — send streams to VLC Desktop from the browser
@@ -78,7 +79,7 @@ This fork extends the original with several additions:
 <td width="50%" valign="top">
 
 ### 📂 File Management
-- **Multi-account** — Real-Debrid, TorBox, AllDebrid
+- **Multi-account** — Real-Debrid, TorBox, AllDebrid, Premiumize
 - **Advanced explorer** — tree view, search, sort, batch operations
 - **Drag & drop** — upload torrents, magnets, and files
 - **Web downloads** — direct URL downloads with progress
@@ -110,6 +111,7 @@ This fork extends the original with several additions:
 | Database driver | `postgres` (Postgres.js) via TCP proxy | `@neondatabase/serverless` |
 | Built-in video player | ✅ Codec detection, iOS fixes | External player links |
 | Continue watching | ✅ Cross-device progress | — |
+| Device Sync | ✅ Spotify Connect-like remote control | — |
 | PWA installable | ✅ Offline support, home screen | — |
 | Trakt watchlist/calendar | ✅ Synced with tabs | — |
 | Keyboard shortcuts | ✅ Press `?` for full list | — |
@@ -134,7 +136,7 @@ This fork extends the original with several additions:
 - [Bun](https://bun.sh) 1.2+ (or Node.js 20+)
 - [Neon](https://neon.tech) PostgreSQL database
 - [Cloudflare](https://cloudflare.com) account (for production)
-- A debrid account — Real-Debrid, TorBox, or AllDebrid
+- A debrid account — Real-Debrid, TorBox, AllDebrid, or Premiumize
 
 ### Quick Start
 
@@ -161,10 +163,13 @@ Open **[http://localhost:3000](http://localhost:3000)** and you're in.
 | `NEXT_PUBLIC_APP_URL` | ✅ | Public deployment URL |
 | `NEXT_PUBLIC_CORS_PROXY_URL` | ✅ | CORS proxy for addon API requests |
 | `NEXT_PUBLIC_TRAKT_CLIENT_ID` | ✅ | Trakt.tv API client ID |
+| `TRAKT_CLIENT_SECRET` | ✅ | Trakt.tv API client secret (set via `wrangler secret put`) |
 | `NEXT_PUBLIC_NEON_AUTH_URL` | ✅ | Neon Auth endpoint |
 | `NEON_AUTH_BASE_URL` | ✅ | Neon Auth base URL (server-side) |
 | `NEXT_PUBLIC_DISCORD_URL` | — | Discord invite link (shown in UI) |
 | `NEXT_PUBLIC_DISABLE_EMAIL_SIGNUP` | — | `"true"` to disable email signup |
+| `NEXT_PUBLIC_DEVICE_SYNC_URL` | — | Device Sync Worker URL for cross-device playback |
+| `SYNC_TOKEN_SECRET` | — | HMAC secret shared between main app and sync worker |
 
 See [`.env.example`](.env.example) for a full template.
 
@@ -209,6 +214,30 @@ Stremio addons require a CORS proxy. Deploy `proxy.worker.js` to Cloudflare Work
 
 </details>
 
+<details>
+<summary><strong>Device Sync Setup (Optional)</strong></summary>
+
+<br />
+
+Cross-device playback control (Spotify Connect-like). Requires a separate Cloudflare Worker:
+
+```bash
+cd device-sync-worker
+npm install
+npx wrangler deploy
+```
+
+1. Generate a shared secret: `openssl rand -base64 32`
+2. Set the secret on both workers:
+   - `npx wrangler secret put SYNC_TOKEN_SECRET` (in `device-sync-worker/`)
+   - `bunx wrangler secret put SYNC_TOKEN_SECRET` (in project root)
+3. Set `NEXT_PUBLIC_DEVICE_SYNC_URL` in `wrangler.jsonc` to your sync worker URL
+4. Enable Device Sync per-user in Settings → Integrations
+
+See [docs/DEVICE-SYNC.md](docs/DEVICE-SYNC.md) for full architecture details.
+
+</details>
+
 ---
 
 ## 🏗️ Architecture
@@ -217,8 +246,14 @@ Stremio addons require a CORS proxy. Deploy `proxy.worker.js` to Cloudflare Work
 ┌─────────────────────────────────────────────────┐
 │                    Browser                       │
 │  React 19 · Zustand · React Query (IDB cache)   │
-└────────────────────┬────────────────────────────┘
-                     │
+└────────┬───────────────────────────┬────────────┘
+         │                           │
+         │                ┌──────────▼──────────┐
+         │                │  Device Sync Worker │
+         │                │  Durable Objects +  │
+         │                │  WebSocket (WS)     │
+         │                └─────────────────────┘
+         │
          ┌───────────▼───────────┐
          │   Cloudflare Workers  │
          │   Next.js SSR + API   │
@@ -242,6 +277,7 @@ Stremio addons require a CORS proxy. Deploy `proxy.worker.js` to Cloudflare Work
 | **Database** | Drizzle ORM → Postgres.js (`prepare: false`) → Hyperdrive |
 | **Auth** | Neon Auth (cookie-based, Google OAuth) |
 | **Addons** | Stremio-compatible protocol with manifest-based filtering |
+| **Device Sync** | Cloudflare Durable Objects + WebSocket Hibernation |
 
 ---
 

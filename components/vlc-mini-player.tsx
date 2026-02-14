@@ -124,8 +124,26 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
 
+    const enabledAddons = addons
+        .filter((a: Addon) => a.enabled)
+        .sort((a: Addon, b: Addon) => a.order - b.order)
+        .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+    const hasEpisodes = !!episodeContext && enabledAddons.length > 0;
+
     // Auto-next episode when VLC finishes
     useAutoNextEpisode();
+
+    // Listen for remote device-sync episode navigation commands
+    useEffect(() => {
+        if (!hasEpisodes) return;
+        const handler = (e: Event) => {
+            const direction = (e as CustomEvent).detail?.direction;
+            if (direction === "next") playNextEpisode(enabledAddons);
+            else if (direction === "previous") playPreviousEpisode(enabledAddons);
+        };
+        window.addEventListener("device-sync-navigate", handler);
+        return () => window.removeEventListener("device-sync-navigate", handler);
+    }, [hasEpisodes, enabledAddons, playNextEpisode, playPreviousEpisode]);
 
     const isPlaying = status?.state === "playing";
     const isPaused = status?.state === "paused";
@@ -134,12 +152,6 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
     const volume = status ? Math.round((status.volume / 256) * 100) : 0;
     const isMuted = volume === 0;
     const isActive = isPlaying || isPaused;
-
-    const enabledAddons = addons
-        .filter((a: Addon) => a.enabled)
-        .sort((a: Addon, b: Addon) => a.order - b.order)
-        .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
-    const hasEpisodes = !!episodeContext && enabledAddons.length > 0;
 
     // Don't render if VLC has nothing playing 
     if (!vlcConnected || !isActive) return null;
