@@ -41,6 +41,8 @@ export function PreviewDialog() {
         directTitle,
         fileType,
         directSubtitles,
+        directStreamingLinks,
+        redirectChain,
         closePreview,
         navigateNext,
         navigatePrevious,
@@ -62,6 +64,36 @@ export function PreviewDialog() {
         enabled: isOpen && !isSingleMode && !!currentFile?.id,
         gcTime: 15 * 60 * 1000, // 15 minutes
     });
+
+    // In single mode (addon playback), try to fetch streaming links (HLS/transcoded)
+    // from the debrid provider using the resolved download URL or intermediate redirect URLs.
+    // This enables iOS Safari to use HLS instead of raw download URLs, and lets TorBox
+    // extract torrent_id/file_id from API URLs in the redirect chain.
+    const { data: fetchedStreamingLinks, isLoading: isFetchingStreamingLinks } = useQuery({
+        queryKey: ["preview", "streaming-links", directUrl, currentAccount.id],
+        queryFn: async () => {
+            // Try the resolved URL first
+            const links = await client.getStreamingLinksFromUrl(directUrl!);
+            if (Object.keys(links).length > 0) return links;
+
+            // Try each URL in the redirect chain (e.g. TorBox API URL with torrent_id)
+            if (redirectChain?.length) {
+                for (const chainUrl of redirectChain) {
+                    const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
+                    if (Object.keys(chainLinks).length > 0) return chainLinks;
+                }
+            }
+
+            return undefined;
+        },
+        enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 5 * 60 * 1000,
+        retry: false,
+    });
+
+    // Merge: store-provided streaming links take priority, then fetched
+    const singleStreamingLinks = directStreamingLinks ?? fetchedStreamingLinks;
 
     const handleNext = useCallback(() => {
         if (!isSingleMode) {
@@ -208,7 +240,7 @@ export function PreviewDialog() {
                         <div className="flex items-center justify-center h-full">
                             <Loader2 className="h-8 w-8 animate-spin" />
                         </div>
-                    ) : isSingleMode && !activeUrl ? (
+                    ) : isSingleMode && (!activeUrl || isFetchingStreamingLinks) ? (
                         <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
                             <Loader2 className="h-10 w-10 animate-spin" />
                             <p className="text-sm font-medium">Preparing playback…</p>
@@ -217,7 +249,7 @@ export function PreviewDialog() {
                         <PreviewContent
                             file={activeFile}
                             downloadUrl={activeUrl}
-                            streamingLinks={linkInfo?.streamingLinks}
+                            streamingLinks={isSingleMode ? singleStreamingLinks : linkInfo?.streamingLinks}
                             fileType={activeFileType}
                             subtitles={isSingleMode ? directSubtitles : undefined}
                             onNext={hasNav ? handleNext : undefined}

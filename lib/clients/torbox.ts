@@ -352,6 +352,27 @@ export default class TorBoxClient extends BaseClient {
         }
     }
 
+    /**
+     * Extract torrent_id and file_id from a TorBox API URL and fetch streaming links.
+     * TorBox download URLs follow the pattern:
+     *   https://api.torbox.app/v1/api/torrents/requestdl?token=...&torrent_id={id}&file_id={fid}&redirect=true
+     * These URLs appear in the redirect chain when addons (Torrentio, etc.) return
+     * TorBox download links.
+     */
+    override async getStreamingLinksFromUrl(url: string): Promise<Record<string, string>> {
+        try {
+            const parsed = new URL(url);
+            // Match TorBox API URLs
+            if (!parsed.hostname.includes("torbox")) return {};
+            const torrentId = parsed.searchParams.get("torrent_id");
+            const fileId = parsed.searchParams.get("file_id");
+            if (!torrentId || !fileId) return {};
+            return this.getStreamingLinks(`${torrentId}:${fileId}`);
+        } catch {
+            return {};
+        }
+    }
+
     private async getResolvedDownloadLink(torrentId: string, targetFileId: string): Promise<string> {
         return this.makeRequest<string>(
             `torrents/requestdl?token=${this.user.apiKey}&torrent_id=${torrentId}&file_id=${targetFileId}&redirect=false`,

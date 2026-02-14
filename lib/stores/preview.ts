@@ -14,6 +14,8 @@ interface SinglePreviewOptions {
     subtitles?: AddonSubtitle[];
     /** Progress tracking key for continue watching feature */
     progressKey?: ProgressKey;
+    /** Streaming links (HLS, transcoded) fetched from the debrid provider */
+    streamingLinks?: Record<string, string>;
 }
 
 interface PreviewState {
@@ -29,6 +31,9 @@ interface PreviewState {
     directTitle: string | null;
     fileType: FileType | null;
     directSubtitles: AddonSubtitle[];
+    directStreamingLinks: Record<string, string> | undefined;
+    /** Redirect chain URLs from addon URL resolution (for extracting debrid provider params) */
+    redirectChain: string[] | undefined;
     progressKey: ProgressKey | null;
 
     // Actions
@@ -36,6 +41,10 @@ interface PreviewState {
     openSinglePreview: (options: SinglePreviewOptions) => void;
     /** Update the URL for a single-mode preview (e.g. after resolving a redirect) */
     setDirectUrl: (url: string) => void;
+    /** Update streaming links for a single-mode preview */
+    setDirectStreamingLinks: (links: Record<string, string>) => void;
+    /** Set the redirect chain from URL resolution */
+    setRedirectChain: (chain: string[]) => void;
     closePreview: () => void;
     navigateNext: () => void;
     navigatePrevious: () => void;
@@ -53,6 +62,8 @@ const initialState = {
     directTitle: null,
     fileType: null,
     directSubtitles: [],
+    directStreamingLinks: undefined as Record<string, string> | undefined,
+    redirectChain: undefined as string[] | undefined,
     progressKey: null,
 };
 
@@ -78,7 +89,7 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
         });
     },
 
-    openSinglePreview: ({ url, title, fileType, subtitles, progressKey }) => {
+    openSinglePreview: ({ url, title, fileType, subtitles, progressKey, streamingLinks }) => {
         set({
             isOpen: true,
             mode: "single",
@@ -86,6 +97,8 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
             directTitle: title,
             fileType: fileType ?? null,
             directSubtitles: subtitles ?? [],
+            directStreamingLinks: streamingLinks,
+            redirectChain: undefined,
             progressKey: progressKey ?? null,
             currentFile: null,
             currentIndex: 0,
@@ -95,6 +108,8 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
     },
 
     setDirectUrl: (url) => set({ directUrl: url }),
+    setDirectStreamingLinks: (links) => set({ directStreamingLinks: links }),
+    setRedirectChain: (chain) => set({ redirectChain: chain }),
 
     closePreview: () => set(initialState),
 

@@ -135,6 +135,17 @@ export default abstract class BaseClient {
      */
     abstract getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>>;
 
+    /**
+     * Try to extract streaming links (HLS, transcoded) from a resolved download URL.
+     * Used in the addon streaming flow where we only have the final debrid CDN URL.
+     * Providers that support transcoding (e.g. RealDebrid) override this to extract
+     * the link ID from the URL and call their transcoding endpoint.
+     * Default: returns empty (no streaming links derivable from URL alone).
+     */
+    async getStreamingLinksFromUrl(_url: string): Promise<Record<string, string>> {
+        return {};
+    }
+
     // Web download methods
     abstract addWebDownloads(links: string[]): Promise<WebDownloadAddResult[]>;
     abstract getWebDownloadList(params: { offset: number; limit: number }): Promise<WebDownloadList>;

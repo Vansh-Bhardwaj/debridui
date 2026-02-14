@@ -170,8 +170,8 @@ interface ShowSourceToastParams {
  * that redirect to the actual debrid download link.
  * Returns the resolved URL, or the original URL if resolution fails.
  */
-async function resolveStreamUrl(url: string): Promise<string> {
-    if (typeof window === "undefined") return url;
+async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: string[] }> {
+    if (typeof window === "undefined") return { url };
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -179,11 +179,11 @@ async function resolveStreamUrl(url: string): Promise<string> {
             signal: controller.signal,
         });
         clearTimeout(timeout);
-        if (!res.ok) return url;
-        const data = (await res.json()) as { url?: string; status?: number };
-        if (data.url && (data.status ?? 999) < 400) return data.url;
+        if (!res.ok) return { url };
+        const data = (await res.json()) as { url?: string; status?: number; chain?: string[] };
+        if (data.url && (data.status ?? 999) < 400) return { url: data.url, chain: data.chain };
     } catch { /* resolve failed — use original */ }
-    return url;
+    return { url };
 }
 
 function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay }: ShowSourceToastParams) {
@@ -281,7 +281,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         }
 
         // Resolve addon proxy/redirect URL to the actual debrid download link
-        const playUrl = await resolveStreamUrl(source.url);
+        const resolved = await resolveStreamUrl(source.url);
+        const playUrl = resolved.url;
 
         if (syncStore.playOnTarget({
             url: playUrl,
@@ -299,7 +300,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
         if (mediaPlayer === MediaPlayer.BROWSER) {
             // Preview is already open in loading state — just update the URL
-            usePreviewStore.getState().setDirectUrl(playUrl);
+            // Also pass the redirect chain so streaming links can be resolved
+            // from intermediate debrid provider URLs (e.g. TorBox API with torrent_id)
+            const previewStore = usePreviewStore.getState();
+            previewStore.setDirectUrl(playUrl);
+            if (resolved.chain?.length) {
+                previewStore.setRedirectChain(resolved.chain);
+            }
         } else {
             openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
         }

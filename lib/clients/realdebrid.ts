@@ -322,6 +322,18 @@ export default class RealDebridClient extends BaseClient {
         }
     }
 
+    /**
+     * Extract the link ID from a Real-Debrid download URL and fetch transcoded
+     * streaming links (HLS/apple, liveMP4, DASH, h264WebM).
+     * RD download URLs follow the pattern:
+     *   https://XXXX.download.real-debrid.com/d/{linkId}/filename.ext
+     */
+    override async getStreamingLinksFromUrl(url: string): Promise<Record<string, string>> {
+        const match = url.match(/real-debrid\.com\/d\/([A-Za-z0-9]+)/);
+        if (!match?.[1]) return {};
+        return this.getStreamingLinks(match[1]);
+    }
+
     async getTorrentFiles(torrentId: string): Promise<DebridNode[]> {
         const torrent = await this.makeRequest<RDTorrentInfo>(`torrents/info/${torrentId}`);
 

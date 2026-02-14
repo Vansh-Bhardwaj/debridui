@@ -25,11 +25,15 @@ const _PROBLEMATIC_AUDIO_CODECS = ["ac3", "ac-3", "eac3", "e-ac-3", "dts", "true
 const PROBLEMATIC_EXTENSIONS = [".mkv", ".avi", ".wmv", ".flv"];
 
 /**
- * Check if we're on iOS
+ * Check if we're on iOS (including iPadOS 13+ which uses a macOS user agent)
  */
 export function isIOS(): boolean {
     if (typeof navigator === "undefined") return false;
-    return /iPhone|iPad|iPod/.test(navigator.userAgent);
+    // Standard iOS detection
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) return true;
+    // iPadOS 13+ sends macOS UA but has touch support
+    if (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) return true;
+    return false;
 }
 
 /**

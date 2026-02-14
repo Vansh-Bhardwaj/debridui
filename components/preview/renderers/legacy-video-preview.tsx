@@ -37,7 +37,11 @@ interface SubtitleCue {
 /** iOS Safari requires user gesture to start playback and often requires Range request support from the server. */
 function isIOS(): boolean {
     if (typeof navigator === "undefined") return false;
-    return /iPhone|iPad|iPod/.test(navigator.userAgent);
+    // Standard iOS detection
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) return true;
+    // iPadOS 13+ sends macOS UA but has touch support
+    if (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) return true;
+    return false;
 }
 
 function normalizeLangCode(code?: string | null): string | null {
@@ -195,7 +199,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
     const [showLoadingHint, setShowLoadingHint] = useState(false);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [canStartPlayback, setCanStartPlayback] = useState(() => ios);
+    const [canStartPlayback, setCanStartPlayback] = useState(false);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
     const [subtitleSize, setSubtitleSize] = useState(24);
@@ -247,8 +251,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
 
     // Suppress warning if we're using a transcoded stream
-    // On iOS, if we have an 'apple' or 'native' link, it's an HLS/m3u8 stream
-    const isHls = ios && (!!streamingLinks?.apple || !!streamingLinks?.native);
+    // Check if we have an HLS stream available
+    const isHls = !!streamingLinks?.apple;
     const shouldShowWarning = hasCodecIssue && !isHls && !isUsingTranscodedStream;
 
     const openInExternalPlayer = useCallback(
@@ -261,7 +265,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         [downloadUrl, file.name]
     );
 
-    const [iosDidStartPlayback, setIosDidStartPlayback] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -318,7 +321,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         // Auto-enable subtitle track matching user's preferred language
-        if (!ios && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
+        if (subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
             const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
             const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
@@ -328,11 +331,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         onLoad?.();
-    }, [onLoad, startFromSeconds, initialProgress, subtitles, ios, activeSubtitleIndex, preferredSubLang]);
+    }, [onLoad, startFromSeconds, initialProgress, subtitles, activeSubtitleIndex, preferredSubLang]);
 
     // Watch for subtitles arriving later (e.g. from async fetch)
     useEffect(() => {
-        if (!ios && subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
+        if (subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
             const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
             const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
@@ -340,7 +343,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setActiveSubtitleIndex(bestIndex);
             }
         }
-    }, [ios, subtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
+    }, [subtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
 
     const handleError = useCallback(() => {
         setIsLoading(false);
@@ -367,9 +370,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 if (video) {
                     video.src = transcodedUrl;
                     video.load();
-                    if (!ios) {
-                        video.play().catch(() => {});
-                    }
+                    video.play().catch(() => {});
                 }
                 return;
             }
@@ -391,7 +392,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         if (video) {
                             video.src = resolvedUrl;
                             video.load();
-                            if (!ios) video.play().catch(() => {});
+                            video.play().catch(() => {});
                         }
                         return;
                     }
@@ -425,7 +426,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             duration: 5000,
         });
         onError?.(new Error(errorMessage));
-    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, ios, downloadUrl]);
+    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl]);
 
     const handleTimeUpdate = useCallback(() => {
         const el = videoRef.current;
@@ -578,10 +579,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [selectedAudioIndex, audioTrackCount]);
 
-    // Sync basic media state for custom controls (non-iOS).
+    // Sync basic media state for custom controls.
     useEffect(() => {
         const video = videoRef.current;
-        if (!video || ios) return;
+        if (!video) return;
 
         const onPlay = () => {
             setIsPlaying(true);
@@ -651,7 +652,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
         };
-    }, [ios, duration, progressKey, updateProgress, forceSync, markCompleted, onNext, scrobble]);
+    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, scrobble]);
 
 
     // Keep fullscreen state in sync
@@ -686,7 +687,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, []);
 
     useEffect(() => {
-        if (ios) return;
         const container = containerRef.current;
         if (!container) return;
 
@@ -704,7 +704,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             container.removeEventListener("touchstart", handleActivity);
             container.removeEventListener("click", handleActivity);
         };
-    }, [ios, resetControlsTimeout]);
+    }, [resetControlsTimeout]);
 
     const togglePlay = useCallback(() => {
         const el = videoRef.current;
@@ -767,9 +767,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
 
-    // When subtitle selection changes (non-iOS), toggle textTracks modes (also disables embedded tracks).
+    // When subtitle selection changes, toggle textTracks modes (also disables embedded tracks).
     useEffect(() => {
-        if (ios) return;
         const el = videoRef.current;
         if (!el) return;
         const tracks = el.textTracks;
@@ -792,7 +791,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 activated = true;
             }
         }
-    }, [activeSubtitleIndex, ios, subtitles]);
+    }, [activeSubtitleIndex, subtitles]);
 
     const formatTime = (value: number): string => {
         if (!Number.isFinite(value) || value < 0) return "0:00";
@@ -805,10 +804,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
     };
 
-    // iOS: start loading timeout when video starts loading; show hint if it never reaches canplay
+    // Start loading timeout when video starts loading; show hint if it never reaches canplay
     useEffect(() => {
         const el = videoRef.current;
-        if (!el || !ios) return;
+        if (!el) return;
 
         const onLoadStart = () => {
             if (loadingTimeoutRef.current) return;
@@ -825,20 +824,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 loadingTimeoutRef.current = null;
             }
         };
-    }, [ios]);
+    }, []);
 
     const handleIosTapToPlay = useCallback(() => {
         setIosTapToPlay(false);
-        setIosDidStartPlayback(true);
         videoRef.current?.play();
     }, []);
 
-    // Keyboard shortcuts (non-iOS) - YouTube-style controls:
+    // Keyboard shortcuts - YouTube-style controls:
     // Space/K: play/pause | Arrow Left/Right: ±5s | J/L: ±10s | ,/.: ±0.5s frame-step (paused)
     // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles | [/]: speed
     useEffect(() => {
-        if (ios) return;
-
         const handler = (event: KeyboardEvent) => {
             const active = document.activeElement;
             // Skip if user is typing in a text input (but not range/seekbar)
@@ -959,7 +955,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [ios, subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -980,14 +976,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, [toggleFullscreen]);
 
-    // Non-iOS: if we have subtitles, "warm up" the default subtitle by hitting our proxy first.
+    // If we have subtitles, "warm up" the default subtitle by hitting our proxy first.
     // This allows the proxy to convert SRT->VTT before the browser starts video playback, similar to Stremio web.
     useEffect(() => {
-        if (ios) {
-            setCanStartPlayback(true);
-            return;
-        }
-
         const first = subtitles?.[0];
         if (!first?.url) {
             setCanStartPlayback(true);
@@ -1021,7 +1012,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             clearTimeout(timeoutId);
             controller.abort();
         };
-    }, [ios, subtitles]);
+    }, [subtitles]);
 
     // Load addon subtitles and parse cues for manual overlay rendering.
     useEffect(() => {
@@ -1030,8 +1021,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setParsedCues([]);
             return;
         }
-        if (ios && !iosDidStartPlayback) return;
-        if (!ios && !canStartPlayback) return;
+        if (!canStartPlayback) return;
 
         const controller = new AbortController();
 
@@ -1105,11 +1095,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         void run();
         return () => controller.abort();
-    }, [ios, iosDidStartPlayback, canStartPlayback, subtitles]);
+    }, [canStartPlayback, subtitles]);
 
     // Sync active cue text for manual overlay (bypasses Windows OS ::cue style override)
     useEffect(() => {
-        if (ios || activeSubtitleIndex < 0) {
+        if (activeSubtitleIndex < 0) {
             setActiveCueText("");
             return;
         }
@@ -1121,7 +1111,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         // Find the cue that matches currentTime
         const activeCue = cues.find((c) => currentTime >= c.start && currentTime < c.end);
         setActiveCueText(activeCue?.text ?? "");
-    }, [ios, activeSubtitleIndex, parsedCues, currentTime]);
+    }, [activeSubtitleIndex, parsedCues, currentTime]);
 
     // iOS: ensure playsinline (and webkit prefix for older Safari)
     useEffect(() => {
@@ -1157,7 +1147,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 if (transcodedUrl && videoRef.current) {
                                     videoRef.current.src = transcodedUrl;
                                     videoRef.current.load();
-                                    if (!ios) videoRef.current.play().catch(() => {});
+                                    videoRef.current.play().catch(() => {});
                                 }
                             }}
                         >
@@ -1171,10 +1161,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <video
                         ref={videoRef}
                         src={canStartPlayback ? finalUrl : undefined}
-                        controls={ios}
-                        autoPlay={!ios && canStartPlayback}
+                        autoPlay={canStartPlayback && !iosTapToPlay}
                         playsInline
-                        preload={ios && !isHls && !isUsingTranscodedStream ? "none" : "metadata"}
+                        preload="metadata"
                         crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black"
                         style={{ maxHeight: "100%" }}
@@ -1192,7 +1181,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
 
                     {/* Big Center Play/Pause Overlay */}
-                    {!ios && !isLoading && (
+                    {!isLoading && (
                         <div
                             className={`absolute inset-0 flex items-center justify-center transition-all duration-300 z-25 pointer-events-none ${(!isPlaying || showControls) ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}
                         >
@@ -1231,16 +1220,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onOpenInPlayer={openInExternalPlayer}
                     />
 
-                    {/* Non-iOS: brief "preparing subtitles" gate (proxy conversion) */}
-                    {!ios && !canStartPlayback && (
+                    {/* Brief "preparing subtitles" gate (proxy conversion) */}
+                    {!canStartPlayback && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60 text-white z-40">
                             <Loader2 className="h-10 w-10 animate-spin" />
                             <p className="text-sm font-medium">Preparing subtitles…</p>
                         </div>
                     )}
 
-                    {/* Manual subtitle overlay (bypasses Windows OS ::cue style override) */}
-                    {!ios && activeCueText && (
+                    {/* Manual subtitle overlay */}
+                    {activeCueText && (
                         <div
                             className="debridui-subtitle-overlay pointer-events-none absolute inset-x-0 z-15 flex justify-center px-4"
                             style={{ bottom: `${subtitlePosition}px` }}
@@ -1253,10 +1242,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
-                    {/* Custom control bar (non-iOS) */}
-                    {!ios && (
-                        <div
-                            className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
+                    {/* Custom control bar */}
+                    <div
+                        className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
                             <div className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
                                 {/* Seek bar */}
                                 <div className="group/seekbar relative flex items-center gap-3">
@@ -1605,7 +1593,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 </div>
                             </div>
                         </div>
-                    )}
 
                     {/* iOS: tap-to-play overlay so playback runs in user gesture context */}
                     {ios && iosTapToPlay && (
@@ -1625,42 +1612,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </button>
                     )}
 
-                    {/* iOS: if loading takes too long, stream may not support Range requests or codec is unsupported */}
-                    {ios && showLoadingHint && (
+                    {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
+                    {showLoadingHint && (
                         <div className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">
                                 {hasCodecIssue 
-                                    ? "This video format (MKV/AC3/DTS) isn't supported on iOS Safari."
-                                    : "The stream may not work in Safari."}
+                                    ? "This video format (MKV/AC3/DTS) may not be supported by your browser."
+                                    : "The stream may not be compatible with your browser."}
                             </p>
-                            <p className="mb-3 text-white/70">Open with an external player app:</p>
+                            <p className="mb-3 text-white/70">Try an external player app:</p>
                             <div className="flex flex-wrap justify-center gap-3">
-                                <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
-                                    onClick={() => openInExternalPlayer(MediaPlayer.VLC)}>
-                                    <ExternalLink className="h-3 w-3" />
-                                    VLC
-                                </button>
-                                <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition-colors"
-                                    onClick={() => openInExternalPlayer(MediaPlayer.INFUSE)}>
-                                    <ExternalLink className="h-3 w-3" />
-                                    Infuse
-                                </button>
+                                {Object.values(MediaPlayer)
+                                    .filter((p) => p !== MediaPlayer.BROWSER && isSupportedPlayer(p))
+                                    .slice(0, 3)
+                                    .map((player) => (
+                                        <button
+                                            key={player}
+                                            type="button"
+                                            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
+                                            onClick={() => openInExternalPlayer(player)}>
+                                            <ExternalLink className="h-3 w-3" />
+                                            {player}
+                                        </button>
+                                    ))}
                             </div>
-                            <p className="mt-3 text-[10px] text-white/50">
-                                Don&apos;t have these apps?{" "}
-                                <a href="https://apps.apple.com/app/vlc-media-player/id650377962" target="_blank" rel="noopener" className="underline">
-                                    Get VLC
-                                </a>
-                                {" or "}
-                                <a href="https://apps.apple.com/app/infuse-7/id1136220934" target="_blank" rel="noopener" className="underline">
-                                    Get Infuse
-                                </a>
-                            </p>
                         </div>
                     )}
                 </div>
