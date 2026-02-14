@@ -240,3 +240,43 @@
         scrollbar-width: none;
     }
 }
+
+/* Range input (seek/volume) — cross-browser track + thumb styling */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 9999px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 100%;
+    background: transparent;
+    border-radius: 9999px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    margin-top: -3px;
+}
+
+input[type="range"]::-moz-range-track {
+    height: 100%;
+    background: transparent;
+    border-radius: 9999px;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    border: none;
+}

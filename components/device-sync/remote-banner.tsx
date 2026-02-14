@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
 import {
@@ -15,12 +15,12 @@ import {
     Volume2,
     VolumeX,
     X,
-    Cast,
     ChevronUp,
     ChevronDown,
     AudioLines,
     Subtitles,
     Maximize2,
+    Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,8 +72,9 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const setActiveTarget = useDeviceSyncStore((s) => s.setActiveTarget);
     const sendCommand = useDeviceSyncStore((s) => s.sendCommand);
     const enabled = useDeviceSyncStore((s) => s.enabled);
+    const transferPending = useDeviceSyncStore((s) => s.transferPending);
 
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(true);
     const [seekActive, setSeekActive] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
     const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,6 +105,20 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
     const nowPlaying = targetDevice?.nowPlaying ?? null;
 
+    // Auto-expand when playback starts — subscribe to store changes outside render
+    useEffect(() => {
+        let prev = false;
+        const unsub = useDeviceSyncStore.subscribe((s) => {
+            const target = s.activeTarget
+                ? s.devices.find((d) => d.id === s.activeTarget)
+                : s.devices.find((d) => d.isPlaying && d.nowPlaying);
+            const active = !!(target?.nowPlaying || s.transferPending);
+            if (active && !prev) setCollapsed(false);
+            prev = active;
+        });
+        return unsub;
+    }, []);
+
     if (!enabled || !targetDevice) return null;
 
     const isPlaying = nowPlaying && !nowPlaying.paused;
@@ -118,29 +133,41 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const subtitleTracks = nowPlaying?.subtitleTracks ?? [];
 
     return (
-        <div role="region" aria-label="Remote player">
-            <div className="pointer-events-auto mx-auto max-w-lg px-4 pb-4">
-                <div className="rounded-sm border border-border/50 bg-background/95 backdrop-blur-md shadow-lg overflow-hidden">
+        <div role="region" aria-label="Remote player" className="pointer-events-auto mx-auto max-w-lg px-4 pb-4">
+            <div className="rounded-sm border border-border bg-card/95 backdrop-blur-md shadow-xl overflow-hidden w-full">
                     {/* Collapse toggle — title bar */}
-                    <button
+                    <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setCollapsed((c) => !c)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
                         aria-expanded={!collapsed}
                         aria-label={collapsed ? "Expand remote player" : "Collapse remote player"}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors border-b border-border/30"
+                        className="flex w-full items-center gap-1.5 px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors border-b border-border/30 cursor-pointer select-none"
                     >
                         <DeviceTypeIcon type={targetDevice.deviceType} className="size-3.5 text-primary" />
                         <span className="flex-1 text-left truncate font-medium">
                             {nowPlaying ? nowPlaying.title : targetDevice.name}
                         </span>
                         <span className="text-muted-foreground/60 text-[9px] mr-1 hidden sm:inline">
-                            {nowPlaying ? targetDevice.name : "Waiting for content"}
+                            {nowPlaying ? targetDevice.name : "Connected"}
                         </span>
+                        {!nowPlaying && !transferPending && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setActiveTarget(null); }}
+                                className="p-0.5 rounded-sm hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label="Disconnect"
+                                title="Disconnect"
+                            >
+                                <X className="size-3" />
+                            </button>
+                        )}
                         {collapsed ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                    </button>
+                    </div>
 
                     {/* ── Expanded: Full Remote ─────────────────────────── */}
                     {!collapsed && nowPlaying && (
-                        <div className="px-4 pb-4 pt-3 space-y-4">
+                        <div className="px-4 pb-4 pt-3 space-y-4 max-h-[55vh] overflow-y-auto">
                             {/* Title + metadata */}
                             <div className="space-y-0.5">
                                 <p className="text-sm font-medium truncate">{nowPlaying.title}</p>
@@ -170,7 +197,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     onTouchEnd={() => commitSeek(seekValue)}
                                     className="w-full h-1.5 cursor-pointer appearance-none rounded-full accent-primary"
                                     style={{
-                                        background: `linear-gradient(to right, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%)`,
+                                        background: `linear-gradient(to right, var(--primary) ${progress}%, var(--muted) ${progress}%)`,
                                     }}
                                 />
                                 <div className="flex justify-between">
@@ -263,7 +290,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     onChange={(e) => cmd("volume", { level: Number(e.target.value) / 100 })}
                                     className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
                                     style={{
-                                        background: `linear-gradient(to right, hsl(var(--primary)) ${volume}%, hsl(var(--muted)) ${volume}%)`,
+                                        background: `linear-gradient(to right, var(--primary) ${volume}%, var(--muted) ${volume}%)`,
                                     }}
                                 />
                             </div>
@@ -275,7 +302,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                             <div className="flex items-center justify-between border-t border-border/30 pt-3">
                                 <div className="flex items-center gap-1">
                                     {/* Audio tracks */}
-                                    {audioTracks.length > 1 && (
+                                    {audioTracks.length > 0 && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Audio Track" aria-label="Audio Track">
@@ -344,7 +371,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 text-xs text-muted-foreground hover:text-destructive gap-1.5"
+                                    className="h-8 text-xs text-muted-foreground hover:text-destructive gap-1.5 shrink-0"
                                     onClick={() => {
                                         cmd("stop");
                                         setActiveTarget(null);
@@ -359,31 +386,25 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                         </div>
                     )}
 
-                    {/* Idle state (selected but nothing playing) */}
-                    {!collapsed && !nowPlaying && (
-                        <div className="px-4 py-3 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <Cast className="size-3.5 text-primary shrink-0" />
-                                    <span className="text-xs text-muted-foreground truncate">
-                                        Browse and play content — it will play on {targetDevice.name}
-                                    </span>
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs shrink-0"
-                                    onClick={() => setActiveTarget(null)}
-                                >
-                                    Disconnect
-                                </Button>
+                    {/* Loading state (transfer pending, nothing playing yet) */}
+                    {!collapsed && !nowPlaying && transferPending && (
+                        <div className="px-4 py-4 flex items-center gap-3">
+                            <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate">{transferPending}</p>
+                                <p className="text-[10px] text-muted-foreground">Loading on {targetDevice.name}…</p>
                             </div>
-                            <RemoteFileBrowser targetDeviceId={targetDevice.id} />
+                        </div>
+                    )}
+
+                    {/* Idle state (selected but nothing playing) — always mounted to preserve file browser state */}
+                    {!nowPlaying && !transferPending && (
+                        <div className={cn("px-4 pb-3 pt-2 max-h-[45vh] overflow-y-auto overflow-x-hidden", collapsed && "hidden")}>
+                            <RemoteFileBrowser targetDeviceId={targetDevice.id} compact />
                             <PlaybackQueue compact />
                         </div>
                     )}
                 </div>
             </div>
-        </div>
     );
 });

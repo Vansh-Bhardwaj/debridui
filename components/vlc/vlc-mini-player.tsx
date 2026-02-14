@@ -160,9 +160,8 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
     const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
     return (
-        <div role="region" aria-label="Media player">
-            <div className="pointer-events-auto mx-auto max-w-3xl px-4 pb-2">
-                <div className="rounded-sm border border-border/50 bg-background/95 backdrop-blur-md shadow-lg overflow-hidden">
+        <div role="region" aria-label="Media player" className="pointer-events-auto mx-auto max-w-3xl px-4 pb-2">
+            <div className="rounded-sm border border-border bg-card/95 backdrop-blur-md shadow-xl overflow-hidden">
                     {/* Collapse toggle */}
                     <button
                         onClick={() => setCollapsed((c) => !c)}
@@ -210,7 +209,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                     }}
                                     className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
                                     style={{
-                                        background: `linear-gradient(to right, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%)`,
+                                        background: `linear-gradient(to right, var(--primary) ${progress}%, var(--muted) ${progress}%)`,
                                     }}
                                 />
                                 <span className="text-[10px] tabular-nums text-muted-foreground w-10">
@@ -219,7 +218,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                             </div>
 
                             {/* Controls */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-y-1">
                                 <div className="flex items-center gap-1">
                                     <Button
                                         variant="ghost"
@@ -284,7 +283,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                             const pct = Number(e.target.value);
                                             setVolume(Math.round((pct / 100) * 256));
                                         }}
-                                        className="w-0 overflow-hidden accent-primary transition-all duration-300 group-hover/vol:w-16"
+                                        className="w-14 sm:w-0 sm:overflow-hidden accent-primary transition-all duration-300 sm:group-hover/vol:w-16"
                                     />
                                 </div>
 
@@ -386,6 +385,5 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                     )}
                 </div>
             </div>
-        </div>
     );
 });

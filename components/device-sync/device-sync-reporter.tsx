@@ -45,6 +45,20 @@ export function DeviceSyncReporter() {
                 name: s.name || s.lang || `Track ${i + 1}`,
             }));
 
+            // Try to read audio tracks (Safari supports HTMLMediaElement.audioTracks)
+            const audioTracks: TrackInfo[] = [];
+            const audioTrackList = (video as unknown as { audioTracks?: { length: number; [index: number]: { label?: string; language?: string; enabled?: boolean } } }).audioTracks;
+            if (audioTrackList?.length) {
+                for (let i = 0; i < audioTrackList.length; i++) {
+                    const t = audioTrackList[i];
+                    audioTracks.push({
+                        id: i,
+                        name: t.label || t.language || `Track ${i + 1}`,
+                        active: t.enabled,
+                    });
+                }
+            }
+
             return {
                 title: directTitle || document.title || "Video",
                 imdbId: progressKey?.imdbId,
@@ -56,6 +70,7 @@ export function DeviceSyncReporter() {
                 paused: video.paused,
                 url: video.currentSrc || video.src,
                 volume: Math.round(video.volume * 100),
+                audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
                 subtitleTracks: subtitleTracks.length > 0 ? subtitleTracks : undefined,
             };
         };
@@ -72,16 +87,22 @@ export function DeviceSyncReporter() {
         const onPause = (e: Event) => report(e.target as HTMLVideoElement);
         const onEnded = () => reportNowPlaying(null);
 
+        const onLoadedData = (e: Event) => report(e.target as HTMLVideoElement);
+
         const attachToVideo = (video: HTMLVideoElement) => {
             video.addEventListener("play", onPlay);
             video.addEventListener("pause", onPause);
             video.addEventListener("ended", onEnded);
+            video.addEventListener("loadeddata", onLoadedData, { once: true });
+            // If already loaded (e.g. cached), report immediately
+            if (video.readyState >= 2) report(video);
         };
 
         const detachFromVideo = (video: HTMLVideoElement) => {
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("ended", onEnded);
+            video.removeEventListener("loadeddata", onLoadedData);
         };
 
         // Attach to any existing video elements
@@ -114,7 +135,9 @@ export function DeviceSyncReporter() {
         // Periodic reporting during playback (for progress updates)
         intervalRef.current = setInterval(() => {
             const video = document.querySelector("video");
-            if (video && !video.paused && video.currentTime > 0) {
+            if (video && (video.src || video.currentSrc)) {
+                // Report both playing and paused states so remote controller
+                // shows playback controls (not "Loading...") as soon as video loads
                 const state = buildNowPlaying(video);
                 if (state) reportNowPlaying(state);
                 return;

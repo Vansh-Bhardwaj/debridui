@@ -432,7 +432,7 @@ function RemoteController({
                         onTouchEnd={() => commitSeek(seekValue)}
                         className="w-full h-1.5 cursor-pointer appearance-none rounded-full accent-primary"
                         style={{
-                            background: `linear-gradient(to right, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%)`,
+                            background: `linear-gradient(to right, var(--primary) ${progress}%, var(--muted) ${progress}%)`,
                         }}
                     />
                     <div className="flex justify-between">
@@ -521,7 +521,7 @@ function RemoteController({
                         onChange={(e) => onCommand("volume", { level: Number(e.target.value) / 100 })}
                         className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
                         style={{
-                            background: `linear-gradient(to right, hsl(var(--primary)) ${volume}%, hsl(var(--muted)) ${volume}%)`,
+                            background: `linear-gradient(to right, var(--primary) ${volume}%, var(--muted) ${volume}%)`,
                         }}
                     />
                 </div>

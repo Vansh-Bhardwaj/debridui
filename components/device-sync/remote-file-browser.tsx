@@ -24,13 +24,27 @@ function formatSize(bytes: number): string {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+/** Shortened display name — strip common quality/codec tags and limit length */
+function displayName(name: string, maxLen = 40): string {
+    // Remove common tags: resolution, codec, source, group, extension
+    let short = name
+        .replace(/\.(mkv|mp4|avi|mov|wmv|flv|webm)$/i, "")
+        .replace(/[\.\-_]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    if (short.length > maxLen) short = short.slice(0, maxLen) + "…";
+    return short || name.slice(0, maxLen);
+}
+
 interface RemoteFileBrowserProps {
     targetDeviceId: string;
     onSelect?: (file: BrowseFileItem) => void;
     className?: string;
+    /** Compact mode: smaller height, hide header label */
+    compact?: boolean;
 }
 
-export function RemoteFileBrowser({ targetDeviceId, onSelect, className }: RemoteFileBrowserProps) {
+export function RemoteFileBrowser({ targetDeviceId, onSelect, className, compact }: RemoteFileBrowserProps) {
     const browseDevice = useDeviceSyncStore((s) => s.browseDevice);
 
     const [files, setFiles] = useState<BrowseFileItem[]>([]);
@@ -93,17 +107,19 @@ export function RemoteFileBrowser({ targetDeviceId, onSelect, className }: Remot
 
     if (!loaded && !loading) {
         return (
-            <div className={cn("space-y-3", className)}>
-                <p className="text-xs tracking-widest uppercase text-muted-foreground px-1">
-                    Remote Files
-                </p>
+            <div className={cn("space-y-2", className)}>
+                {!compact && (
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground px-1">
+                        Remote Files
+                    </p>
+                )}
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={handleLoadFiles}
-                    className="w-full gap-2"
+                    className={cn("w-full gap-2", compact && "h-7 text-xs")}
                 >
-                    <FolderOpen className="size-4" />
+                    <FolderOpen className="size-3.5" />
                     Browse files on this device
                 </Button>
             </div>
@@ -111,10 +127,12 @@ export function RemoteFileBrowser({ targetDeviceId, onSelect, className }: Remot
     }
 
     return (
-        <div className={cn("space-y-3", className)}>
-            <p className="text-xs tracking-widest uppercase text-muted-foreground px-1">
-                Remote Files{total !== undefined && ` · ${total} total`}
-            </p>
+        <div className={cn("space-y-2 overflow-hidden", className)}>
+            {!compact && (
+                <p className="text-xs tracking-widest uppercase text-muted-foreground px-1">
+                    Remote Files{total !== undefined && ` · ${total} total`}
+                </p>
+            )}
 
             {/* Search */}
             <form onSubmit={handleSearch} className="flex gap-2">
@@ -122,7 +140,7 @@ export function RemoteFileBrowser({ targetDeviceId, onSelect, className }: Remot
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search files..."
-                    className="h-8 text-xs"
+                    className="h-8 text-xs min-w-0"
                 />
                 <Button type="submit" variant="outline" size="sm" className="h-8 shrink-0">
                     <Search className="size-3.5" />
@@ -149,17 +167,17 @@ export function RemoteFileBrowser({ targetDeviceId, onSelect, className }: Remot
             )}
 
             {!loading && files.length > 0 && (
-                <div className="space-y-1 max-h-64 overflow-y-auto">
+                <div className={cn("space-y-1 overflow-y-auto overflow-x-hidden", compact ? "max-h-28" : "max-h-40 sm:max-h-64")}>
                     {files.map((file) => (
                         <button
                             key={file.id}
                             onClick={() => onSelect?.(file)}
-                            className="flex items-center gap-2 w-full text-left rounded-sm px-2 py-1.5 hover:bg-muted/30 transition-colors"
+                            className="flex items-center gap-2 w-full text-left rounded-sm px-2 py-1.5 hover:bg-muted/30 transition-colors overflow-hidden max-w-full"
                         >
                             <File className="size-3.5 text-muted-foreground shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs truncate">{file.name}</p>
-                                <p className="text-[10px] text-muted-foreground">
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                                <p className="text-xs truncate max-w-full" title={file.name}>{displayName(file.name)}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">
                                     {formatSize(file.size)}
                                     {file.status !== "downloaded" && (
                                         <> <span className="text-border">·</span> {file.status}</>

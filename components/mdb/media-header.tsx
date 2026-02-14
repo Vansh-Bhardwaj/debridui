@@ -61,7 +61,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
             <div className="relative pt-[12vh] sm:pt-[20vh] md:pt-[30vh] pb-8">
                 <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] gap-6 md:gap-8">
                     {/* Poster Column */}
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-md:mx-auto">
                         <div className="max-md:max-w-[45vw] aspect-2/3 overflow-hidden rounded-sm bg-muted/30">
                             <img
                                 src={posterUrl}
@@ -238,7 +238,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         )}
 
                         {/* Mobile Action Buttons */}
-                        <div className="flex md:hidden flex-wrap items-center gap-2 pt-2">
+                        <div className="flex md:hidden flex-wrap items-center justify-center gap-2 pt-2">
                             {type === "movie" && media.ids?.imdb && (
                                 <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
                                     <Button className="gap-2">

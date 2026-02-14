@@ -1,5 +1,5 @@
 import "@/lib/polyfills";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import Providers from "./providers";
@@ -28,6 +28,10 @@ const siteConfig = {
         "subtitle support",
         "cloudflare workers",
     ],
+};
+
+export const viewport: Viewport = {
+    viewportFit: "cover",
 };
 
 export const metadata: Metadata = {

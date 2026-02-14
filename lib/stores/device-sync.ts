@@ -46,6 +46,8 @@ interface DeviceSyncState {
     browseResults: Map<string, BrowseResponse>;
     /** Shared playback queue (persisted in DO SQLite) */
     queue: QueueItem[];
+    /** Title of content currently being transferred to remote device */
+    transferPending: string | null;
     /** Pending browse request callbacks */
     _browseCallbacks: Map<string, (response: BrowseResponse) => void>;
 
@@ -295,6 +297,7 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
     controlledBy: null,
     browseResults: new Map(),
     queue: [],
+    transferPending: null,
     _browseCallbacks: new Map(),
 
     setActiveTarget: (deviceId) => {
@@ -405,6 +408,12 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
         if (!wsClient) return;
 
         wsClient.transferTo(targetId, playback);
+        set({ transferPending: playback.title ?? "Loading..." });
+
+        // Clear pending state after 30s timeout (fallback if device never reports)
+        setTimeout(() => {
+            if (get().transferPending) set({ transferPending: null });
+        }, 30000);
 
         const target = get().devices.find((d) => d.id === targetId);
         toast.success(`Transferred to ${target?.name ?? "device"}`, {
@@ -552,6 +561,7 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                 break;
             }
             case "now-playing-update": {
+                const isActiveTarget = msg.deviceId === get().activeTarget;
                 set((state) => ({
                     devices: state.devices.map((d) =>
                         d.id === msg.deviceId
@@ -562,6 +572,8 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                               }
                             : d
                     ),
+                    // Clear transfer pending when target starts playing
+                    transferPending: isActiveTarget && msg.state ? null : state.transferPending,
                 }));
 
                 // Cross-device progress sync: write remote progress to localStorage

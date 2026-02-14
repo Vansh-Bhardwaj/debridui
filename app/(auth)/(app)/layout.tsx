@@ -75,7 +75,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <PreviewDialog />
                 <PreviewRegistryLoader />
                 {/* Bottom floating panels — stacked vertically to avoid overlap */}
-                <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none flex flex-col items-center">
+                <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none flex flex-col items-stretch pb-[env(safe-area-inset-bottom)]">
                     <VLCMiniPlayer />
                     <RemoteControlBanner />
                 </div>

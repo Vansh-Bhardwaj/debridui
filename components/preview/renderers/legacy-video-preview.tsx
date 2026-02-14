@@ -655,7 +655,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, scrobble]);
 
 
-    // Keep fullscreen state in sync
+    // Keep fullscreen state in sync (native + CSS fake fullscreen)
+    const [fakeFullscreen, setFakeFullscreen] = useState(false);
     useEffect(() => {
         const handler = () => {
             const el = containerRef.current;
@@ -749,21 +750,34 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         el.muted = el.volume === 0;
     }, []);
 
-    const toggleFullscreen = useCallback(() => {
+    const toggleFullscreen = useCallback(async () => {
         const el = containerRef.current;
         if (!el) return;
+
+        // Exit fake fullscreen if active
+        if (fakeFullscreen) {
+            setFakeFullscreen(false);
+            setIsFullscreen(false);
+            return;
+        }
+
         const fsElement =
             document.fullscreenElement ||
             // @ts-expect-error - vendor-prefixed
             document.webkitFullscreenElement;
         if (!fsElement) {
-            if (el.requestFullscreen) {
-                void el.requestFullscreen();
+            try {
+                await el.requestFullscreen();
+            } catch {
+                // Fullscreen API rejected (no user gesture, e.g. remote command)
+                // Fall back to CSS-based fullscreen
+                setFakeFullscreen(true);
+                setIsFullscreen(true);
             }
         } else if (document.exitFullscreen) {
             void document.exitFullscreen();
         }
-    }, []);
+    }, [fakeFullscreen]);
 
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
 
@@ -857,6 +871,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
 
             switch (event.key) {
+                case "Escape":
+                    if (fakeFullscreen) {
+                        event.preventDefault();
+                        setFakeFullscreen(false);
+                        setIsFullscreen(false);
+                    }
+                    break;
                 case " ":
                 case "k":
                 case "K":
@@ -955,7 +976,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -966,7 +987,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         };
         const fsHandler = () => {
-            toggleFullscreen();
+            void toggleFullscreen();
         };
         window.addEventListener("device-sync-subtitle", subHandler);
         window.addEventListener("device-sync-fullscreen", fsHandler);
@@ -1122,7 +1143,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     return (
         <div
             ref={containerRef}
-            className="relative w-full h-full flex flex-col bg-black debridui-legacy-player group"
+            className={cn(
+                "relative w-full h-full flex flex-col bg-black debridui-legacy-player group",
+                fakeFullscreen && "fixed inset-0 z-[9999]"
+            )}
             onClick={(e) => {
                 if (e.target === containerRef.current || (e.target as HTMLElement).tagName === "VIDEO") {
                     togglePlay();
