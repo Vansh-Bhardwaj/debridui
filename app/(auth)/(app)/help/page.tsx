@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { HelpCircle, ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight, Keyboard } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { ShortcutsHelpButton } from "./shortcuts-button";

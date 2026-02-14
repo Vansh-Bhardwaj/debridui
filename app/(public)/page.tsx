@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Gallery } from "@/components/gallery";
+import { Gallery } from "@/components/common/gallery";
 import { DISCORD_URL, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ICONS } from "@/lib/constants";
 import { AccountType } from "@/lib/types";
 

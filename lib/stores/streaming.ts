@@ -256,9 +256,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
-        // Resolve addon proxy/redirect URL to the actual debrid download link
-        const playUrl = await resolveStreamUrl(source.url);
-
         // Build descriptive filename with source metadata
         const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
         const fileName = meta ? `${title} [${meta}]` : title;
@@ -268,6 +265,24 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // the content there instead of playing locally.
         const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
         const syncStore = useDeviceSyncStore.getState();
+
+        const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
+
+        // For browser playback, open the preview dialog immediately (loading state)
+        // before resolving the URL, so the user sees instant feedback.
+        if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
+            usePreviewStore.getState().openSinglePreview({
+                url: "", // Empty → shows loading spinner in dialog
+                title: fileName,
+                fileType: FileType.VIDEO,
+                subtitles: options?.subtitles,
+                progressKey: options?.progressKey,
+            });
+        }
+
+        // Resolve addon proxy/redirect URL to the actual debrid download link
+        const playUrl = await resolveStreamUrl(source.url);
+
         if (syncStore.playOnTarget({
             url: playUrl,
             title: fileName,
@@ -277,19 +292,14 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             episode: options?.progressKey?.episode,
             subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
         })) {
-            return; // Sent to remote device — don't play locally
+            // Sent to remote device — close any loading preview
+            usePreviewStore.getState().closePreview();
+            return;
         }
 
-        const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
-
         if (mediaPlayer === MediaPlayer.BROWSER) {
-            usePreviewStore.getState().openSinglePreview({
-                url: playUrl,
-                title: fileName,
-                fileType: FileType.VIDEO,
-                subtitles: options?.subtitles,
-                progressKey: options?.progressKey,
-            });
+            // Preview is already open in loading state — just update the URL
+            usePreviewStore.getState().setDirectUrl(playUrl);
         } else {
             openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
         }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useKeyboardShortcuts } from "@/components/keyboard-shortcuts-dialog";
+import { useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { Keyboard } from "lucide-react";
 
 export function ShortcutsHelpButton() {

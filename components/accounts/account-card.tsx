@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AccountType } from "@/lib/types";
 import { formatAccountType, cn } from "@/lib/utils";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { ServiceIcon } from "./service-icon";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useRemoveUserAccount, useDebridUserInfo } from "@/hooks/use-user-accounts";

@@ -5,7 +5,6 @@ import { cdnUrl } from "@/lib/utils/media";
 
 const HASH_REGEX = /[a-f0-9]{40}/;
 const FILE_SIZE_REGEX = /\b\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B\b/gi;
-const RESOLUTION_REGEX = /\b(\d{3,4}p|4k)\b/i;
 const CACHED_NAME_REGEX = /instant|\+|✅|⚡/i;
 const CACHED_DESC_REGEX = /✅|⚡/;
 
@@ -135,20 +134,42 @@ export function extractSize(stream: AddonStream): string | undefined {
 const RESOLUTION_MAP: Record<string, Resolution> = {
     "2160p": Resolution.UHD_4K,
     "4k": Resolution.UHD_4K,
+    "uhd": Resolution.UHD_4K,
+    "4k ultra": Resolution.UHD_4K,
     "1440p": Resolution.QHD_1440P,
     "1080p": Resolution.FHD_1080P,
+    "full hd": Resolution.FHD_1080P,
+    "fullhd": Resolution.FHD_1080P,
+    "fhd": Resolution.FHD_1080P,
     "720p": Resolution.HD_720P,
+    "hd": Resolution.HD_720P,
     "480p": Resolution.SD_480P,
+    "sd": Resolution.SD_480P,
     "360p": Resolution.SD_360P,
 };
 
+/**
+ * Extended regex: numeric (2160p, 1080p, etc.), keywords (4k, uhd, full hd, fhd, hd, sd)
+ * Order matters — longer patterns matched first via alternation.
+ */
+const RESOLUTION_EXTENDED_REGEX = /\b(2160p|1440p|1080p|720p|480p|360p|4k\s*ultra|4k|uhd|full\s?hd|fullhd|fhd|hd|sd)\b/i;
+
 export function extractResolution(stream: AddonStream): Resolution | undefined {
-    if (!stream.name) return undefined;
-
-    const resolutionMatch = stream.name.match(RESOLUTION_REGEX);
-    if (!resolutionMatch) return undefined;
-
-    return RESOLUTION_MAP[resolutionMatch[0].toLowerCase()];
+    // Check name, title, description, and filename hint in priority order
+    const fields = [
+        stream.name,
+        stream.title,
+        stream.description,
+        stream.behaviorHints?.filename,
+    ];
+    for (const field of fields) {
+        if (!field) continue;
+        const match = field.match(RESOLUTION_EXTENDED_REGEX);
+        if (match) {
+            return RESOLUTION_MAP[match[1].toLowerCase()];
+        }
+    }
+    return undefined;
 }
 /**
  * Construct magnet link from hash

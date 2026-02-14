@@ -4,7 +4,7 @@ import { memo } from "react";
 import { DebridFile } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatSize, formatRelativeTime, formatSpeed, cn } from "@/lib/utils";
-import { StatusBadge } from "../display";
+import { StatusBadge } from "../common/display";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileItemContextMenu } from "./file-item-context-menu";
 import { Badge } from "../ui/badge";

@@ -5,7 +5,7 @@ import { HardDrive, Users, Zap } from "lucide-react";
 import { formatSize } from "@/lib/utils";
 import { type TorBoxSearchResult } from "@/lib/clients/torbox";
 import { AddSourceButton } from "./sources";
-import { SearchItemWrapper } from "@/components/search-item-wrapper";
+import { SearchItemWrapper } from "@/components/mdb/search-item-wrapper";
 
 interface SearchSourceItemProps {
     result: TorBoxSearchResult;

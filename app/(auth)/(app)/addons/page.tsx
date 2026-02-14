@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X, ExternalLink } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { AddonCard, AddonCardSkeleton } from "@/components/addon-card";
-import { CachedBadge } from "@/components/display";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { SectionDivider } from "@/components/section-divider";
+import { PageHeader } from "@/components/common/page-header";
+import { AddonCard, AddonCardSkeleton } from "@/components/addons/addon-card";
+import { CachedBadge } from "@/components/common/display";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SectionDivider } from "@/components/common/section-divider";
 
 const ADDON_PRESETS = [
     {

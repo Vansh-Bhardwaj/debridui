@@ -5,7 +5,7 @@ import { Film, Tv, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type TraktSearchResult } from "@/lib/trakt";
 import { getPosterUrl } from "@/lib/utils/media";
-import { SearchItemWrapper } from "@/components/search-item-wrapper";
+import { SearchItemWrapper } from "@/components/mdb/search-item-wrapper";
 
 interface SearchMediaItemProps {
     result: TraktSearchResult;

@@ -26,7 +26,7 @@ import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
 import { ContinueWatching } from "@/components/mdb/continue-watching";
-import { SectionErrorBoundary } from "@/components/error-boundary";
+import { SectionErrorBoundary } from "@/components/common/error-boundary";
 
 const HeroCarousel = dynamic(
     () => import("@/components/mdb/hero-carousel").then((m) => ({ default: m.HeroCarousel })),

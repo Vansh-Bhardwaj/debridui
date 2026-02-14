@@ -10,7 +10,7 @@ import { EpisodeCard } from "./episode-card";
 import { PeopleSection } from "./people-section";
 import { MediaHeader } from "./media-header";
 import { RelatedMedia } from "./related-media";
-import { SectionDivider } from "@/components/section-divider";
+import { SectionDivider } from "@/components/common/section-divider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";

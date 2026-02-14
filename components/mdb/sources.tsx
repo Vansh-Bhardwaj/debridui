@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, memo } from "react";
-import { type AddonSource, type TvSearchParams } from "@/lib/addons/types";
+import { Resolution, type AddonSource, type TvSearchParams } from "@/lib/addons/types";
 import { useAddonSources, useAddonSubtitles } from "@/hooks/use-addons";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, HardDriveDownloadIcon, Trash2Icon, DownloadIcon, AlertTriangle, PlayIcon, RefreshCw } from "lucide-react";
@@ -11,8 +11,51 @@ import { toast } from "sonner";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useRouter } from "next/navigation";
-import { CachedBadge } from "@/components/display";
+import { CachedBadge } from "@/components/common/display";
 import { useStreamingStore } from "@/lib/stores/streaming";
+import { useSettingsStore, getActiveRange } from "@/lib/stores/settings";
+
+// Resolution filter tiers — exact match per tier, not "and above"
+type ResolutionFilter = "4k" | "1080p" | "720p" | "all";
+
+/** Which tier a resolution belongs to */
+const RESOLUTION_TIER: Record<string, ResolutionFilter> = {
+    [Resolution.UHD_4K]: "4k",
+    [Resolution.QHD_1440P]: "4k",
+    [Resolution.FHD_1080P]: "1080p",
+    [Resolution.HD_720P]: "720p",
+    [Resolution.SD_480P]: "720p",
+    [Resolution.SD_360P]: "720p",
+};
+
+/** Map user's quality profile to a default filter tab */
+function getDefaultFilter(streaming: Parameters<typeof getActiveRange>[0]): ResolutionFilter {
+    const range = getActiveRange(streaming);
+    const profile = streaming.profileId;
+    // Named profiles → deterministic defaults
+    if (profile === "high-quality" || profile === "max-quality") return "4k";
+    if (profile === "balanced") return "1080p";
+    if (profile === "data-saver" || profile === "low-bandwidth") return "720p";
+    // Custom → derive from maxResolution
+    const max = range.maxResolution;
+    if (max === "any") return "all";
+    return RESOLUTION_TIER[max] ?? "all";
+}
+
+function matchesResolutionFilter(source: AddonSource, filter: ResolutionFilter): boolean {
+    if (filter === "all") return true;
+    if (!source.resolution) return false; // unknown resolution → only visible in "All" tab
+    const tier = RESOLUTION_TIER[source.resolution];
+    if (!tier) return false; // unrecognized resolution → only visible in "All" tab
+    return tier === filter;
+}
+
+const FILTER_OPTIONS: { value: ResolutionFilter; label: string }[] = [
+    { value: "4k", label: "4K" },
+    { value: "1080p", label: "1080p" },
+    { value: "720p", label: "720p" },
+    { value: "all", label: "All" },
+];
 
 interface SourcesProps {
     imdbId: string;
@@ -209,6 +252,10 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
 
     const [addonFilter, setAddonFilter] = useState("all");
 
+    // Resolution filter — default from user's quality profile
+    const streaming = useSettingsStore((s) => s.get("streaming"));
+    const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>(() => getDefaultFilter(streaming));
+
     const addonNames = useMemo(() => {
         if (!sources?.length) return [];
         const seen = new Map<string, string>();
@@ -218,16 +265,41 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
         return Array.from(seen, ([id, name]) => ({ id, name }));
     }, [sources]);
 
-    const filtered = useMemo(
-        () => (addonFilter === "all" ? sources : sources?.filter((s) => s.addonId === addonFilter)),
-        [sources, addonFilter],
-    );
+    const filtered = useMemo(() => {
+        let result = sources;
+        if (addonFilter !== "all") {
+            result = result?.filter((s) => s.addonId === addonFilter);
+        }
+        if (resolutionFilter !== "all") {
+            result = result?.filter((s) => matchesResolutionFilter(s, resolutionFilter));
+        }
+        return result;
+    }, [sources, addonFilter, resolutionFilter]);
 
     return (
         <div className="space-y-2">
-            {/* Addon filter — shown when multiple addons provide sources */}
-            {addonNames.length > 1 && (
-                <div className="flex justify-end pt-2">
+            {/* Filter bar — resolution + addon filters */}
+            <div className="flex items-center justify-between gap-2 pt-2">
+                {/* Resolution filter tabs */}
+                <div className="flex items-center gap-0.5 bg-muted/30 rounded-sm p-0.5">
+                    {FILTER_OPTIONS.map((opt) => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setResolutionFilter(opt.value)}
+                            className={cn(
+                                "px-2.5 py-1 text-xs rounded-sm transition-colors",
+                                resolutionFilter === opt.value
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            )}>
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Addon filter — shown when multiple addons provide sources */}
+                {addonNames.length > 1 && (
                     <Select value={addonFilter} onValueChange={setAddonFilter}>
                         <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm">
                             <SelectValue />
@@ -241,8 +313,8 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
-            )}
+                )}
+            </div>
 
             <div className={cn("border border-border/50 rounded-sm overflow-hidden", className)}>
                 {/* Loading indicator */}

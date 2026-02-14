@@ -5,7 +5,8 @@ import { PeopleSection } from "./people-section";
 import { Sources } from "./sources";
 import { MediaHeader } from "./media-header";
 import { RelatedMedia } from "./related-media";
-import { SectionDivider } from "@/components/section-divider";
+import { MovieCollection } from "./movie-collection";
+import { SectionDivider } from "@/components/common/section-divider";
 import { memo } from "react";
 
 interface MovieDetailsProps {
@@ -14,6 +15,8 @@ interface MovieDetailsProps {
 }
 
 export const MovieDetails = memo(function MovieDetails({ media, mediaId }: MovieDetailsProps) {
+    const tmdbId = media.ids?.tmdb;
+
     return (
         <div className="space-y-12">
             <MediaHeader media={media} mediaId={mediaId} type="movie" />
@@ -26,6 +29,8 @@ export const MovieDetails = memo(function MovieDetails({ media, mediaId }: Movie
                     </div>
                 </section>
             )}
+
+            <MovieCollection tmdbId={tmdbId} currentTmdbId={tmdbId} />
 
             <section className="space-y-6">
                 <SectionDivider label="Cast & Crew" />

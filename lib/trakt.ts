@@ -837,6 +837,21 @@ export class TraktClient {
         return this.makeRequest<TraktMedia[]>(`shows/${id}/related?limit=${limit}`, {}, false, extended);
     }
 
+    /** Lookup a movie/show by external ID (TMDB, IMDB, TVDB) */
+    public async lookupByExternalId(
+        idType: "tmdb" | "imdb" | "tvdb",
+        id: string | number,
+        type: "movie" | "show" = "movie",
+        extended = "images"
+    ): Promise<TraktSearchResult[]> {
+        return this.makeRequest<TraktSearchResult[]>(
+            `search/${idType}/${id}?type=${type}`,
+            {},
+            false,
+            extended
+        );
+    }
+
     // ── Calendar Methods (require auth) ─────────────────────────────────
 
     /** Get user's personalized calendar — upcoming episodes for shows they watch */

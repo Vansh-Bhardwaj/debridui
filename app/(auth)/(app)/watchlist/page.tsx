@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { MediaSection } from "@/components/mdb/media-section";
 import { MediaCard } from "@/components/mdb/media-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -17,7 +17,7 @@ import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell } from "l
 import { type TraktCalendarItem } from "@/lib/trakt";
 import Link from "next/link";
 import Image from "next/image";
-import { SectionErrorBoundary } from "@/components/error-boundary";
+import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { cn } from "@/lib/utils";
 import { getPosterUrl } from "@/lib/utils/media";
 

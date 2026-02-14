@@ -56,6 +56,42 @@ export interface TMDBEpisodeGroupDetails {
     type: number;
 }
 
+// TMDB Movie Collection Types
+export interface TMDBCollectionRef {
+    id: number;
+    name: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+}
+
+export interface TMDBMovieSummary {
+    id: number;
+    title: string;
+    overview: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+    release_date: string;
+    vote_average: number;
+    vote_count: number;
+    popularity: number;
+    genre_ids: number[];
+}
+
+export interface TMDBMovieDetails {
+    id: number;
+    title: string;
+    belongs_to_collection: TMDBCollectionRef | null;
+}
+
+export interface TMDBCollectionDetails {
+    id: number;
+    name: string;
+    overview: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+    parts: TMDBMovieSummary[];
+}
+
 export interface TMDBClientConfig {
     apiKey: string;
     baseUrl?: string;
@@ -119,6 +155,14 @@ export class TMDBClient {
 
     public async getEpisodeGroupDetails(groupId: string): Promise<TMDBEpisodeGroupDetails> {
         return this.makeRequest<TMDBEpisodeGroupDetails>(`/tv/episode_group/${groupId}`);
+    }
+
+    public async getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
+        return this.makeRequest<TMDBMovieDetails>(`/movie/${movieId}`);
+    }
+
+    public async getCollection(collectionId: number): Promise<TMDBCollectionDetails> {
+        return this.makeRequest<TMDBCollectionDetails>(`/collection/${collectionId}`);
     }
 }
 

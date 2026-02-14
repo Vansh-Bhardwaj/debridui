@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { Plus, RefreshCw, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountCard } from "@/components/accounts/account-card";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { useAuth } from "@/components/auth/auth-provider";
 
 export default function AccountsPage() {

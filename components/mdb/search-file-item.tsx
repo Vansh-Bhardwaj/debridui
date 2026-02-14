@@ -5,7 +5,7 @@ import { HardDrive } from "lucide-react";
 import { formatSize } from "@/lib/utils";
 import { type DebridFile } from "@/lib/types";
 import { FileItemContextMenu } from "../explorer/file-item-context-menu";
-import { SearchItemWrapper } from "@/components/search-item-wrapper";
+import { SearchItemWrapper } from "@/components/mdb/search-item-wrapper";
 
 interface SearchFileItemProps {
     file: DebridFile;

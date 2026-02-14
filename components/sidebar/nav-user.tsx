@@ -15,7 +15,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import Link from "next/link";
 
@@ -88,7 +88,7 @@ export function NavUser() {
                                 <DropdownMenuItem asChild>
                                     <Link href="/settings/account" onClick={handleNavigation}>
                                         <UserIcon />
-                                        Account
+                                        Profile
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem asChild>

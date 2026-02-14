@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Breadcrumbs } from "@/components/common/breadcrumbs";
 import { SearchButton } from "@/components/common/search-button";
 import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
-import { VLCMiniPlayer } from "@/components/vlc-mini-player";
+import { VLCMiniPlayer } from "@/components/vlc/vlc-mini-player";
 import { DevicePicker } from "@/components/device-sync/device-picker";
 import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
 import { DeviceSyncReporter } from "@/components/device-sync/device-sync-reporter";
@@ -16,9 +16,9 @@ import { ControlledIndicator } from "@/components/device-sync/controlled-indicat
 import { BrowseHandler } from "@/components/device-sync/browse-handler";
 import { initDeviceSync } from "@/lib/stores/device-sync";
 import { useAuth } from "@/components/auth/auth-provider";
-import { SplashScreen } from "@/components/splash-screen";
+import { SplashScreen } from "@/components/auth/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
-import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/keyboard-shortcuts-dialog";
+import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { Keyboard } from "lucide-react";
 
 
@@ -74,8 +74,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarProvider>
                 <PreviewDialog />
                 <PreviewRegistryLoader />
-                <VLCMiniPlayer />
-                <RemoteControlBanner />
+                {/* Bottom floating panels — stacked vertically to avoid overlap */}
+                <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none flex flex-col items-center">
+                    <VLCMiniPlayer />
+                    <RemoteControlBanner />
+                </div>
                 <DeviceSyncReporter />
                 <BrowseHandler />
             </SearchProvider>

@@ -102,13 +102,12 @@ const FileActionButton = memo(function FileActionButton({
 }) {
     const { client, currentAccount } = useAuthGuaranteed();
     const [isButtonLoading, setIsButtonLoading] = useState(false);
-    const downloadLinkMaxAge = useSettingsStore((state) => state.get("downloadLinkMaxAge"));
 
     const { data: linkInfo, refetch } = useQuery({
         queryKey: getDownloadLinkCacheKey(currentAccount.id, node.id, false),
         queryFn: () => client.getDownloadLink({ fileNode: node }),
         enabled: false,
-        gcTime: downloadLinkMaxAge,
+        gcTime: 15 * 60 * 1000, // 15 minutes
     });
 
     const handleAction = async (linkInfo: DebridLinkInfo) => {

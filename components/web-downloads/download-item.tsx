@@ -6,7 +6,7 @@ import { formatSize, cn, getFileType, openInPlayer } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { WebDownloadStatusBadge } from "@/components/display";
+import { WebDownloadStatusBadge } from "@/components/common/display";
 import { canPreviewFile } from "@/lib/preview/registry";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { usePreviewStore } from "@/lib/stores/preview";

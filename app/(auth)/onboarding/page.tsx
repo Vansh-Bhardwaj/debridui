@@ -1,6 +1,6 @@
 "use client";
 
-import { AddAccountForm } from "@/components/add-account-form";
+import { AddAccountForm } from "@/components/accounts/add-account-form";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

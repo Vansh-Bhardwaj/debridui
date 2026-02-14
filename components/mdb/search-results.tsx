@@ -8,7 +8,7 @@ import { type TraktSearchResult } from "@/lib/trakt";
 import { SearchFileItem } from "./search-file-item";
 import { SearchMediaItem } from "./search-media-item";
 import { SearchSourceItem } from "./search-source-item";
-import { SectionDivider } from "@/components/section-divider";
+import { SectionDivider } from "@/components/common/section-divider";
 import { cn } from "@/lib/utils";
 
 interface SearchResultsProps {

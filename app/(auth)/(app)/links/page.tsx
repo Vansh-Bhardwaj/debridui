@@ -1,8 +1,8 @@
 "use client";
 
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
-import { SectionDivider } from "@/components/section-divider";
+import { SectionDivider } from "@/components/common/section-divider";
 import { RefreshCw, Link2 } from "lucide-react";
 import { WebDownloadsProvider, useWebDownloads } from "@/components/web-downloads/web-downloads-provider";
 import { AddLinksForm } from "@/components/web-downloads/add-links-form";

@@ -4,7 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import Providers from "./providers";
 import { cn } from "@/lib/utils";
-import { Analytics } from "@/components/analytics";
+import { Analytics } from "@/components/common/analytics";
 
 const siteConfig = {
     name: "DebridUI",

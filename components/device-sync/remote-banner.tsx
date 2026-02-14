@@ -118,7 +118,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const subtitleTracks = nowPlaying?.subtitleTracks ?? [];
 
     return (
-        <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none" role="region" aria-label="Remote player">
+        <div role="region" aria-label="Remote player">
             <div className="pointer-events-auto mx-auto max-w-lg px-4 pb-4">
                 <div className="rounded-sm border border-border/50 bg-background/95 backdrop-blur-md shadow-lg overflow-hidden">
                     {/* Collapse toggle — title bar */}

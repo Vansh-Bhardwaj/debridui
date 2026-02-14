@@ -11,8 +11,8 @@ import {
     Smartphone,
     XCircle,
 } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { SectionDivider } from "@/components/section-divider";
+import { PageHeader } from "@/components/common/page-header";
+import { SectionDivider } from "@/components/common/section-divider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from "@/components/ui/card";

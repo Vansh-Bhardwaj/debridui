@@ -25,8 +25,8 @@ import { queryClient } from "@/lib/query-client";
 import { toast } from "sonner";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { formatDistanceToNow, format } from "date-fns";
-import { PageHeader } from "@/components/page-header";
-import { SectionDivider } from "@/components/section-divider";
+import { PageHeader } from "@/components/common/page-header";
+import { SectionDivider } from "@/components/common/section-divider";
 import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/lib/utils/media-player";
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
 import { cn } from "@/lib/utils";
@@ -76,8 +76,6 @@ export default function SettingsPage() {
     const { get, set, getPresets } = useSettingsStore();
     const mediaPlayer = get("mediaPlayer");
     const mediaPlayerPresets = getPresets("mediaPlayer") || [];
-    const downloadLinkMaxAge = get("downloadLinkMaxAge");
-    const downloadLinkMaxAgePresets = getPresets("downloadLinkMaxAge") || [];
     const streaming = get("streaming");
     const playback = get("playback");
     const tmdbApiKey = get("tmdbApiKey");
@@ -774,35 +772,8 @@ export default function SettingsPage() {
             <section className="space-y-4">
                 <SectionDivider label="Cache & Data" />
 
-                {/* Download Link Cache Duration */}
-                <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                        <Clock className="size-4 text-muted-foreground" />
-                        <Label htmlFor="download-link-max-age" className="text-sm">
-                            Cache Duration
-                        </Label>
-                    </div>
-                    <Select
-                        value={String(downloadLinkMaxAge)}
-                        onValueChange={(value) => set("downloadLinkMaxAge", Number(value))}>
-                        <SelectTrigger id="download-link-max-age" className="w-full max-w-xs">
-                            <SelectValue placeholder="Select duration" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {downloadLinkMaxAgePresets.map((preset) => (
-                                <SelectItem key={preset.value} value={String(preset.value)} title={preset.description}>
-                                    {preset.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                        Links will be kept in memory for this duration before being garbage collected
-                    </p>
-                </div>
-
                 {/* Cache Management */}
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3">
                     <div className="flex items-center gap-2">
                         <Trash2 className="size-4 text-muted-foreground" />
                         <span className="text-sm">Clear Cache</span>

@@ -7,7 +7,6 @@ import { useUserAddons } from "@/hooks/use-addons";
 import { type Addon } from "@/lib/addons/types";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useQuery } from "@tanstack/react-query";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +19,6 @@ import { DebridFileNode } from "@/lib/types";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
-    const { get } = useSettingsStore();
-    const downloadLinkMaxAge = get("downloadLinkMaxAge");
 
     const previousButtonRef = useRef<HTMLButtonElement>(null);
     const nextButtonRef = useRef<HTMLButtonElement>(null);
@@ -54,8 +51,8 @@ export function PreviewDialog() {
 
     // Create mock file node for single mode
     const singleFileNode = useMemo<DebridFileNode | null>(() => {
-        if (!isSingleMode || !directUrl || !directTitle) return null;
-        return { id: directUrl, name: directTitle, size: undefined, type: "file", children: [] };
+        if (!isSingleMode || !directTitle) return null;
+        return { id: directUrl || "loading", name: directTitle, size: undefined, type: "file", children: [] };
     }, [isSingleMode, directUrl, directTitle]);
 
     // Fetch download link for current file (gallery mode only)
@@ -63,7 +60,7 @@ export function PreviewDialog() {
         queryKey: getDownloadLinkCacheKey(currentAccount.id, currentFile?.id || "", true),
         queryFn: () => client.getDownloadLink({ fileNode: currentFile!, resolve: true }),
         enabled: isOpen && !isSingleMode && !!currentFile?.id,
-        gcTime: downloadLinkMaxAge,
+        gcTime: 15 * 60 * 1000, // 15 minutes
     });
 
     const handleNext = useCallback(() => {
@@ -210,6 +207,11 @@ export function PreviewDialog() {
                     {!isSingleMode && isLoading ? (
                         <div className="flex items-center justify-center h-full">
                             <Loader2 className="h-8 w-8 animate-spin" />
+                        </div>
+                    ) : isSingleMode && !activeUrl ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
+                            <Loader2 className="h-10 w-10 animate-spin" />
+                            <p className="text-sm font-medium">Preparing playback…</p>
                         </div>
                     ) : activeUrl ? (
                         <PreviewContent

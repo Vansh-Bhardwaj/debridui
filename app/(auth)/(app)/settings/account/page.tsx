@@ -6,8 +6,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { setPassword } from "@/lib/actions/user";
-import { PageHeader } from "@/components/page-header";
-import { SectionDivider } from "@/components/section-divider";
+import { PageHeader } from "@/components/common/page-header";
+import { SectionDivider } from "@/components/common/section-divider";
 import { clearAppCache } from "@/lib/utils";
 import { parseUserAgent } from "@/lib/utils/media-player";
 import { toast } from "sonner";
@@ -184,6 +184,7 @@ function PasswordSection() {
     });
 
     const hasPassword = accounts.some((account) => account.providerId === "credential");
+    const hasOAuth = accounts.some((account) => account.providerId !== "credential");
 
     const changeForm = useForm<z.infer<typeof passwordChangeSchema>>({
         resolver: zodResolver(passwordChangeSchema),
@@ -246,7 +247,11 @@ function PasswordSection() {
         <section className="space-y-4">
             <SectionDivider label="Password" />
             <p className="text-xs text-muted-foreground">
-                {hasPassword ? "Change your account password" : "Set a password for your account"}
+                {hasPassword
+                    ? "Change your account password"
+                    : hasOAuth
+                      ? "You signed in with Google. Set a password to also log in with email."
+                      : "Set a password for your account"}
             </p>
 
             {hasPassword ? (
@@ -382,20 +387,63 @@ function SessionsSection({ currentToken }: { currentToken?: string }) {
         staleTime: 1 * 60 * 1000,
     });
 
-    const sortedSessions = useMemo(
-        () => [...sessions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-        [sessions]
-    );
+    // Group sessions by device/browser + IP, keeping most recent per group
+    const groupedSessions = useMemo(() => {
+        if (!sessions.length) return [];
+
+        // Sort descending by creation time
+        const sorted = [...sessions].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        // Current session always standalone (don't group it)
+        const currentSession = sorted.find((s) => s.token === currentToken);
+        const otherSessions = sorted.filter((s) => s.token !== currentToken);
+
+        // Group others by parsed summary + IP
+        const groups = new Map<string, { representative: (typeof sessions)[0]; count: number; tokens: string[] }>();
+        for (const session of otherSessions) {
+            const parsed = parseUserAgent(session.userAgent);
+            const key = `${parsed.summary}|${session.ipAddress || "unknown"}`;
+            const existing = groups.get(key);
+            if (existing) {
+                existing.count++;
+                existing.tokens.push(session.token);
+            } else {
+                groups.set(key, { representative: session, count: 1, tokens: [session.token] });
+            }
+        }
+
+        const result: { session: (typeof sessions)[0]; count: number; isCurrent: boolean; tokens: string[] }[] = [];
+
+        // Current session first
+        if (currentSession) {
+            result.push({ session: currentSession, count: 1, isCurrent: true, tokens: [currentSession.token] });
+        }
+
+        // Other groups sorted by most recent
+        for (const group of groups.values()) {
+            result.push({
+                session: group.representative,
+                count: group.count,
+                isCurrent: false,
+                tokens: group.tokens,
+            });
+        }
+
+        return result;
+    }, [sessions, currentToken]);
 
     const revokeMutation = useMutation({
-        mutationFn: async (token: string) => {
-            const { error } = await authClient.revokeSession({ token });
-            if (error) throw new Error(error.message || "Failed to revoke session");
+        mutationFn: async (tokens: string[]) => {
+            // Revoke all tokens in the group
+            for (const token of tokens) {
+                const { error } = await authClient.revokeSession({ token });
+                if (error) throw new Error(error.message || "Failed to revoke session");
+            }
         },
         onSuccess: () => {
-            toast.success("Session revoked successfully", {
-                description: "Note: The session may still have access until cookies expire",
-            });
+            toast.success("Session revoked");
             queryClient.invalidateQueries({ queryKey: USER_SESSIONS_KEY });
         },
         onError: (error: Error) => toast.error(`Failed to revoke session: ${error.message}`),
@@ -407,7 +455,7 @@ function SessionsSection({ currentToken }: { currentToken?: string }) {
             if (error) throw new Error(error.message || "Failed to revoke sessions");
         },
         onSuccess: () => {
-            toast.success("All other sessions revoked successfully");
+            toast.success("All other sessions revoked");
             queryClient.invalidateQueries({ queryKey: USER_SESSIONS_KEY });
         },
         onError: (error: Error) => toast.error(`Failed to revoke sessions: ${error.message}`),
@@ -432,63 +480,64 @@ function SessionsSection({ currentToken }: { currentToken?: string }) {
                             </div>
                         ))}
                     </>
-                ) : sessions.length === 0 ? (
+                ) : groupedSessions.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4">No active sessions found</p>
                 ) : (
                     <>
-                        {sortedSessions.map((sessionItem) => {
-                            const isCurrent = sessionItem.token === currentToken;
-                            const parsed = parseUserAgent(sessionItem.userAgent);
+                        {groupedSessions.map((group) => {
+                            const parsed = parseUserAgent(group.session.userAgent);
                             const DeviceIcon =
                                 parsed.device === "Phone" ? Smartphone : parsed.device === "Tablet" ? Tablet : Monitor;
 
                             return (
                                 <div
-                                    key={sessionItem.id}
-                                    className={`rounded-sm border p-3 sm:p-4 transition-colors ${isCurrent ? "border-primary/30 bg-primary/[0.03]" : "border-border/50 hover:border-border"}`}>
+                                    key={group.session.id}
+                                    className={`rounded-sm border p-3 sm:p-4 transition-colors ${group.isCurrent ? "border-primary/30 bg-primary/[0.03]" : "border-border/50 hover:border-border"}`}>
                                     <div className="flex items-center gap-3">
                                         <div
-                                            className={`flex size-9 shrink-0 items-center justify-center rounded-sm ${isCurrent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                            className={`flex size-9 shrink-0 items-center justify-center rounded-sm ${group.isCurrent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                                             <DeviceIcon className="size-4" strokeWidth={1.5} />
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <p className="font-light truncate text-sm">{parsed.summary}</p>
-                                                {isCurrent && (
+                                                {group.isCurrent && (
                                                     <Badge
                                                         variant="default"
                                                         className="text-[10px] tracking-widest uppercase px-1.5 py-0 shrink-0">
                                                         Current
                                                     </Badge>
                                                 )}
+                                                {group.count > 1 && (
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="text-[10px] px-1.5 py-0 shrink-0">
+                                                        {group.count} sessions
+                                                    </Badge>
+                                                )}
                                             </div>
-                                            <p className="text-[11px] text-muted-foreground/50 truncate">
-                                                {sessionItem.userAgent || "Unknown user agent"}
-                                            </p>
                                         </div>
-                                        {!isCurrent && (
+                                        {!group.isCurrent && (
                                             <Button
-                                                onClick={() => revokeMutation.mutate(sessionItem.token)}
+                                                onClick={() => revokeMutation.mutate(group.tokens)}
                                                 variant="destructive"
                                                 size="sm"
                                                 disabled={revokeMutation.isPending}
                                                 className="shrink-0">
-                                                Revoke
+                                                Revoke{group.count > 1 ? " All" : ""}
                                             </Button>
                                         )}
                                     </div>
                                     <div className="mt-2 ml-12 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        {sessionItem.ipAddress && (
+                                        {group.session.ipAddress && (
                                             <span className="inline-flex items-center gap-1">
                                                 <MapPin className="size-3 shrink-0" />
-                                                {sessionItem.ipAddress}
+                                                {group.session.ipAddress}
                                             </span>
                                         )}
                                         <span className="inline-flex items-center gap-1">
                                             <Clock className="size-3 shrink-0" />
-                                            {formatDistanceToNow(new Date(sessionItem.createdAt), { addSuffix: true })}
-                                            <span className="text-border">·</span>
-                                            {new Date(sessionItem.createdAt).toLocaleString()}
+                                            {formatDistanceToNow(new Date(group.session.createdAt), { addSuffix: true })}
                                         </span>
                                     </div>
                                 </div>

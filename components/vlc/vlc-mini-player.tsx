@@ -160,8 +160,8 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
     const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
 
     return (
-        <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none" role="region" aria-label="Media player">
-            <div className="pointer-events-auto mx-auto max-w-3xl px-4 pb-4">
+        <div role="region" aria-label="Media player">
+            <div className="pointer-events-auto mx-auto max-w-3xl px-4 pb-2">
                 <div className="rounded-sm border border-border/50 bg-background/95 backdrop-blur-md shadow-lg overflow-hidden">
                     {/* Collapse toggle */}
                     <button

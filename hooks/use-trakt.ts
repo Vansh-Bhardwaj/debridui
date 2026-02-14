@@ -471,3 +471,17 @@ export function useTraktRecentEpisodes(days = 7) {
         enabled: !!traktClient.getAccessToken(),
     });
 }
+
+/** Lookup a movie by TMDB ID — returns the Trakt slug for linking */
+export function useTraktSlugFromTmdb(tmdbId: number | undefined) {
+    return useQuery({
+        queryKey: ["trakt", "lookup", "tmdb", tmdbId],
+        queryFn: async () => {
+            const results = await traktClient.lookupByExternalId("tmdb", tmdbId!);
+            const movie = results[0]?.movie;
+            return movie?.ids?.slug ?? null;
+        },
+        staleTime: CACHE_DURATION.LONG,
+        enabled: !!tmdbId,
+    });
+}

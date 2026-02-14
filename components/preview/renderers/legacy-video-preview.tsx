@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2 } from "lucide-react";
 import { toast } from "sonner";
-import { getProxyUrl, isNonMP4Video, openInPlayer } from "@/lib/utils";
+import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
@@ -24,6 +24,8 @@ import { useProgress, type ProgressKey } from "@/hooks/use-progress";
 import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
+import { useDeviceSyncStore } from "@/lib/stores/device-sync";
+import { cn } from "@/lib/utils";
 
 /** Parsed subtitle cue for manual rendering */
 interface SubtitleCue {
@@ -105,6 +107,82 @@ export interface LegacyVideoPreviewProps {
 }
 
 const LOADING_HINT_AFTER_MS = 12000;
+
+/** Compact device-sync cast button for the video player control bar */
+function PlayerCastButton({
+    videoRef,
+    downloadUrl,
+    title,
+    subtitles,
+}: {
+    videoRef: React.RefObject<HTMLVideoElement | null>;
+    downloadUrl: string;
+    title: string;
+    subtitles?: AddonSubtitle[];
+}) {
+    const enabled = useDeviceSyncStore((s) => s.enabled);
+    const devices = useDeviceSyncStore((s) => s.devices);
+    const activeTarget = useDeviceSyncStore((s) => s.activeTarget);
+    const connectionStatus = useDeviceSyncStore((s) => s.connectionStatus);
+    const setActiveTarget = useDeviceSyncStore((s) => s.setActiveTarget);
+    const transferPlayback = useDeviceSyncStore((s) => s.transferPlayback);
+
+    if (!enabled || connectionStatus !== "connected") return null;
+
+    const isRemoteActive = activeTarget !== null;
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-white hover:bg-white/20"
+                    aria-label="Cast to device">
+                    <Cast className={cn("h-5 w-5", isRemoteActive && "text-primary")} />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+                align="end"
+                side="top"
+                className="min-w-[200px] z-[100] bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                    Play on
+                </DropdownMenuLabel>
+                {/* This device */}
+                <DropdownMenuItem
+                    onClick={() => setActiveTarget(null)}
+                    className={cn("focus:bg-white/10 focus:text-white", !isRemoteActive && "text-primary")}>
+                    This device {!isRemoteActive && "✓"}
+                </DropdownMenuItem>
+                {/* Other devices */}
+                {devices.map((device) => (
+                    <DropdownMenuItem
+                        key={device.id}
+                        onClick={() => {
+                            setActiveTarget(device.id);
+                            const video = videoRef.current;
+                            transferPlayback(device.id, {
+                                url: downloadUrl,
+                                title,
+                                subtitles: subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
+                                progressSeconds: video?.currentTime,
+                                durationSeconds: video?.duration,
+                            });
+                        }}
+                        className={cn("focus:bg-white/10 focus:text-white", activeTarget === device.id && "text-primary")}>
+                        {device.name} {activeTarget === device.id && "✓"}
+                    </DropdownMenuItem>
+                ))}
+                {devices.length === 0 && (
+                    <DropdownMenuItem className="focus:bg-transparent text-white/40 cursor-default" onSelect={(e) => e.preventDefault()}>
+                        No other devices online
+                    </DropdownMenuItem>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
 
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
 export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, startFromSeconds, onNext, onPrev, onPreload, onLoad, onError }: LegacyVideoPreviewProps) {
@@ -232,6 +310,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 // Only seek if within valid range (not at the end)
                 if (seekTo < video.duration - 5) {
                     video.currentTime = seekTo;
+                    const mins = Math.floor(seekTo / 60);
+                    const secs = Math.floor(seekTo % 60);
+                    toast.info(`Resumed at ${mins}:${secs.toString().padStart(2, "0")}`, { duration: 2000 });
                 }
             }
         }
@@ -684,7 +765,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, []);
 
-    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "external" | "settings" | null>(null);
+    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
 
     // When subtitle selection changes (non-iOS), toggle textTracks modes (also disables embedded tracks).
     useEffect(() => {
@@ -1152,8 +1233,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* Non-iOS: brief "preparing subtitles" gate (proxy conversion) */}
                     {!ios && !canStartPlayback && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-sm z-10">
-                            Preparing subtitles…
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60 text-white z-40">
+                            <Loader2 className="h-10 w-10 animate-spin" />
+                            <p className="text-sm font-medium">Preparing subtitles…</p>
                         </div>
                     )}
 
@@ -1452,52 +1534,56 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             <Plus className="h-4 w-4" />
                                                         </Button>
                                                     </div>
+
+                                                    <div className="h-px bg-white/10 my-2" />
+
+                                                    {/* Open in external player — platform-filtered */}
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                        Open In
+                                                    </DropdownMenuLabel>
+                                                    <div className="space-y-0.5 px-1 pb-1">
+                                                        {Object.values(MediaPlayer)
+                                                            .filter((p) => p !== MediaPlayer.BROWSER && isSupportedPlayer(p))
+                                                            .map((player) => (
+                                                                <DropdownMenuItem
+                                                                    key={player}
+                                                                    onClick={() => openInExternalPlayer(player)}
+                                                                    className="gap-2 focus:bg-white/10 focus:text-white">
+                                                                    <ExternalLink className="size-3.5" /> {player}
+                                                                </DropdownMenuItem>
+                                                            ))}
+                                                    </div>
+
+                                                    {/* PiP */}
+                                                    {document.pictureInPictureEnabled && (
+                                                        <>
+                                                            <div className="h-px bg-white/10 my-2" />
+                                                            <DropdownMenuItem
+                                                                onClick={() => {
+                                                                    const video = videoRef.current;
+                                                                    if (!video) return;
+                                                                    if (document.pictureInPictureElement) {
+                                                                        document.exitPictureInPicture();
+                                                                    } else {
+                                                                        video.requestPictureInPicture().catch(() => {});
+                                                                    }
+                                                                }}
+                                                                className="gap-2 focus:bg-white/10 focus:text-white mx-1">
+                                                                <PictureInPicture2 className="size-3.5" /> Picture in Picture
+                                                            </DropdownMenuItem>
+                                                        </>
+                                                    )}
                                                 </DropdownMenuContent>
                                             </DropdownMenuPortal>
                                         </DropdownMenu>
 
-                                        {/* Open in external player */}
-                                        <DropdownMenu
-                                            open={openMenu === "external"}
-                                            onOpenChange={(open) =>
-                                                setOpenMenu(open ? "external" : null)
-                                            }>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-9 w-9 text-white hover:bg-white/20">
-                                                    <ExternalLink className="h-5 w-5" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
-                                                <DropdownMenuContent
-                                                    align="end"
-                                                    className="min-w-[160px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
-                                                        External Player
-                                                    </DropdownMenuLabel>
-                                                    <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.VLC)}
-                                                        className="focus:bg-white/10 focus:text-white"
-                                                    >
-                                                        VLC
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.MPV)}
-                                                        className="focus:bg-white/10 focus:text-white"
-                                                    >
-                                                        MPV
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => openInExternalPlayer(MediaPlayer.IINA)}
-                                                        className="focus:bg-white/10 focus:text-white"
-                                                    >
-                                                        IINA
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenuPortal>
-                                        </DropdownMenu>
+                                        {/* Cast to device */}
+                                        <PlayerCastButton
+                                            videoRef={videoRef}
+                                            downloadUrl={effectiveUrl}
+                                            title={file.name}
+                                            subtitles={subtitles}
+                                        />
 
                                         {/* Fullscreen */}
                                         <Button

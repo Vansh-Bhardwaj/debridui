@@ -34,6 +34,8 @@ interface PreviewState {
     // Actions
     openPreview: (file: DebridFileNode, allFiles: DebridFileNode[], fileId: string) => void;
     openSinglePreview: (options: SinglePreviewOptions) => void;
+    /** Update the URL for a single-mode preview (e.g. after resolving a redirect) */
+    setDirectUrl: (url: string) => void;
     closePreview: () => void;
     navigateNext: () => void;
     navigatePrevious: () => void;
@@ -80,7 +82,7 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
         set({
             isOpen: true,
             mode: "single",
-            directUrl: url,
+            directUrl: url || null,
             directTitle: title,
             fileType: fileType ?? null,
             directSubtitles: subtitles ?? [],
@@ -91,6 +93,8 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
             fileId: null,
         });
     },
+
+    setDirectUrl: (url) => set({ directUrl: url }),
 
     closePreview: () => set(initialState),
 

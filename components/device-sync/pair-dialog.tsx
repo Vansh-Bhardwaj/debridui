@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Check, Copy, Link2, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import QRCode from "react-qr-code";
 
 /**
  * Pair Dialog — allows authenticated users to share a pairing link
@@ -111,6 +112,16 @@ export const PairDialog = memo(function PairDialog({
                         </div>
                     ) : pairUrl ? (
                         <>
+                            {/* QR Code */}
+                            <div className="flex justify-center py-2">
+                                <div className="rounded-sm border border-border/50 p-3 bg-white">
+                                    <QRCode value={pairUrl} size={160} level="M" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground text-center">
+                                Scan with your phone or tablet camera
+                            </p>
+
                             {/* Pairing URL display */}
                             <div className="flex items-center gap-2 rounded-sm border border-border/50 bg-muted/30 p-3">
                                 <Link2 className="size-4 text-muted-foreground shrink-0" />
