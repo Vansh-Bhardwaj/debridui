@@ -791,6 +791,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const activeSub = activeSubtitleIndex >= 0 ? subtitles?.[activeSubtitleIndex] : undefined;
         const activeLabel = activeSub ? activeSub.name ?? activeSub.lang : undefined;
 
+        // Expose active subtitle index to the device sync reporter via a data attribute
+        el.dataset.activeSubtitle = String(activeSubtitleIndex);
+
         // Ensure we never show more than one subtitle/caption track at a time.
         // Some streams have embedded tracks with the same label/lang as addon tracks,
         // so we only activate the first matching track to avoid "dual subtitles".

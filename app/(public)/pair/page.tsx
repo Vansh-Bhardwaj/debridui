@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { DeviceSyncClient } from "@/lib/device-sync/client";
 import { detectDevice } from "@/lib/device-sync/protocol";
-import type { ServerMessage, TransferPayload, TrackInfo, QueueItem } from "@/lib/device-sync/protocol";
+import type { ServerMessage, TransferPayload, TrackInfo, QueueItem, SourceSummary } from "@/lib/device-sync/protocol";
 import {
     Monitor,
     Smartphone,
@@ -23,6 +23,11 @@ import {
     Maximize2,
     ListMusic,
     Trash2,
+    Search,
+    Loader2,
+    ChevronDown,
+    ChevronUp,
+    Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,8 +37,10 @@ import {
     DropdownMenuPortal,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
+import type { DeviceInfo, RemoteAction, NowPlayingInfo } from "@/lib/device-sync/protocol";
 import { cn } from "@/lib/utils";
+import { traktClient } from "@/lib/trakt";
+import type { TraktEpisode } from "@/lib/trakt";
 
 function DeviceTypeIcon({ type, className }: { type: DeviceInfo["deviceType"]; className?: string }) {
     switch (type) {
@@ -81,17 +88,37 @@ function PairPageContent() {
     const [, setPlayback] = useState<TransferPayload | null>(null);
     const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
     const [queue, setQueue] = useState<QueueItem[]>([]);
+    const [client, setClient] = useState<DeviceSyncClient | null>(null);
     const clientRef = useRef<DeviceSyncClient | null>(null);
 
     const handleMessage = useCallback((msg: ServerMessage) => {
         const selfId = detectDevice().id;
         switch (msg.type) {
-            case "devices":
-                setDevices(msg.devices.filter((d) => d.id !== selfId));
+            case "devices": {
+                // Deduplicate by name+deviceType, keeping the most recently seen entry.
+                // Handles phantom entries from iOS Safari (ITP clears localStorage,
+                // generating new deviceIds while old hibernated sockets linger).
+                const seen = new Map<string, DeviceInfo>();
+                for (const d of msg.devices) {
+                    if (d.id === selfId) continue;
+                    const key = `${d.name}::${d.deviceType}`;
+                    const existing = seen.get(key);
+                    if (!existing || d.lastSeen > existing.lastSeen) {
+                        seen.set(key, d);
+                    }
+                }
+                setDevices(Array.from(seen.values()));
                 break;
+            }
             case "device-joined":
                 if (msg.device.id !== selfId) {
-                    setDevices((prev) => [...prev.filter((d) => d.id !== msg.device.id), msg.device]);
+                    setDevices((prev) => [
+                        ...prev.filter((d) =>
+                            d.id !== msg.device.id &&
+                            !(d.name === msg.device.name && d.deviceType === msg.device.deviceType)
+                        ),
+                        msg.device,
+                    ]);
                 }
                 break;
             case "device-left":
@@ -116,6 +143,12 @@ function PairPageContent() {
             case "queue-updated":
                 setQueue(msg.queue);
                 break;
+            case "browse-response":
+                // Dispatch to SearchSection via custom event
+                window.dispatchEvent(new CustomEvent("pair-browse-result", {
+                    detail: { requestId: msg.response.requestId, files: msg.response.files },
+                }));
+                break;
         }
     }, []);
 
@@ -136,6 +169,8 @@ function PairPageContent() {
         });
 
         clientRef.current = client;
+        // Use queueMicrotask to avoid synchronous setState in effect body
+        queueMicrotask(() => setClient(client));
         client.connect().then(() => {
             setTimeout(() => {
                 if (client.status !== "connected") setState("error");
@@ -145,6 +180,7 @@ function PairPageContent() {
         return () => {
             client.disconnect();
             clientRef.current = null;
+            setClient(null);
         };
     }, [token, syncUrl, handleMessage, isValid]);
 
@@ -349,6 +385,14 @@ function PairPageContent() {
                             ))}
                         </div>
                     </div>
+                )}
+
+                {/* Search files on remote device */}
+                {effectiveSelectedId && client && (
+                    <SearchSection
+                        client={client}
+                        targetId={effectiveSelectedId}
+                    />
                 )}
             </div>
         </div>
@@ -565,6 +609,353 @@ function RemoteController({
                     </Button>
                 </div>
             </div>
+
+            {/* Episode list (for shows) */}
+            {nowPlaying.type === "show" && nowPlaying.imdbId && nowPlaying.season && (
+                <EpisodeSection
+                    nowPlaying={nowPlaying}
+                    onCommand={onCommand}
+                />
+            )}
+
+            {/* Sources list */}
+            {nowPlaying.sources && nowPlaying.sources.length > 0 && (
+                <SourcesSection
+                    sources={nowPlaying.sources}
+                    onCommand={onCommand}
+                />
+            )}
+        </div>
+    );
+}
+
+// ── Episode Section (for TV shows) ─────────────────────────────────────────
+
+function EpisodeSection({
+    nowPlaying,
+    onCommand,
+}: {
+    nowPlaying: NowPlayingInfo;
+    onCommand: (action: RemoteAction, payload?: Record<string, unknown>) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const [episodes, setEpisodes] = useState<TraktEpisode[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [seasonOverride, setSeasonOverride] = useState<number | null>(null);
+    const [seasons, setSeasons] = useState<number[]>([]);
+    const fetchedRef = useRef<string>("");
+
+    const selectedSeason = seasonOverride ?? nowPlaying.season ?? 1;
+
+    // Fetch seasons on first expand
+    useEffect(() => {
+        if (!expanded || !nowPlaying.imdbId) return;
+        const key = `${nowPlaying.imdbId}`;
+        if (fetchedRef.current === key) return;
+        fetchedRef.current = key;
+
+        traktClient.getShowSeasons(nowPlaying.imdbId, "full").then((s) => {
+            const seasonNumbers = s.map((ss) => ss.number).filter((n) => n > 0).sort((a, b) => a - b);
+            setSeasons(seasonNumbers);
+        }).catch(() => {});
+    }, [expanded, nowPlaying.imdbId]);
+
+    // Fetch episodes when season changes
+    useEffect(() => {
+        if (!expanded || !nowPlaying.imdbId) return;
+
+        let cancelled = false;
+        const fetchEpisodes = async () => {
+            setLoading(true);
+            try {
+                const eps = await traktClient.getShowEpisodes(nowPlaying.imdbId!, selectedSeason, "full");
+                if (!cancelled) setEpisodes(eps);
+            } catch {
+                if (!cancelled) setEpisodes([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        fetchEpisodes();
+
+        return () => { cancelled = true; };
+    }, [expanded, nowPlaying.imdbId, selectedSeason]);
+
+    const currentEpisode = nowPlaying.episode;
+
+    return (
+        <div className="border-t border-border/30">
+            <button
+                onClick={() => setExpanded((e) => !e)}
+                className="flex items-center justify-between w-full px-5 py-3 text-left hover:bg-muted/20 transition-colors"
+            >
+                <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                    Episodes
+                </p>
+                {expanded ? <ChevronUp className="size-3.5 text-muted-foreground" /> : <ChevronDown className="size-3.5 text-muted-foreground" />}
+            </button>
+            {expanded && (
+                <div className="px-5 pb-4 space-y-3">
+                    {/* Season selector */}
+                    {seasons.length > 1 && (
+                        <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+                            {seasons.map((s) => (
+                                <Button
+                                    key={s}
+                                    variant={s === selectedSeason ? "default" : "ghost"}
+                                    size="sm"
+                                    className={cn("h-7 text-[10px] shrink-0", s === selectedSeason && "pointer-events-none")}
+                                    onClick={() => setSeasonOverride(s)}
+                                >
+                                    S{String(s).padStart(2, "0")}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Episode list */}
+                    {loading ? (
+                        <div className="flex items-center justify-center py-4">
+                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="space-y-0.5 max-h-48 overflow-y-auto -mx-1 px-1">
+                            {episodes.map((ep) => {
+                                const isCurrent = selectedSeason === nowPlaying.season && ep.number === currentEpisode;
+                                return (
+                                    <button
+                                        key={ep.number}
+                                        onClick={() => {
+                                            if (isCurrent) return;
+                                            // Extract show title from nowPlaying.title
+                                            const showTitle = nowPlaying.title.replace(/\s+S\d{1,2}\s*E\d{1,2}.*/i, "").replace(/\s+\[.*$/, "");
+                                            const epTag = `S${String(selectedSeason).padStart(2, "0")}E${String(ep.number).padStart(2, "0")}`;
+                                            const epTitle = ep.title ? `${showTitle} ${epTag} - ${ep.title}` : `${showTitle} ${epTag}`;
+                                            onCommand("play-episode", {
+                                                imdbId: nowPlaying.imdbId,
+                                                season: selectedSeason,
+                                                episode: ep.number,
+                                                title: epTitle,
+                                            });
+                                        }}
+                                        className={cn(
+                                            "flex items-center gap-2 w-full rounded-sm px-2 py-1.5 text-left transition-colors",
+                                            isCurrent
+                                                ? "bg-primary/10 border border-primary/30"
+                                                : "hover:bg-muted/30"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "text-[10px] w-6 text-center shrink-0 tabular-nums",
+                                            isCurrent ? "text-primary font-medium" : "text-muted-foreground"
+                                        )}>
+                                            {ep.number}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn("text-xs truncate", isCurrent && "text-primary font-medium")}>
+                                                {ep.title || `Episode ${ep.number}`}
+                                            </p>
+                                            {ep.runtime && (
+                                                <p className="text-[10px] text-muted-foreground">{ep.runtime}min</p>
+                                            )}
+                                        </div>
+                                        {isCurrent && (
+                                            <div className="size-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Sources Section ────────────────────────────────────────────────────────
+
+function SourcesSection({
+    sources,
+    onCommand,
+}: {
+    sources: SourceSummary[];
+    onCommand: (action: RemoteAction, payload?: Record<string, unknown>) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div className="border-t border-border/30">
+            <button
+                onClick={() => setExpanded((e) => !e)}
+                className="flex items-center justify-between w-full px-5 py-3 text-left hover:bg-muted/20 transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    <Layers className="size-3.5 text-muted-foreground" />
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                        Sources
+                    </p>
+                    <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                        {sources.length}
+                    </span>
+                </div>
+                {expanded ? <ChevronUp className="size-3.5 text-muted-foreground" /> : <ChevronDown className="size-3.5 text-muted-foreground" />}
+            </button>
+            {expanded && (
+                <div className="px-5 pb-4 space-y-0.5 max-h-64 overflow-y-auto">
+                    {sources.map((source) => {
+                        const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" · ");
+                        return (
+                            <button
+                                key={source.index}
+                                onClick={() => onCommand("play-source", { index: source.index })}
+                                className="flex items-start gap-2 w-full rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-muted/30"
+                            >
+                                <span className="text-[10px] w-5 text-center shrink-0 tabular-nums text-muted-foreground mt-0.5">
+                                    {source.index + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs truncate">{source.title}</p>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        {meta && (
+                                            <span className="text-[10px] text-muted-foreground">{meta}</span>
+                                        )}
+                                        {source.isCached && (
+                                            <span className="text-[10px] text-green-500 font-medium">Cached</span>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground/50">{source.addonName}</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Search Section ─────────────────────────────────────────────────────────
+
+function SearchSection({
+    client,
+    targetId,
+}: {
+    client: DeviceSyncClient;
+    targetId: string;
+}) {
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<{ id: string; name: string; size: number; status: string }[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [expanded, setExpanded] = useState(false);
+
+    const handleSearch = useCallback(async () => {
+        if (!query.trim()) return;
+        setSearching(true);
+        setResults([]);
+
+        const requestId = crypto.randomUUID();
+        const timeout = setTimeout(() => setSearching(false), 15000);
+
+        // Listen for the browse response
+        const handler = (e: MessageEvent) => {
+            try {
+                const msg = JSON.parse(e.data) as ServerMessage;
+                if (msg.type === "browse-response" && msg.response.requestId === requestId) {
+                    clearTimeout(timeout);
+                    setResults(msg.response.files);
+                    setSearching(false);
+                }
+            } catch { /* ignore */ }
+        };
+
+        // We can't easily hook into the client's message handler, so use the browse protocol
+        // by sending a browse request. Results come back via the normal message flow.
+        client.send({
+            type: "browse-request",
+            target: targetId,
+            request: { requestId, action: "search", query: query.trim() },
+        });
+
+        // Set up a one-time listener on the client's onMessage
+        // Actually, we need to intercept the message from the ws. Let's use a simpler approach:
+        // Send the request and wait for the pair page's handleMessage to get the response.
+        // Since we can't easily do that, let's store the request and check in handleMessage.
+        // For now, use a global event approach:
+        const browseHandler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail?.requestId === requestId) {
+                clearTimeout(timeout);
+                setResults(detail.files);
+                setSearching(false);
+                window.removeEventListener("pair-browse-result", browseHandler);
+            }
+        };
+        window.addEventListener("pair-browse-result", browseHandler);
+
+        // Clean up the message handler reference
+        void handler;
+
+        return () => {
+            clearTimeout(timeout);
+            window.removeEventListener("pair-browse-result", browseHandler);
+        };
+    }, [query, client, targetId]);
+
+    return (
+        <div className="space-y-2">
+            <button
+                onClick={() => setExpanded((e) => !e)}
+                className="flex items-center justify-between w-full text-left"
+            >
+                <div className="flex items-center gap-1.5 px-1">
+                    <Search className="size-3.5 text-muted-foreground" />
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                        Search Files
+                    </p>
+                </div>
+                {expanded ? <ChevronUp className="size-3.5 text-muted-foreground" /> : <ChevronDown className="size-3.5 text-muted-foreground" />}
+            </button>
+            {expanded && (
+                <div className="space-y-2">
+                    <div className="flex gap-1">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                            placeholder="Search on remote device..."
+                            className="flex-1 h-8 rounded-sm border border-border/50 bg-muted/20 px-2 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+                        />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0"
+                            onClick={handleSearch}
+                            disabled={searching || !query.trim()}
+                        >
+                            {searching ? <Loader2 className="size-3 animate-spin" /> : <Search className="size-3" />}
+                        </Button>
+                    </div>
+                    {results.length > 0 && (
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                            {results.map((file) => (
+                                <div
+                                    key={file.id}
+                                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-muted/30 transition-colors"
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs truncate">{file.name}</p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {file.size ? `${(file.size / (1024 * 1024 * 1024)).toFixed(1)} GB` : ""} {file.status && <><span className="text-border">·</span> {file.status}</>}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -597,7 +988,12 @@ function TrackDropdown({
             <DropdownMenuPortal>
                 <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
                     {showOff && (
-                        <DropdownMenuItem onClick={() => onSelect(-1)}>Off</DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => onSelect(-1)}
+                            className={cn(!tracks.some((t) => t.active) && "text-primary font-medium")}
+                        >
+                            Off
+                        </DropdownMenuItem>
                     )}
                     {tracks.map((t) => (
                         <DropdownMenuItem

@@ -62,7 +62,12 @@ function PlaybackControls({
             : 0;
 
     return (
-        <div className="px-2 pb-1.5 space-y-1">
+        // Prevent pointer/click events from propagating to Radix dropdown dismiss handler
+        <div
+            className="px-2 pb-1.5 space-y-1"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+        >
             <p className="text-xs text-muted-foreground truncate px-0.5">
                 {device.nowPlaying.title}
             </p>
@@ -79,7 +84,7 @@ function PlaybackControls({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "previous"); }}
+                    onClick={() => onCommand(device.id, "previous")}
                 >
                     <SkipBack className="size-3.5" />
                 </Button>
@@ -87,7 +92,7 @@ function PlaybackControls({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "toggle-pause"); }}
+                    onClick={() => onCommand(device.id, "toggle-pause")}
                 >
                     {device.nowPlaying.paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
                 </Button>
@@ -95,7 +100,7 @@ function PlaybackControls({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    onPointerDown={(e) => { e.stopPropagation(); onCommand(device.id, "next"); }}
+                    onClick={() => onCommand(device.id, "next")}
                 >
                     <SkipForward className="size-3.5" />
                 </Button>

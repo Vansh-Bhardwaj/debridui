@@ -25,6 +25,17 @@ export interface TrackInfo {
     active?: boolean;
 }
 
+/** Compact source info sent over WebSocket (no URLs — those stay on the playing device). */
+export interface SourceSummary {
+    index: number;
+    title: string;
+    resolution?: string;
+    quality?: string;
+    size?: string;
+    isCached?: boolean;
+    addonName: string;
+}
+
 export interface NowPlayingInfo {
     title: string;
     imdbId?: string;
@@ -38,6 +49,7 @@ export interface NowPlayingInfo {
     volume?: number; // 0-100
     audioTracks?: TrackInfo[];
     subtitleTracks?: TrackInfo[];
+    sources?: SourceSummary[];
 }
 
 export interface TransferPayload {
@@ -136,7 +148,9 @@ export type RemoteAction =
     | "previous"
     | "set-audio-track"
     | "set-subtitle-track"
-    | "fullscreen";
+    | "fullscreen"
+    | "play-episode"
+    | "play-source";
 
 // ── Server → Client Messages ───────────────────────────────────────────────
 

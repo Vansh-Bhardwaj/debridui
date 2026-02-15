@@ -232,6 +232,33 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             }
             break;
         }
+        case "play-episode": {
+            // Remote device is requesting we play a specific episode
+            const imdbId = payload?.imdbId as string | undefined;
+            const season = payload?.season as number | undefined;
+            const episode = payload?.episode as number | undefined;
+            const title = payload?.title as string | undefined;
+            if (!imdbId || season == null || episode == null) break;
+
+            window.dispatchEvent(
+                new CustomEvent("device-sync-play-episode", {
+                    detail: { imdbId, season, episode, title: title ?? "" },
+                })
+            );
+            break;
+        }
+        case "play-source": {
+            // Remote device is requesting we play a specific source by index
+            const sourceIndex = payload?.index as number | undefined;
+            if (sourceIndex == null) break;
+
+            window.dispatchEvent(
+                new CustomEvent("device-sync-play-source", {
+                    detail: { index: sourceIndex },
+                })
+            );
+            break;
+        }
     }
 }
 

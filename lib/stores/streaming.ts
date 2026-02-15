@@ -47,7 +47,7 @@ interface StreamingState {
     preloadedData: PreloadedData | null;
     preloadNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
 
-    play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[]) => Promise<void>;
+    play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
     playSource: (source: AddonSource, title: string, options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }) => Promise<void>;
     playNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
     playPreviousEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
@@ -312,7 +312,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         }
     },
 
-    play: async (request, addons) => {
+    play: async (request, addons, options) => {
+        const forceAutoPlay = options?.forceAutoPlay ?? false;
         // Clear preloaded data if we are playing something unrelated
         set({ preloadedData: null });
 
@@ -440,7 +441,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 source,
                 title: displayTitle,
                 isCached: result.isCached,
-                autoPlay: streamingSettings.autoPlay,
+                autoPlay: forceAutoPlay || streamingSettings.autoPlay,
                 allowUncached: streamingSettings.allowUncached,
                 onPlay: () =>
                     playSource(source, displayTitle, {
