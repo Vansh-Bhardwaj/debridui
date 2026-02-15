@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, memo } from "react";
+import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { Resolution, type AddonSource, type TvSearchParams } from "@/lib/addons/types";
 import { useAddonSources, useAddonSubtitles } from "@/hooks/use-addons";
 import { Button } from "@/components/ui/button";
@@ -251,6 +251,14 @@ export const SourceRow = memo(function SourceRow({
 export function Sources({ imdbId, mediaType = "movie", tvParams, className, mediaTitle }: SourcesProps) {
     const { data: sources, isLoading, failedAddons, retry } = useAddonSources({ imdbId, mediaType, tvParams });
     const { data: subtitles } = useAddonSubtitles({ imdbId, mediaType, tvParams });
+
+    // Sync fetched sources to the streaming store so the DeviceSyncReporter
+    // can include them in now-playing reports (enables remote source switching)
+    useEffect(() => {
+        if (sources?.length) {
+            useStreamingStore.setState({ allFetchedSources: sources });
+        }
+    }, [sources]);
 
     const [addonFilter, setAddonFilter] = useState("all");
 

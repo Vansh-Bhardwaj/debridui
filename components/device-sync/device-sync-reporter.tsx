@@ -12,10 +12,40 @@
 import { useEffect, useRef } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import { usePreviewStore } from "@/lib/stores/preview";
-import type { NowPlayingInfo, TrackInfo } from "@/lib/device-sync/protocol";
+import type { NowPlayingInfo, SourceSummary, TrackInfo } from "@/lib/device-sync/protocol";
 import { getVLCProgressSession } from "@/lib/vlc-progress";
+import { queryClient } from "@/lib/query-client";
+import type { Addon } from "@/lib/addons/types";
 
 const REPORT_INTERVAL_MS = 5000; // Report every 5s during playback
+
+/** Cache the streaming store module after first lazy load. */
+let _streamingStoreModule: typeof import("@/lib/stores/streaming") | null = null;
+
+/** Build compact source summaries from the streaming store's fetched sources. */
+function getSourceSummaries(): SourceSummary[] | undefined {
+    if (!_streamingStoreModule) return undefined;
+    const sources = _streamingStoreModule.useStreamingStore.getState().allFetchedSources;
+    if (!sources?.length) return undefined;
+    return sources.map((s, i) => ({
+        index: i,
+        title: s.title,
+        resolution: s.resolution,
+        quality: s.quality,
+        size: s.size,
+        isCached: s.isCached,
+        addonName: s.addonName,
+    }));
+}
+
+/** Eagerly lazy-load the streaming store module so getSourceSummaries works. */
+function ensureStreamingStore(): Promise<typeof import("@/lib/stores/streaming")> {
+    if (_streamingStoreModule) return Promise.resolve(_streamingStoreModule);
+    return import("@/lib/stores/streaming").then((m) => {
+        _streamingStoreModule = m;
+        return m;
+    });
+}
 
 export function DeviceSyncReporter() {
     const enabled = useDeviceSyncStore((s) => s.enabled);
@@ -30,6 +60,11 @@ export function DeviceSyncReporter() {
     const lastReportRef = useRef(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    // Eagerly load streaming store so getSourceSummaries() works in reports
+    useEffect(() => {
+        if (enabled) ensureStreamingStore();
+    }, [enabled]);
+
     // ── Browser <video> monitoring ────────────────────────────────────
 
     useEffect(() => {
@@ -40,9 +75,11 @@ export function DeviceSyncReporter() {
 
             // Use subtitles from the preview store (custom overlay renderer)
             // rather than native textTracks (which are disabled in our player)
+            const activeSubIdx = parseInt(video.dataset.activeSubtitle ?? "-1", 10);
             const subtitleTracks: TrackInfo[] = directSubtitles.map((s, i) => ({
                 id: i,
                 name: s.name || s.lang || `Track ${i + 1}`,
+                active: i === activeSubIdx,
             }));
 
             // Try to read audio tracks (Safari supports HTMLMediaElement.audioTracks)
@@ -72,6 +109,7 @@ export function DeviceSyncReporter() {
                 volume: Math.round(video.volume * 100),
                 audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
                 subtitleTracks: subtitleTracks.length > 0 ? subtitleTracks : undefined,
+                sources: getSourceSummaries(),
             };
         };
 
@@ -168,6 +206,7 @@ export function DeviceSyncReporter() {
                                 id: t.id,
                                 name: t.name,
                             })),
+                            sources: getSourceSummaries(),
                         });
                     }
                 });
@@ -196,6 +235,81 @@ export function DeviceSyncReporter() {
             return () => clearTimeout(timer);
         }
     }, [enabled, isOpen, reportNowPlaying]);
+
+    // ── Handle remote play-episode commands ───────────────────────────
+
+    useEffect(() => {
+        if (!enabled) return;
+
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as {
+                imdbId: string;
+                season: number;
+                episode: number;
+                title: string;
+            };
+            if (!detail?.imdbId) return;
+
+            // Get addons from React Query cache (no hook needed)
+            const addons = queryClient.getQueryData<Addon[]>(["user-addons"]) ?? [];
+            const enabledAddons = addons
+                .filter((a) => a.enabled)
+                .sort((a, b) => a.order - b.order)
+                .map((a) => ({ id: a.id, url: a.url, name: a.name }));
+
+            if (enabledAddons.length === 0) return;
+
+            // Force autoplay — remote user can't see/click the toast on this device
+            ensureStreamingStore().then(({ useStreamingStore }) => {
+                useStreamingStore.getState().play(
+                    {
+                        imdbId: detail.imdbId,
+                        type: "show",
+                        title: detail.title || "Episode",
+                        tvParams: { season: detail.season, episode: detail.episode },
+                    },
+                    enabledAddons,
+                    { forceAutoPlay: true }
+                );
+            });
+        };
+
+        window.addEventListener("device-sync-play-episode", handler);
+        return () => window.removeEventListener("device-sync-play-episode", handler);
+    }, [enabled]);
+
+    // ── Handle remote play-source commands ────────────────────────────
+
+    useEffect(() => {
+        if (!enabled) return;
+
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { index: number };
+            if (detail?.index == null) return;
+
+            ensureStreamingStore().then(({ useStreamingStore }) => {
+                const store = useStreamingStore.getState();
+                const source = store.allFetchedSources[detail.index];
+                if (!source?.url) return;
+
+                // Build title from active request or source title
+                const title = store.episodeContext
+                    ? `${store.episodeContext.title} S${String(store.episodeContext.season).padStart(2, "0")}E${String(store.episodeContext.episode).padStart(2, "0")}`
+                    : source.title;
+
+                // Preserve subtitles from the current playback session
+                const currentSubs = usePreviewStore.getState().directSubtitles;
+
+                store.playSource(source, title, {
+                    progressKey: store.getProgressKey() ?? undefined,
+                    subtitles: currentSubs.length > 0 ? currentSubs : undefined,
+                });
+            });
+        };
+
+        window.addEventListener("device-sync-play-source", handler);
+        return () => window.removeEventListener("device-sync-play-source", handler);
+    }, [enabled]);
 
     return null;
 }

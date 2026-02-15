@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
-import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
+import type { DeviceInfo, RemoteAction, SourceSummary } from "@/lib/device-sync/protocol";
 import {
     Monitor,
     Smartphone,
@@ -21,6 +21,7 @@ import {
     Subtitles,
     Maximize2,
     Loader2,
+    Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -133,7 +134,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const subtitleTracks = nowPlaying?.subtitleTracks ?? [];
 
     return (
-        <div role="region" aria-label="Remote player" className="pointer-events-auto mx-auto max-w-lg px-4 pb-4">
+        <div role="region" aria-label="Remote player" className="pointer-events-auto mx-auto max-w-lg px-2 sm:px-4 pb-3 sm:pb-4">
             <div className="rounded-sm border border-border bg-card/95 backdrop-blur-md shadow-xl overflow-hidden w-full">
                     {/* Collapse toggle — title bar */}
                     <div
@@ -167,7 +168,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
                     {/* ── Expanded: Full Remote ─────────────────────────── */}
                     {!collapsed && nowPlaying && (
-                        <div className="px-4 pb-4 pt-3 space-y-4 max-h-[55vh] overflow-y-auto">
+                        <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-2 sm:pt-3 space-y-3 sm:space-y-4 max-h-[55vh] overflow-y-auto">
                             {/* Title + metadata */}
                             <div className="space-y-0.5">
                                 <p className="text-sm font-medium truncate">{nowPlaying.title}</p>
@@ -210,12 +211,12 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 </div>
                             </div>
 
-                            {/* Transport controls — centered, larger */}
-                            <div className="flex items-center justify-center gap-2">
+                            {/* Transport controls — centered, responsive */}
+                            <div className="flex items-center justify-center gap-1 sm:gap-2">
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="size-9 text-xs tabular-nums font-medium"
+                                    className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
                                     onClick={() => cmd("seek", { position: Math.max(0, currentTime - 10) })}
                                     title="Rewind 10s"
                                     aria-label="Rewind 10 seconds"
@@ -225,41 +226,41 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8"
+                                    className="size-7 sm:size-8"
                                     onClick={() => cmd("previous")}
                                     title="Previous"
                                     aria-label="Previous"
                                 >
-                                    <SkipBack className="size-4 fill-current" />
+                                    <SkipBack className="size-3.5 sm:size-4 fill-current" />
                                 </Button>
                                 <Button
                                     variant="outline"
                                     size="icon"
-                                    className="size-11 rounded-full"
+                                    className="size-10 sm:size-11 rounded-full"
                                     onClick={() => cmd("toggle-pause")}
                                     title={isPlaying ? "Pause" : "Play"}
                                     aria-label={isPlaying ? "Pause" : "Play"}
                                 >
                                     {isPlaying ? (
-                                        <Pause className="size-5 fill-current" />
+                                        <Pause className="size-4 sm:size-5 fill-current" />
                                     ) : (
-                                        <Play className="size-5 fill-current ml-0.5" />
+                                        <Play className="size-4 sm:size-5 fill-current ml-0.5" />
                                     )}
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="size-8"
+                                    className="size-7 sm:size-8"
                                     onClick={() => cmd("next")}
                                     title="Next"
                                     aria-label="Next"
                                 >
-                                    <SkipForward className="size-4 fill-current" />
+                                    <SkipForward className="size-3.5 sm:size-4 fill-current" />
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="size-9 text-xs tabular-nums font-medium"
+                                    className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
                                     onClick={() => cmd("seek", { position: Math.min(duration, currentTime + 10) })}
                                     title="Forward 10s"
                                     aria-label="Forward 10 seconds"
@@ -298,8 +299,16 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                             {/* Playback queue */}
                             <PlaybackQueue compact />
 
+                            {/* Sources (alternative streams) */}
+                            {nowPlaying.sources && nowPlaying.sources.length > 0 && (
+                                <BannerSourcesSection
+                                    sources={nowPlaying.sources}
+                                    onCommand={cmd}
+                                />
+                            )}
+
                             {/* Bottom row: track selectors + fullscreen + stop */}
-                            <div className="flex items-center justify-between border-t border-border/30 pt-3">
+                            <div className="flex items-center justify-between border-t border-border/30 pt-2 sm:pt-3 flex-wrap gap-y-1">
                                 <div className="flex items-center gap-1">
                                     {/* Audio tracks */}
                                     {audioTracks.length > 0 && (
@@ -337,7 +346,10 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal>
                                                 <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
-                                                    <DropdownMenuItem onClick={() => cmd("set-subtitle-track", { trackId: -1 })}>
+                                                    <DropdownMenuItem
+                                                        onClick={() => cmd("set-subtitle-track", { trackId: -1 })}
+                                                        className={cn(!subtitleTracks.some((t) => t.active) && "text-primary font-medium")}
+                                                    >
                                                         Off
                                                     </DropdownMenuItem>
                                                     {subtitleTracks.map((t) => (
@@ -388,7 +400,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
                     {/* Loading state (transfer pending, nothing playing yet) */}
                     {!collapsed && !nowPlaying && transferPending && (
-                        <div className="px-4 py-4 flex items-center gap-3">
+                        <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
                             <Loader2 className="size-4 animate-spin text-primary shrink-0" />
                             <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium truncate">{transferPending}</p>
@@ -399,7 +411,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
                     {/* Idle state (selected but nothing playing) — always mounted to preserve file browser state */}
                     {!nowPlaying && !transferPending && (
-                        <div className={cn("px-4 pb-3 pt-2 max-h-[45vh] overflow-y-auto overflow-x-hidden", collapsed && "hidden")}>
+                        <div className={cn("px-3 sm:px-4 pb-3 pt-2 max-h-[45vh] overflow-y-auto overflow-x-hidden", collapsed && "hidden")}>
                             <RemoteFileBrowser targetDeviceId={targetDevice.id} compact />
                             <PlaybackQueue compact />
                         </div>
@@ -408,3 +420,65 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
             </div>
     );
 });
+
+// ── Banner Sources Section ─────────────────────────────────────────────────
+
+function BannerSourcesSection({
+    sources,
+    onCommand,
+}: {
+    sources: SourceSummary[];
+    onCommand: (action: RemoteAction, payload?: Record<string, unknown>) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div className="border-t border-border/30 -mx-3 sm:-mx-4">
+            <button
+                onClick={() => setExpanded((e) => !e)}
+                className="flex items-center justify-between w-full px-3 sm:px-4 py-2 text-left hover:bg-muted/20 transition-colors"
+            >
+                <div className="flex items-center gap-1.5">
+                    <Layers className="size-3 text-muted-foreground" />
+                    <span className="text-[10px] tracking-widest uppercase text-muted-foreground">
+                        Sources
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                        {sources.length}
+                    </span>
+                </div>
+                {expanded ? <ChevronUp className="size-3 text-muted-foreground" /> : <ChevronDown className="size-3 text-muted-foreground" />}
+            </button>
+            {expanded && (
+                <div className="px-3 sm:px-4 pb-2 space-y-0.5 max-h-48 overflow-y-auto">
+                    {sources.map((source) => {
+                        const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" · ");
+                        return (
+                            <button
+                                key={source.index}
+                                onClick={() => onCommand("play-source", { index: source.index })}
+                                className="flex items-start gap-1.5 w-full rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-muted/30"
+                            >
+                                <span className="text-[10px] w-4 text-center shrink-0 tabular-nums text-muted-foreground mt-0.5">
+                                    {source.index + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] truncate">{source.title}</p>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        {meta && (
+                                            <span className="text-[10px] text-muted-foreground">{meta}</span>
+                                        )}
+                                        {source.isCached && (
+                                            <span className="text-[10px] text-green-500 font-medium">Cached</span>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground/50">{source.addonName}</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
