@@ -24,8 +24,13 @@ export async function GET(req: Request) {
     try {
         const response = await fetch(url, {
             headers: {
-                accept: "application/json",
-                "user-agent": "DebridUI",
+                accept: "application/json, text/plain, */*",
+                // Use a standard browser user-agent — some addons may limit
+                // results for unrecognized user-agent strings
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                // Prevent upstream HTTP caching (AIOStreams, Cloudflare edge, etc.)
+                "cache-control": "no-cache",
+                "pragma": "no-cache",
             },
             redirect: "follow",
         });
@@ -43,7 +48,9 @@ export async function GET(req: Request) {
             status: 200,
             headers: {
                 "content-type": response.headers.get("content-type") ?? "application/json",
-                "cache-control": "public, max-age=300",
+                // No caching — stream results change frequently and can be partial
+                // during initial aggregation by meta-addons (AIOStreams, etc.)
+                "cache-control": "no-store",
             },
         });
     } catch (error) {

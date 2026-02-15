@@ -372,18 +372,19 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const sourcePromises = streamAddons.map(async (addon) => {
                 const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
 
-                const cached = queryClient.getQueryData<AddonSource[]>(queryKey);
-                if (cached?.length) return cached;
-
                 try {
-                    const client = new AddonClient({ url: addon.url });
-                    const response = await client.fetchStreams(imdbId, type, tvParams);
-                    const parsed = parseStreams(response.streams, addon.id, addon.name);
-                    // Only cache non-empty results so retries can re-fetch
-                    if (parsed.length > 0) {
-                        queryClient.setQueryData(queryKey, parsed);
-                    }
-                    return parsed;
+                    // Use fetchQuery which respects staleTime — avoids serving
+                    // stale cached data that may have fewer results
+                    return await queryClient.fetchQuery({
+                        queryKey,
+                        queryFn: async () => {
+                            const client = new AddonClient({ url: addon.url });
+                            const response = await client.fetchStreams(imdbId, type, tvParams);
+                            return parseStreams(response.streams, addon.id, addon.name);
+                        },
+                        staleTime: 3 * 60 * 1000, // 3 minutes
+                        gcTime: 10 * 60 * 1000,   // match use-addons.ts
+                    });
                 } catch {
                     return [] as AddonSource[];
                 }
@@ -502,14 +503,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             // 3. Fetch Streams (Background) — only from stream-capable addons
             const sourcePromises = streamAddons.map(async (addon) => {
                 const queryKey = ["addon", addon.id, "sources", episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode }] as const;
-                const cached = queryClient.getQueryData<AddonSource[]>(queryKey);
-                if (cached) return cached;
                 try {
-                    const client = new AddonClient({ url: addon.url });
-                    const response = await client.fetchStreams(episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode });
-                    const parsed = parseStreams(response.streams, addon.id, addon.name);
-                    queryClient.setQueryData(queryKey, parsed);
-                    return parsed;
+                    return await queryClient.fetchQuery({
+                        queryKey,
+                        queryFn: async () => {
+                            const client = new AddonClient({ url: addon.url });
+                            const response = await client.fetchStreams(episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode });
+                            return parseStreams(response.streams, addon.id, addon.name);
+                        },
+                        staleTime: 3 * 60 * 1000,
+                        gcTime: 10 * 60 * 1000,
+                    });
                 } catch { return [] as AddonSource[]; }
             });
 
@@ -545,7 +549,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         imdbId: episodeContext.imdbId
                     }
                 });
-                console.log("Preloaded next episode:", targetTitle);
+                if (process.env.NODE_ENV === "development") {
+                    console.log("Preloaded next episode:", targetTitle);
+                }
             }
 
         } catch (e) {

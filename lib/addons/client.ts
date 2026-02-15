@@ -7,11 +7,21 @@ import {
     type TvSearchParams,
 } from "./types";
 
+/** External CORS proxy URL — resolved at build time from env */
+const CORS_PROXY = process.env.NEXT_PUBLIC_CORS_PROXY_URL || "https://corsproxy.io/?url=";
 
-/** Check if an error is a CORS/network error (opaque failure from same-origin policy) */
+
+/** Check if an error is a CORS/network error (opaque failure from same-origin policy).
+ * Handles both raw TypeError (from fetch) AND wrapped AddonError (from executeFetch). */
 const isCorsOrNetworkError = (error: unknown): boolean => {
     if (error instanceof TypeError && error.message === "Failed to fetch") return true;
-    if (error instanceof AddonError && error.statusCode === 403) return true;
+    if (error instanceof AddonError) {
+        if (error.statusCode === 403) return true;
+        // executeFetch wraps TypeError("Failed to fetch") into
+        // AddonError("Network error: Failed to fetch") — match that too
+        if (error.message.includes("Failed to fetch")) return true;
+        if (error.message.includes("Network error")) return true;
+    }
     return false;
 };
 
@@ -46,12 +56,18 @@ export class AddonClient {
     }
 
     /**
-     * Create headers for API requests
+     * Create headers for API requests.
+     * 
+     * IMPORTANT: Only use CORS-safe ("simple") headers here.
+     * Adding non-simple headers like cache-control triggers a CORS preflight
+     * request — most addon servers (including AIOStreams) don't include
+     * cache-control in Access-Control-Allow-Headers, which causes the
+     * direct fetch to fail entirely and forces a proxy fallback.
      */
     private getHeaders(): HeadersInit {
         return {
-            accept: "application/json",
-            "accept-language": "en-US,en;q=0.5",
+            accept: "application/json, text/plain, */*",
+            "accept-language": "en-US,en;q=0.9",
         };
     }
 
@@ -74,12 +90,13 @@ export class AddonClient {
                 throw new AddonError(`HTTP ${response.status}: ${response.statusText}`, response.status);
             }
 
-            const contentType = response.headers.get("content-type");
-            if (contentType && !contentType.includes("json")) {
-                throw new AddonError("Invalid response format: expected JSON");
+            // Try to parse as JSON regardless of content-type — many addons
+            // return text/plain or omit the header entirely.
+            try {
+                return (await response.json()) as T;
+            } catch {
+                throw new AddonError("Invalid response: failed to parse JSON");
             }
-
-            return (await response.json()) as T;
         } catch (error) {
             clearTimeout(timeoutId);
 
@@ -98,22 +115,48 @@ export class AddonClient {
 
     /**
      * Make HTTP request — tries direct fetch first (bypasses proxy), falls back
-     * to /api/addon/proxy when the addon blocks direct browser requests (CORS/403).
+     * to external CORS proxy when the addon blocks direct browser requests (CORS/403).
      */
     private async makeRequest<T>(url: string): Promise<T> {
         // Server-side: always direct
         if (typeof window === "undefined") return this.executeFetch<T>(url);
 
-        // Client-side: try direct first to avoid Cloudflare IP bans
+        // Client-side: try direct first to avoid proxy overhead
         try {
-            return await this.executeFetch<T>(url);
+            const result = await this.executeFetch<T>(url);
+            if (process.env.NODE_ENV === "development") {
+                console.log(`[Addon] DIRECT fetch succeeded: ${url}`);
+            }
+            return result;
         } catch (error) {
             if (!isCorsOrNetworkError(error)) throw error;
+            if (process.env.NODE_ENV === "development") {
+                console.log(`[Addon] Direct fetch failed (CORS/network), trying external proxy...`);
+            }
         }
 
-        // Fallback to server proxy
-        const proxyUrl = `/api/addon/proxy?url=${encodeURIComponent(url)}`;
-        return this.executeFetch<T>(proxyUrl);
+        // Fallback: external CORS proxy (streams response directly, strips
+        // browser headers) → then built-in API proxy as last resort
+        const externalProxyUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
+        try {
+            const result = await this.executeFetch<T>(externalProxyUrl);
+            if (process.env.NODE_ENV === "development") {
+                console.log(`[Addon] EXTERNAL PROXY fetch succeeded: ${url}`);
+            }
+            return result;
+        } catch (error) {
+            if (!isCorsOrNetworkError(error)) throw error;
+            if (process.env.NODE_ENV === "development") {
+                console.log(`[Addon] External proxy failed, trying built-in API proxy...`);
+            }
+        }
+
+        // Last resort: built-in proxy (same origin, no CORS issues)
+        const apiProxyUrl = `/api/addon/proxy?url=${encodeURIComponent(url)}`;
+        if (process.env.NODE_ENV === "development") {
+            console.log(`[Addon] API PROXY fetch: ${url}`);
+        }
+        return this.executeFetch<T>(apiProxyUrl);
     }
 
     /**
@@ -141,8 +184,13 @@ export class AddonClient {
         const url = `${this.baseUrl}/stream/movie/${imdbId}.json`;
         const response = await this.makeRequest<AddonStreamResponse>(url);
 
+        // Normalise: some addons return {streams: null} or omit the key entirely
         if (!response.streams || !Array.isArray(response.streams)) {
-            throw new AddonError("Invalid response structure: missing streams array");
+            return { streams: [] };
+        }
+
+        if (process.env.NODE_ENV === "development") {
+            console.log(`[Addon] ${this.baseUrl} → movie/${imdbId}: ${response.streams.length} raw streams`);
         }
 
         return response;
@@ -163,8 +211,13 @@ export class AddonClient {
         const url = `${this.baseUrl}/stream/series/${imdbId}:${params.season}:${params.episode}.json`;
         const response = await this.makeRequest<AddonStreamResponse>(url);
 
+        // Normalise: some addons return {streams: null} or omit the key entirely
         if (!response.streams || !Array.isArray(response.streams)) {
-            throw new AddonError("Invalid response structure: missing streams array");
+            return { streams: [] };
+        }
+
+        if (process.env.NODE_ENV === "development") {
+            console.log(`[Addon] ${this.baseUrl} → series/${imdbId}:${params.season}:${params.episode}: ${response.streams.length} raw streams`);
         }
 
         return response;

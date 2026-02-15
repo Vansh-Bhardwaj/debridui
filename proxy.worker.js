@@ -64,7 +64,8 @@ export default {
 
         try {
             // Create clean headers — strip browser-specific headers that cause
-            // upstream servers (e.g. Torrentio) to reject the request with 403
+            // upstream servers (e.g. Torrentio) to reject the request with 403.
+            // Use browser-like defaults to bypass Cloudflare bot detection.
             const cleanHeaders = new Headers();
             const stripPrefixes = ["origin", "referer", "sec-", "cf-", "cookie", "host"];
 
@@ -73,6 +74,18 @@ export default {
                     cleanHeaders.set(key, value);
                 }
             }
+
+            // Override user-agent with a browser-like value to avoid Cloudflare blocks
+            cleanHeaders.set(
+                "user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            );
+            cleanHeaders.set("accept", "application/json, text/plain, */*");
+            cleanHeaders.set("accept-language", "en-US,en;q=0.9");
+            // Prevent any upstream HTTP caching — AIOStreams assembles results
+            // dynamically and cached responses may contain partial data
+            cleanHeaders.set("cache-control", "no-cache");
+            cleanHeaders.set("pragma", "no-cache");
 
             const proxyRequest = new Request(targetUrl, {
                 method: request.method,

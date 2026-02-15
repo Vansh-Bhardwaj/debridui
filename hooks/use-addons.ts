@@ -294,8 +294,8 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
         queries: streamAddons.map((addon: Addon) => ({
             queryKey: ["addon", addon.id, "sources", imdbId, mediaType, tvParams] as const,
             queryFn: () => fetchAddonSources(addon, imdbId, mediaType, tvParams),
-            staleTime: 5 * 60 * 1000, // 5 minutes
-            gcTime: 24 * 60 * 60 * 1000, // 24 hours
+            staleTime: 3 * 60 * 1000, // 3 minutes
+            gcTime: 10 * 60 * 1000, // 10 minutes (don't keep stale sources for hours)
             retry: 1,
             retryDelay: 1000,
             refetchOnWindowFocus: false,
@@ -335,10 +335,10 @@ export function useAddonSources({ imdbId, mediaType, tvParams }: UseAddonSources
     // Loading state: true if manifests or ANY source query is still loading
     const isLoading = manifestQueries.some((q) => q.isLoading) || queries.some((q) => q.isLoading);
 
-    // Retry: invalidate all source caches for this content and refetch
+    // Retry: clear cache AND actively refetch from all addons
     const retry = () => {
         for (const addon of streamAddons) {
-            queryClient.removeQueries({
+            queryClient.resetQueries({
                 queryKey: ["addon", addon.id, "sources", imdbId, mediaType, tvParams],
             });
         }

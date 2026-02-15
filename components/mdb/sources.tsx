@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import { Resolution, type AddonSource, type TvSearchParams } from "@/lib/addons/types";
 import { useAddonSources, useAddonSubtitles } from "@/hooks/use-addons";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useRouter } from "next/navigation";
 import { CachedBadge } from "@/components/common/display";
 import { useStreamingStore } from "@/lib/stores/streaming";
-import { useSettingsStore, getActiveRange } from "@/lib/stores/settings";
 
 // Resolution filter tiers — exact match per tier, not "and above"
 type ResolutionFilter = "4k" | "1080p" | "720p" | "all";
+
+const RESOLUTION_FILTER_KEY = "debridui-resolution-filter";
 
 /** Which tier a resolution belongs to */
 const RESOLUTION_TIER: Record<string, ResolutionFilter> = {
@@ -28,26 +29,27 @@ const RESOLUTION_TIER: Record<string, ResolutionFilter> = {
     [Resolution.SD_360P]: "720p",
 };
 
-/** Map user's quality profile to a default filter tab */
-function getDefaultFilter(streaming: Parameters<typeof getActiveRange>[0]): ResolutionFilter {
-    const range = getActiveRange(streaming);
-    const profile = streaming.profileId;
-    // Named profiles → deterministic defaults
-    if (profile === "high-quality" || profile === "max-quality") return "4k";
-    if (profile === "balanced") return "1080p";
-    if (profile === "data-saver" || profile === "low-bandwidth") return "720p";
-    // Custom → derive from maxResolution
-    const max = range.maxResolution;
-    if (max === "any") return "all";
-    return RESOLUTION_TIER[max] ?? "all";
+/** Read last selected filter from localStorage, default to "all" */
+function getSavedFilter(): ResolutionFilter {
+    if (typeof window === "undefined") return "all";
+    const saved = localStorage.getItem(RESOLUTION_FILTER_KEY);
+    if (saved === "4k" || saved === "1080p" || saved === "720p" || saved === "all") return saved;
+    return "all";
 }
 
+/** Strictly matches resolution tier */
 function matchesResolutionFilter(source: AddonSource, filter: ResolutionFilter): boolean {
     if (filter === "all") return true;
-    if (!source.resolution) return false; // unknown resolution → only visible in "All" tab
+    if (!source.resolution) return false;
     const tier = RESOLUTION_TIER[source.resolution];
-    if (!tier) return false; // unrecognized resolution → only visible in "All" tab
+    if (!tier) return false;
     return tier === filter;
+}
+
+/** Count sources matching a filter tier (including unknown-resolution sources in the count for "all") */
+function countForFilter(sources: AddonSource[] | undefined, filter: ResolutionFilter): number {
+    if (!sources) return 0;
+    return sources.filter((s) => matchesResolutionFilter(s, filter)).length;
 }
 
 const FILTER_OPTIONS: { value: ResolutionFilter; label: string }[] = [
@@ -252,9 +254,12 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
 
     const [addonFilter, setAddonFilter] = useState("all");
 
-    // Resolution filter — default from user's quality profile
-    const streaming = useSettingsStore((s) => s.get("streaming"));
-    const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>(() => getDefaultFilter(streaming));
+    // Resolution filter — remembered independently from settings
+    const [resolutionFilter, setResolutionFilterRaw] = useState<ResolutionFilter>(getSavedFilter);
+    const setResolutionFilter = useCallback((value: ResolutionFilter) => {
+        setResolutionFilterRaw(value);
+        try { localStorage.setItem(RESOLUTION_FILTER_KEY, value); } catch { /* noop */ }
+    }, []);
 
     const addonNames = useMemo(() => {
         if (!sources?.length) return [];
@@ -276,44 +281,69 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
         return result;
     }, [sources, addonFilter, resolutionFilter]);
 
+    // Total unfiltered sources count (after addon filter only)
+    const totalSourceCount = useMemo(() => {
+        if (!sources) return 0;
+        if (addonFilter !== "all") return sources.filter((s) => s.addonId === addonFilter).length;
+        return sources.length;
+    }, [sources, addonFilter]);
+
     return (
         <div className="space-y-2">
             {/* Filter bar — resolution + addon filters */}
             <div className="flex items-center justify-between gap-2 pt-2">
                 {/* Resolution filter tabs */}
                 <div className="flex items-center gap-0.5 bg-muted/30 rounded-sm p-0.5">
-                    {FILTER_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setResolutionFilter(opt.value)}
-                            className={cn(
-                                "px-2.5 py-1 text-xs rounded-sm transition-colors",
-                                resolutionFilter === opt.value
-                                    ? "bg-primary text-primary-foreground"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                            )}>
-                            {opt.label}
-                        </button>
-                    ))}
+                    {FILTER_OPTIONS.map((opt) => {
+                        const count = countForFilter(sources, opt.value);
+                        return (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setResolutionFilter(opt.value)}
+                                className={cn(
+                                    "px-2.5 py-1 text-xs rounded-sm transition-colors",
+                                    resolutionFilter === opt.value
+                                        ? "bg-primary text-primary-foreground"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                )}>
+                                {opt.label}
+                                {!isLoading && count > 0 && opt.value !== "all" && (
+                                    <span className="ml-1 opacity-60">{count}</span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
 
-                {/* Addon filter — shown when multiple addons provide sources */}
-                {addonNames.length > 1 && (
-                    <Select value={addonFilter} onValueChange={setAddonFilter}>
-                        <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All addons</SelectItem>
-                            {addonNames.map((a) => (
-                                <SelectItem key={a.id} value={a.id}>
-                                    {a.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
+                {/* Addon filter + refresh — shown when multiple addons provide sources */}
+                <div className="flex items-center gap-1.5">
+                    {addonNames.length > 1 && (
+                        <Select value={addonFilter} onValueChange={setAddonFilter}>
+                            <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All addons</SelectItem>
+                                {addonNames.map((a) => (
+                                    <SelectItem key={a.id} value={a.id}>
+                                        {a.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {process.env.NODE_ENV === "development" && (
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={retry}
+                            disabled={isLoading}
+                            title="Force refresh (bypass cache)">
+                            <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className={cn("border border-border/50 rounded-sm overflow-hidden", className)}>
@@ -327,12 +357,28 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
 
                 {!isLoading && filtered?.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center px-4 gap-3">
-                        <p className="text-sm text-muted-foreground">No sources available</p>
-                        <p className="text-xs text-muted-foreground/70">Configure addons to fetch sources</p>
-                        <Button variant="outline" size="sm" onClick={retry}>
-                            <RefreshCw className="size-4" />
-                            Retry
-                        </Button>
+                        {totalSourceCount > 0 ? (
+                            <>
+                                <p className="text-sm text-muted-foreground">
+                                    No {resolutionFilter === "4k" ? "4K" : resolutionFilter} sources found
+                                </p>
+                                <p className="text-xs text-muted-foreground/70">
+                                    {totalSourceCount} source{totalSourceCount !== 1 ? "s" : ""} available in other qualities
+                                </p>
+                                <Button variant="outline" size="sm" onClick={() => setResolutionFilter("all")}>
+                                    Show all sources
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-muted-foreground">No sources available</p>
+                                <p className="text-xs text-muted-foreground/70">Configure addons to fetch sources</p>
+                                <Button variant="outline" size="sm" onClick={retry}>
+                                    <RefreshCw className="size-4" />
+                                    Retry
+                                </Button>
+                            </>
+                        )}
                     </div>
                 )}
 

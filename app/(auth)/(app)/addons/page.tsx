@@ -18,7 +18,7 @@ import { SectionDivider } from "@/components/common/section-divider";
 const ADDON_PRESETS = [
     {
         name: "Torrentio",
-        url: "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex|qualityfilter=480p,other,scr,cam|limit=4/manifest.json",
+        url: "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex|qualityfilter=480p,other,scr,cam/manifest.json",
     },
     {
         name: "Streaming Catalogs",

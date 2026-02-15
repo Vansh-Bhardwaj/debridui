@@ -152,23 +152,37 @@ const RESOLUTION_MAP: Record<string, Resolution> = {
  * Extended regex: numeric (2160p, 1080p, etc.), keywords (4k, uhd, full hd, fhd, hd, sd)
  * Order matters — longer patterns matched first via alternation.
  */
-const RESOLUTION_EXTENDED_REGEX = /\b(2160p|1440p|1080p|720p|480p|360p|4k\s*ultra|4k|uhd|full\s?hd|fullhd|fhd|hd|sd)\b/i;
+const RESOLUTION_NUMERIC_REGEX = /\b(2160p|1440p|1080p|720p|480p|360p)\b/i;
+const RESOLUTION_KEYWORD_REGEX = /\b(4k\s*ultra|4k|uhd|full\s?hd|fullhd|fhd|hd|sd)\b/i;
 
 export function extractResolution(stream: AddonStream): Resolution | undefined {
-    // Check name, title, description, and filename hint in priority order
+    // Check name, title, description, and filename hint
     const fields = [
         stream.name,
         stream.title,
         stream.description,
         stream.behaviorHints?.filename,
     ];
+
+    // Pass 1: Explicit numeric resolutions (most reliable — e.g. "1080p", "720p")
     for (const field of fields) {
         if (!field) continue;
-        const match = field.match(RESOLUTION_EXTENDED_REGEX);
+        const match = field.match(RESOLUTION_NUMERIC_REGEX);
         if (match) {
             return RESOLUTION_MAP[match[1].toLowerCase()];
         }
     }
+
+    // Pass 2: Keyword resolutions (e.g. "Full HD", "4K", "HD")
+    // Only used when no explicit numeric resolution is found in ANY field
+    for (const field of fields) {
+        if (!field) continue;
+        const match = field.match(RESOLUTION_KEYWORD_REGEX);
+        if (match) {
+            return RESOLUTION_MAP[match[1].toLowerCase()];
+        }
+    }
+
     return undefined;
 }
 /**
@@ -216,7 +230,18 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
  * Parse all streams from an addon response
  */
 export function parseStreams(streams: AddonStream[], addonId: string, addonName: string): AddonSource[] {
-    return streams.map((stream) => parseStream(stream, addonId, addonName));
+    const sources = streams.map((stream) => parseStream(stream, addonId, addonName));
+
+    if (process.env.NODE_ENV === "development" && sources.length > 0) {
+        const resBreakdown: Record<string, number> = {};
+        for (const s of sources) {
+            const key = s.resolution ?? "unknown";
+            resBreakdown[key] = (resBreakdown[key] || 0) + 1;
+        }
+        console.log(`[Parser] ${addonName}: ${streams.length} streams → ${sources.length} sources`, resBreakdown);
+    }
+
+    return sources;
 }
 
 /**
