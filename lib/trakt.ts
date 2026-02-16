@@ -797,19 +797,35 @@ export class TraktClient {
         return this.makeRequest("sync/history/remove", { method: "POST", body: JSON.stringify(items) }, true);
     }
 
-    /** Add episodes to watched history by show ID + episode numbers */
-    public async addEpisodesToHistory(episodes: { ids: SyncIds; season: number; number: number }[]) {
+    /** Add episodes to watched history using show ID + season/episode numbers */
+    public async addEpisodesToHistory(showIds: SyncIds, season: number, episodeNumbers: number[]) {
         return this.makeRequest("sync/history", {
             method: "POST",
-            body: JSON.stringify({ episodes }),
+            body: JSON.stringify({
+                shows: [{
+                    ids: showIds,
+                    seasons: [{
+                        number: season,
+                        episodes: episodeNumbers.map((n) => ({ number: n })),
+                    }],
+                }],
+            }),
         }, true);
     }
 
-    /** Remove episodes from watched history */
-    public async removeEpisodesFromHistory(episodes: { ids: SyncIds; season: number; number: number }[]) {
+    /** Remove episodes from watched history using show ID + season/episode numbers */
+    public async removeEpisodesFromHistory(showIds: SyncIds, season: number, episodeNumbers: number[]) {
         return this.makeRequest("sync/history/remove", {
             method: "POST",
-            body: JSON.stringify({ episodes }),
+            body: JSON.stringify({
+                shows: [{
+                    ids: showIds,
+                    seasons: [{
+                        number: season,
+                        episodes: episodeNumbers.map((n) => ({ number: n })),
+                    }],
+                }],
+            }),
         }, true);
     }
 

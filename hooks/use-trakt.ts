@@ -348,11 +348,9 @@ export function useMarkEpisodeWatched() {
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.addEpisodesToHistory(
-                params.episodes.map((ep) => ({
-                    ids: { trakt: params.showTraktId },
-                    season: params.season,
-                    number: ep,
-                }))
+                { trakt: params.showTraktId },
+                params.season,
+                params.episodes
             ),
         onMutate: async (params) => {
             // Optimistic update: mark episodes as watched immediately
@@ -401,11 +399,9 @@ export function useUnmarkEpisodeWatched() {
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.removeEpisodesFromHistory(
-                params.episodes.map((ep) => ({
-                    ids: { trakt: params.showTraktId },
-                    season: params.season,
-                    number: ep,
-                }))
+                { trakt: params.showTraktId },
+                params.season,
+                params.episodes
             ),
         onMutate: async (params) => {
             await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
