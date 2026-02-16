@@ -1361,7 +1361,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             step={0.05}
                                             value={isMuted ? 0 : volume}
                                             onChange={handleVolumeChange}
-                                            className="w-0 overflow-hidden accent-primary transition-all duration-300 group-hover/volume:w-24 group-hover/volume:ml-2"
+                                            style={{
+                                                background: `linear-gradient(to right, var(--primary) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.3) ${(isMuted ? 0 : volume) * 100}%)`
+                                            }}
+                                            className="h-1 w-0 cursor-pointer appearance-none rounded-full overflow-hidden accent-primary transition-all duration-300 group-hover/volume:w-20 group-hover/volume:overflow-visible"
                                         />
                                     </div>
 
