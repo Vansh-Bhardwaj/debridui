@@ -375,6 +375,7 @@ export function useMarkEpisodeWatched() {
         },
         onError: (_err, params, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+            toast.error("Failed to mark as watched", { description: "Check your Trakt connection in Settings" });
         },
         onSuccess: (_data, params) => {
             toast.success(
@@ -426,6 +427,7 @@ export function useUnmarkEpisodeWatched() {
         },
         onError: (_err, params, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+            toast.error("Failed to unmark watched", { description: "Check your Trakt connection in Settings" });
         },
         onSuccess: (_data, params) => {
             toast.success(

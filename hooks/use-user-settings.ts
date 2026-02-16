@@ -18,13 +18,22 @@ export function hydrateSettingsFromServer(settings: ServerSettings | null) {
 }
 
 export function useUserSettings(enabled = true) {
-    return useQuery({
+    const query = useQuery({
         queryKey: USER_SETTINGS_KEY,
         queryFn: () => getUserSettings(),
         enabled,
         staleTime: 60 * 60 * 1000, // 1 hour
         refetchOnWindowFocus: false,
     });
+
+    // Hydrate Trakt token whenever settings data is available.
+    // This ensures the global traktClient can make authenticated requests
+    // regardless of which page the user visits first.
+    if (query.data?.trakt_access_token && traktClient.getAccessToken() !== query.data.trakt_access_token) {
+        traktClient.setAccessToken(query.data.trakt_access_token);
+    }
+
+    return query;
 }
 
 export function useSaveUserSettings() {
