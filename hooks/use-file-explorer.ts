@@ -20,6 +20,7 @@ export function useFileExplorer() {
     const { data, isLoading } = useQuery({
         queryKey: [currentAccount.id, "getTorrentList", currentPage, sortBy, sortOrder],
         queryFn: () => client.getTorrentList({ offset, limit }),
+        staleTime: 0, // Always revalidate on mount — refetchInterval manages freshness while mounted
         // Adaptive polling: fast when downloads are active, slow when idle
         // Saves ~80% Worker requests vs fixed 3s polling
         refetchInterval: (query) => {

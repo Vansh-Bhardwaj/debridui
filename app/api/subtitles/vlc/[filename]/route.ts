@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isBlockedUrl } from "@/lib/utils/url-safety";
 
 function isSafeHttpUrl(value: string): boolean {
     try {
@@ -31,6 +32,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
 
     if (!url || !isSafeHttpUrl(url)) {
         return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+    }
+
+    if (isBlockedUrl(url)) {
+        return NextResponse.json({ error: "Blocked destination" }, { status: 403 });
     }
 
     const upstream = await fetch(url, {

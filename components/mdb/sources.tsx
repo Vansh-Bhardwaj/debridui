@@ -301,13 +301,15 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
             {/* Filter bar — resolution + addon filters */}
             <div className="flex items-center justify-between gap-2 pt-2">
                 {/* Resolution filter tabs */}
-                <div className="flex items-center gap-0.5 bg-muted/30 rounded-sm p-0.5">
+                <div className="flex items-center gap-0.5 bg-muted/30 rounded-sm p-0.5" role="radiogroup" aria-label="Resolution filter">
                     {FILTER_OPTIONS.map((opt) => {
                         const count = countForFilter(sources, opt.value);
                         return (
                             <button
                                 key={opt.value}
                                 type="button"
+                                role="radio"
+                                aria-checked={resolutionFilter === opt.value}
                                 onClick={() => setResolutionFilter(opt.value)}
                                 className={cn(
                                     "px-2.5 py-1 text-xs rounded-sm transition-colors",

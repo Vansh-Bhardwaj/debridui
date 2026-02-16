@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2, RotateCcw, X, Copy, Download, ListMusic, Loader2 } from "lucide-react";
 import { DebridFile } from "@/lib/types";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import { useSelectionStore } from "@/lib/stores/selection";
 import { useFileMutationActions, useFileLinkActions } from "@/hooks/use-file-actions";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 interface FileActionsDrawerProps {
     files: DebridFile[];
@@ -59,6 +60,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
 
     const { deleteMutation, retryMutation } = useFileMutationActions();
     const { copyMutation, downloadMutation, playlistMutation } = useFileLinkActions(selectedNodeIdsArray);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     return (
         <>
@@ -71,7 +73,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                     "fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border/50 shadow-lg transition-transform duration-300 ease-in-out",
                     hasAnySelection ? "translate-y-0" : "translate-y-full pointer-events-none"
                 )}>
-                <div className="container mx-auto max-w-7xl px-4 py-3">
+                <div className="container mx-auto max-w-7xl px-4 py-3" role="toolbar" aria-label="File actions">
                     {/* Mobile: 2 rows (3+3) | Tablet+: single flex row */}
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
                         {/* Row 1: Copy / Download / Playlist */}
@@ -136,7 +138,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                                 <Button
                                     variant="destructive"
                                     size="sm"
-                                    onClick={() => deleteMutation.mutate(fullySelectedFiles.map((f) => f.id))}
+                                    onClick={() => setShowDeleteConfirm(true)}
                                     disabled={deleteMutation.isPending}
                                     className="flex-1 sm:flex-none">
                                     <Trash2 className="size-4 sm:mr-2" />
@@ -155,6 +157,19 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={showDeleteConfirm}
+                onOpenChange={setShowDeleteConfirm}
+                title="Delete files?"
+                description={`This will permanently delete ${fullySelectedFiles.length} file(s). This action cannot be undone.`}
+                confirmText="Delete"
+                variant="destructive"
+                onConfirm={() => {
+                    setShowDeleteConfirm(false);
+                    deleteMutation.mutate(fullySelectedFiles.map((f) => f.id));
+                }}
+            />
         </>
     );
 }

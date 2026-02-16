@@ -95,6 +95,7 @@ export function useDebridUserInfo(account: UserAccount | null) {
         },
         enabled: !!accountId && !!accountType && !!accountApiKey,
         staleTime: 24 * 60 * 60 * 1000, // 24 hours
+        gcTime: 24 * 60 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false, // Don't refetch on tab focus (data is cached for 24h)
         refetchOnReconnect: false, // Don't refetch on reconnect (data is cached for 24h)

@@ -97,13 +97,17 @@ export function useFileMutationActions() {
     const deleteMutation = useToastMutation(
         async (fileIds: string[]) => {
             const result = { success: 0, error: 0 };
-            for (const id of fileIds) {
-                try {
+            const settled = await Promise.allSettled(
+                fileIds.map(async (id) => {
                     await removeTorrentWithCleanup(client, currentAccount.id, id);
+                })
+            );
+            for (const r of settled) {
+                if (r.status === "fulfilled") {
                     result.success++;
-                } catch (error) {
+                } else {
                     toast.error(
-                        `Failed to delete file ${id}: ${error instanceof Error ? error.message : "Unknown error"}`
+                        `Failed to delete file: ${r.reason instanceof Error ? r.reason.message : "Unknown error"}`
                     );
                     result.error++;
                 }

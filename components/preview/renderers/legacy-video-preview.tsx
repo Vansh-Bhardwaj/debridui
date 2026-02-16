@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2 } from "lucide-react";
@@ -1264,8 +1264,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             <span
                                 className="debridui-subtitle-text inline-block max-w-[90%] text-center px-3 py-1.5 rounded-sm"
                                 style={{ fontSize: `${subtitleSize}px` }}
-                                dangerouslySetInnerHTML={{ __html: activeCueText.replace(/\n/g, "<br />") }}
-                            />
+                            >
+                                {activeCueText.split("\n").map((line, i) => (
+                                    <React.Fragment key={i}>{i > 0 && <br />}{line}</React.Fragment>
+                                ))}
+                            </span>
                         </div>
                     )}
 

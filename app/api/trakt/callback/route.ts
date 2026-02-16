@@ -48,6 +48,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL("/settings?trakt=error&reason=no_code", getAppUrl()));
     }
 
+    // Validate OAuth state parameter (CSRF protection)
+    const state = request.nextUrl.searchParams.get("state");
+    const cookies = request.headers.get("cookie") || "";
+    const stateMatch = cookies.match(/(?:^|;\s*)trakt_oauth_state=([^;]+)/);
+    const storedState = stateMatch?.[1];
+    if (!state || !storedState || state !== storedState) {
+        return NextResponse.redirect(new URL("/settings?trakt=error&reason=state_mismatch", getAppUrl()));
+    }
+
     const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
     const clientSecret = getTraktSecret();
 
@@ -83,7 +92,10 @@ export async function GET(request: NextRequest) {
                 },
             });
 
-        return NextResponse.redirect(new URL("/settings?trakt=connected", getAppUrl()));
+        const response = NextResponse.redirect(new URL("/settings?trakt=connected", getAppUrl()));
+        // Clear the OAuth state cookie
+        response.cookies.set("trakt_oauth_state", "", { path: "/", maxAge: 0 });
+        return response;
     } catch (error) {
         console.error("[trakt] Token exchange failed:", {
             error: error instanceof Error ? error.message : error,

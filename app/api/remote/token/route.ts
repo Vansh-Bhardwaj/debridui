@@ -6,7 +6,6 @@ import { auth } from "@/lib/auth";
  *
  * Token format: base64(userId|timestamp):hmacHex
  * Valid for 24 hours. Uses SYNC_TOKEN_SECRET (shared with sync worker).
- * Falls back to NEON_AUTH_COOKIE_SECRET if SYNC_TOKEN_SECRET is not set.
  */
 export async function GET() {
     const { data: session } = await auth.getSession();
@@ -14,9 +13,9 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const secret = process.env.SYNC_TOKEN_SECRET || process.env.NEON_AUTH_COOKIE_SECRET;
+    const secret = process.env.SYNC_TOKEN_SECRET;
     if (!secret) {
-        return NextResponse.json({ error: "Token signing not configured" }, { status: 500 });
+        return NextResponse.json({ error: "SYNC_TOKEN_SECRET not configured" }, { status: 500 });
     }
 
     try {

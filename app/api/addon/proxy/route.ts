@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { isBlockedUrl } from "@/lib/utils/url-safety";
 
 function isSafeHttpUrl(value: string): boolean {
     try {
@@ -12,13 +14,23 @@ function isSafeHttpUrl(value: string): boolean {
 /**
  * Server-side proxy for Stremio addon requests.
  * Avoids CORS issues entirely since requests originate from the server.
+ * Requires authentication to prevent abuse as an open proxy.
  */
 export async function GET(req: Request) {
+    const { data: session } = await auth.getSession();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const url = searchParams.get("url") ?? "";
 
     if (!url || !isSafeHttpUrl(url)) {
         return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+    }
+
+    if (isBlockedUrl(url)) {
+        return NextResponse.json({ error: "Blocked destination" }, { status: 403 });
     }
 
     try {

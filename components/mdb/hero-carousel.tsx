@@ -302,6 +302,8 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
         []
     );
 
+    const wheelGestures = useMemo(() => WheelGesturesPlugin(), []);
+
     const { data: items, isLoading } = useTraktTrendingMixed(10);
 
     const scrollPrev = useCallback(() => api?.scrollPrev(), [api]);
@@ -340,7 +342,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
     }
 
     return (
-        <div className="-mx-4 -mt-6 lg:-mx-6 relative group/hero">
+        <div className="-mx-4 -mt-6 lg:-mx-6 relative group/hero" role="region" aria-roledescription="carousel" aria-label="Trending content">
             <Carousel
                 ref={carouselRef}
                 tabIndex={0}
@@ -350,7 +352,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     align: "start",
                     loop: true,
                 }}
-                plugins={[autoplay, WheelGesturesPlugin()]}>
+                plugins={[autoplay, wheelGestures]}>
                 <CarouselContent className="-ml-0">
                     {mixed.map((item: TraktMediaItem, index: number) => (
                         <CarouselItem key={`hero-${index}`} className="pl-0">
@@ -366,6 +368,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     variant="ghost"
                     size="icon"
                     onClick={scrollPrev}
+                    aria-label="Previous slide"
                     className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 -translate-x-2 group-hover/hero:translate-x-0">
                     <ChevronLeft className="size-5" />
                 </Button>
@@ -375,6 +378,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     variant="ghost"
                     size="icon"
                     onClick={scrollNext}
+                    aria-label="Next slide"
                     className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 translate-x-2 group-hover/hero:translate-x-0">
                     <ChevronRight className="size-5" />
                 </Button>

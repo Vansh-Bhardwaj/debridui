@@ -3,7 +3,7 @@
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { WatchButton } from "@/components/common/watch-button";
 import { Play, X, Star, SkipForward } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
@@ -55,7 +55,7 @@ function useNextEpisode(
     }, [seasons, season, episode]);
 }
 
-function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
+const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
     const { data: media, isLoading: loading } = useTraktMedia(item.imdbId, item.type);
 
     const progressPercent = item.durationSeconds > 0
@@ -195,7 +195,7 @@ function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
             )}
         </div>
     );
-}
+});
 
 export function ContinueWatching() {
     const { progress, loading } = useContinueWatching();
@@ -228,14 +228,27 @@ export function ContinueWatching() {
         fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
     }, []);
 
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    const handleScrollKeyDown = useCallback((e: React.KeyboardEvent) => {
+        const container = scrollRef.current;
+        if (!container) return;
+        const scrollAmount = 200;
+        if (e.key === "ArrowRight") {
+            container.scrollBy({ left: scrollAmount, behavior: "smooth" });
+        } else if (e.key === "ArrowLeft") {
+            container.scrollBy({ left: -scrollAmount, behavior: "smooth" });
+        }
+    }, []);
+
     if (loading) {
         return (
             <section className="mb-8">
                 <h2 className="text-lg font-light mb-4">Continue Watching</h2>
                 <div className="flex gap-4 overflow-x-auto pb-2">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex-shrink-0 w-48 md:w-56">
-                            <Skeleton className="aspect-video rounded-sm" />
+                        <div key={i} className="flex-shrink-0 w-40 sm:w-48">
+                            <Skeleton className="aspect-2/3 rounded-sm" />
                             <Skeleton className="h-4 mt-2 w-3/4" />
                         </div>
                     ))}
@@ -251,7 +264,14 @@ export function ContinueWatching() {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
+            <div
+                ref={scrollRef}
+                tabIndex={0}
+                role="region"
+                aria-label="Continue watching"
+                onKeyDown={handleScrollKeyDown}
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+            >
                 {items.map((item) => (
                     <ContinueWatchingItem
                         key={`${item.imdbId}-${item.season}-${item.episode}`}

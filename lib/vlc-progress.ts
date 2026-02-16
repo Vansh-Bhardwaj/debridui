@@ -8,6 +8,7 @@
 import type { ProgressKey } from "@/hooks/use-progress";
 import { getVLCBridgeClient } from "@/lib/utils/media-player";
 import { traktClient, TraktClient } from "@/lib/trakt";
+import { queryClient } from "@/lib/query-client";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,14 @@ async function sendScrobble(key: ProgressKey, action: "start" | "pause" | "stop"
         if (action === "start") await traktClient.scrobbleStart(request);
         else if (action === "pause") await traktClient.scrobblePause(request);
         else await traktClient.scrobbleStop(request);
+
+        // When scrobble stops at ≥80%, Trakt auto‑marks the episode as watched.
+        // Invalidate the show’s watched‑progress cache so the UI reflects it.
+        if (action === "stop" && progress >= 80 && key.type === "show") {
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+            }, 2000);
+        }
     } catch {
         // scrobble failed — non-critical
     }

@@ -102,6 +102,7 @@ export default function SettingsPage() {
                 no_code: "No authorization code received from Trakt",
                 config: "Trakt client ID or secret not configured on server",
                 exchange: "Failed to exchange authorization code with Trakt",
+                state_mismatch: "Security validation failed — please try connecting again",
             };
             toast.error(messages[reason ?? ""] || "Failed to connect Trakt");
         }
@@ -111,7 +112,10 @@ export default function SettingsPage() {
         const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
         if (!clientId) { toast.error("Trakt client ID not configured"); return; }
         const redirectUri = `${window.location.origin}/api/trakt/callback`;
-        const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+        // Generate OAuth state for CSRF protection
+        const state = crypto.randomUUID();
+        document.cookie = `trakt_oauth_state=${state}; path=/; max-age=600; samesite=lax`;
+        const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
         window.location.href = url;
     }, []);
 

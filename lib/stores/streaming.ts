@@ -563,7 +563,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playNextEpisode: async (addons) => {
         const { episodeContext, play, preloadedData, playSource } = get();
         if (!episodeContext) {
-            toast.error("No episode context", { description: "Cannot navigate to next episode" });
+            toast.error("No episode context", { description: "Cannot navigate to next episode", position: TOAST_POSITION });
             return;
         }
 
@@ -632,7 +632,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     return;
 
                 } catch {
-                    toast.info("End of series", { description: "You've reached the last episode" });
+                    toast.info("End of series", { description: "You've reached the last episode", position: TOAST_POSITION });
                     return;
                 }
             } else {
@@ -661,7 +661,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playPreviousEpisode: async (addons) => {
         const { episodeContext, play } = get();
         if (!episodeContext) {
-            toast.error("No episode context", { description: "Cannot navigate to previous episode" });
+            toast.error("No episode context", { description: "Cannot navigate to previous episode", position: TOAST_POSITION });
             return;
         }
 
@@ -681,7 +681,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 );
                 return;
             }
-            toast.info("Beginning of series", { description: "You're at the first episode" });
+            toast.info("Beginning of series", { description: "You're at the first episode", position: TOAST_POSITION });
             return;
         }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { memo } from "react";
 import { DebridFile, DebridNode } from "@/lib/types";
 import { FileListItem } from "./file-list-item";
 import { ExpandedRow } from "./expanded-row";
@@ -16,7 +16,7 @@ interface FileListRowProps {
     autoExpand?: boolean;
 }
 
-export function FileListRow({ file, autoExpand = false }: FileListRowProps) {
+export const FileListRow = memo(function FileListRow({ file, autoExpand = false }: FileListRowProps) {
     const { currentAccount } = useAuthGuaranteed();
     const isSelected = useFileSelectionState(file.id);
     const [isExpanded, setIsExpanded] = useState(
@@ -49,4 +49,4 @@ export function FileListRow({ file, autoExpand = false }: FileListRowProps) {
             )}
         </React.Fragment>
     );
-}
+});

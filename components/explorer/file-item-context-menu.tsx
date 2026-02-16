@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Fragment } from "react";
+import React, { Fragment, useState } from "react";
 import { Copy, Download, RotateCw, Trash2, List, Loader2 } from "lucide-react";
 import {
     ContextMenu,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import { DebridFile } from "@/lib/types";
 import { useFileLinkActions, useFileMutationActions } from "@/hooks/use-file-actions";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 interface FileItemContextMenuProps {
     file: DebridFile;
@@ -21,6 +22,7 @@ interface FileItemContextMenuProps {
 export function FileItemContextMenu({ file, children, className }: FileItemContextMenuProps) {
     const { copyMutation, downloadMutation, playlistMutation } = useFileLinkActions(file.id, { fileName: file.name });
     const { deleteMutation, retryMutation } = useFileMutationActions();
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const isAnyActionPending =
         copyMutation.isPending ||
@@ -101,7 +103,7 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                 <ContextMenuItem
                     onClick={(e) => {
                         e.stopPropagation();
-                        deleteMutation.mutate([file.id]);
+                        setShowDeleteConfirm(true);
                     }}
                     disabled={isAnyActionPending}
                     className="cursor-pointer text-destructive focus:text-destructive">
@@ -113,6 +115,19 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                     Delete
                 </ContextMenuItem>
             </ContextMenuContent>
+
+            <ConfirmDialog
+                open={showDeleteConfirm}
+                onOpenChange={setShowDeleteConfirm}
+                title="Delete file?"
+                description={`This will permanently delete "${file.name}". This action cannot be undone.`}
+                confirmText="Delete"
+                variant="destructive"
+                onConfirm={() => {
+                    setShowDeleteConfirm(false);
+                    deleteMutation.mutate([file.id]);
+                }}
+            />
         </ContextMenu>
     );
 }

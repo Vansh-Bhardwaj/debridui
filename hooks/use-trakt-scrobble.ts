@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { traktClient, TraktClient } from "@/lib/trakt";
 import type { ProgressKey } from "@/hooks/use-progress";
 
@@ -11,6 +12,7 @@ type ScrobbleAction = "start" | "pause" | "stop";
  */
 export function useTraktScrobble(progressKey: ProgressKey | null) {
     const lastActionRef = useRef<ScrobbleAction | null>(null);
+    const queryClient = useQueryClient();
 
     const scrobble = useCallback(
         async (action: ScrobbleAction, progressPercent: number) => {
@@ -31,11 +33,19 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                 if (action === "start") await traktClient.scrobbleStart(request);
                 else if (action === "pause") await traktClient.scrobblePause(request);
                 else await traktClient.scrobbleStop(request);
+
+                // When scrobble stops at ≥80%, Trakt auto‑marks the episode as watched.
+                // Invalidate the show's watched‑progress cache so the UI reflects it.
+                if (action === "stop" && progressPercent >= 80 && progressKey.type === "show") {
+                    setTimeout(() => {
+                        queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                    }, 2000);
+                }
             } catch (e) {
                 console.error("[trakt-scrobble]", action, e);
             }
         },
-        [progressKey]
+        [progressKey, queryClient]
     );
 
     return { scrobble };

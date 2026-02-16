@@ -175,6 +175,17 @@ export class DeviceSync extends DurableObject<Env> {
             return;
         }
 
+        // Runtime validation: reject messages with unknown types
+        const validTypes = new Set([
+            "register", "now-playing", "command", "transfer",
+            "control-claim", "control-release", "browse-request", "browse-response",
+            "notify", "queue-add", "queue-remove", "queue-clear", "queue-reorder", "queue-get",
+        ]);
+        if (!msg || typeof msg !== "object" || typeof msg.type !== "string" || !validTypes.has(msg.type)) {
+            this.send(ws, { type: "error", message: "Invalid message type" });
+            return;
+        }
+
         const attachment = ws.deserializeAttachment() as { deviceId: string; device?: DeviceInfo; registered: boolean } | null;
         if (!attachment) return;
 
@@ -427,13 +438,20 @@ export class DeviceSync extends DurableObject<Env> {
     }
 
     private async handleQueueReorder(msg: Extract<ClientMessage, { type: "queue-reorder" }>): Promise<void> {
-        // Batch all updates in a single SQL statement (N → 1 write operation)
         if (msg.itemIds.length === 0) return;
-        const cases = msg.itemIds.map((id, i) => `WHEN '${id}' THEN ${i}`).join(" ");
-        const placeholders = msg.itemIds.map(() => "?").join(",");
+
+        // Validate: only allow UUIDs (prevents SQL injection via string interpolation)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validIds = msg.itemIds.filter(id => typeof id === "string" && uuidRegex.test(id));
+        if (validIds.length === 0) return;
+
+        // Use parameterized queries for CASE clauses to prevent injection
+        const cases = validIds.map((_, i) => `WHEN ? THEN ${i}`).join(" ");
+        const placeholders = validIds.map(() => "?").join(",");
         this.ctx.storage.sql.exec(
             `UPDATE queue SET sort_order = CASE id ${cases} END WHERE id IN (${placeholders})`,
-            ...msg.itemIds
+            ...validIds,  // params for CASE WHENs
+            ...validIds   // params for IN clause
         );
         await this.broadcastQueue();
     }

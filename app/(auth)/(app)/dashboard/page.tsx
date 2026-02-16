@@ -25,8 +25,12 @@ import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle } from
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
-import { ContinueWatching } from "@/components/mdb/continue-watching";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
+
+const ContinueWatching = dynamic(
+    () => import("@/components/mdb/continue-watching").then((m) => ({ default: m.ContinueWatching })),
+    { ssr: false }
+);
 
 const HeroCarousel = dynamic(
     () => import("@/components/mdb/hero-carousel").then((m) => ({ default: m.HeroCarousel })),

@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient, type TraktMedia } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
+import { toast } from "sonner";
 
 // Cache duration constants
 const CACHE_DURATION = {
     SHORT: 5 * 60 * 1000, // 5 minutes
     STANDARD: 6 * 60 * 60 * 1000, // 6 hours
     LONG: 24 * 60 * 60 * 1000, // 24 hours
+    INSTANT: 30 * 1000, // 30s — always refetch on mount, but avoid hammering during session
 } as const;
 
 // Generic Trakt query hook factory
@@ -21,6 +23,7 @@ function createTraktHook<T extends any[], R>(
             queryKey: ["trakt", ...keyParts, ...args],
             queryFn: () => fn(...args),
             staleTime: cacheDuration,
+            gcTime: cacheDuration * 2,
         });
     };
 }
@@ -115,6 +118,7 @@ export function useTraktTrendingMixed(limit = 20) {
         queryKey: ["trakt", "mixed", "trending", limit],
         queryFn: () => traktClient.getTrendingMixed(limit),
         staleTime: CACHE_DURATION.STANDARD,
+        gcTime: CACHE_DURATION.STANDARD * 2,
     });
 }
 
@@ -123,6 +127,7 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
         queryKey: ["trakt", "media", slug, type],
         queryFn: () => (type === "movie" ? traktClient.getMovie(slug) : traktClient.getShow(slug)),
         staleTime: CACHE_DURATION.LONG,
+        gcTime: CACHE_DURATION.LONG,
     });
 }
 
@@ -133,6 +138,7 @@ export function useTraktPeople(id: string, type: "movies" | "shows" = "movies") 
         queryKey: ["trakt", "people", id, type],
         queryFn: () => traktClient.getPeople(id, type),
         staleTime: CACHE_DURATION.LONG,
+        gcTime: CACHE_DURATION.LONG,
     });
 }
 
@@ -160,7 +166,9 @@ export function useTraktWatchlistMovies() {
         queryKey: ["trakt", "watchlist", "movies"],
         queryFn: () => traktClient.getWatchlist("movies", "added"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -169,7 +177,9 @@ export function useTraktWatchlistShows() {
         queryKey: ["trakt", "watchlist", "shows"],
         queryFn: () => traktClient.getWatchlist("shows", "added"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -211,7 +221,9 @@ export function useTraktFavoritesMovies() {
         queryKey: ["trakt", "favorites", "movies"],
         queryFn: () => traktClient.getFavorites("movies"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -220,7 +232,9 @@ export function useTraktFavoritesShows() {
         queryKey: ["trakt", "favorites", "shows"],
         queryFn: () => traktClient.getFavorites("shows"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -262,7 +276,9 @@ export function useTraktRatingsMovies() {
         queryKey: ["trakt", "ratings", "movies"],
         queryFn: () => traktClient.getRatings("movies"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -271,7 +287,9 @@ export function useTraktRatingsShows() {
         queryKey: ["trakt", "ratings", "shows"],
         queryFn: () => traktClient.getRatings("shows"),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -358,8 +376,20 @@ export function useMarkEpisodeWatched() {
         onError: (_err, params, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
         },
-        onSettled: (_data, _err, params) => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+        onSuccess: (_data, params) => {
+            toast.success(
+                params.episodes.length === 1
+                    ? `S${params.season}E${params.episodes[0]} marked as watched`
+                    : `${params.episodes.length} episodes marked as watched`
+            );
+            // Delay invalidation slightly — Trakt needs a moment to process
+            // The optimistic update already shows the correct state instantly
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+            }, 2000);
+        },
+        onSettled: () => {
+            // noop — invalidation moved to onSuccess with delay
         },
     });
 }
@@ -397,8 +427,18 @@ export function useUnmarkEpisodeWatched() {
         onError: (_err, params, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
         },
-        onSettled: (_data, _err, params) => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+        onSuccess: (_data, params) => {
+            toast.success(
+                params.episodes.length === 1
+                    ? `S${params.season}E${params.episodes[0]} unmarked`
+                    : `${params.episodes.length} episodes unmarked`
+            );
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+            }, 2000);
+        },
+        onSettled: () => {
+            // noop — invalidation moved to onSuccess with delay
         },
     });
 }
@@ -422,6 +462,7 @@ export function useTraktRelated(id: string, type: "movie" | "show") {
         queryKey: ["trakt", "related", type, id],
         queryFn: () => (type === "movie" ? traktClient.getRelatedMovies(id) : traktClient.getRelatedShows(id)),
         staleTime: CACHE_DURATION.LONG,
+        gcTime: CACHE_DURATION.LONG,
         enabled: !!id,
     });
 }
@@ -433,10 +474,10 @@ export function useTraktShowProgress(showId: string) {
     return useQuery({
         queryKey: ["trakt", "show", "progress", showId],
         queryFn: () => traktClient.getShowWatchedProgress(showId),
-        staleTime: CACHE_DURATION.LONG,  // Watched progress rarely changes — 24h cache
-        gcTime: CACHE_DURATION.LONG,
+        staleTime: CACHE_DURATION.INSTANT, // Refetch on every page visit — watched status must feel instant
+        gcTime: CACHE_DURATION.STANDARD,   // Keep in cache for reuse but always revalidate
         enabled: !!showId && hasAuth,
-        retry: 1,  // One retry only — fail fast
+        retry: 1,
     });
 }
 
@@ -446,6 +487,7 @@ export function useTraktCalendarShows(days = 14) {
         queryKey: ["trakt", "calendar", "shows", days],
         queryFn: () => traktClient.getCalendarShows(undefined, days),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
     });
 }
@@ -455,6 +497,7 @@ export function useTraktCalendarMovies(days = 30) {
         queryKey: ["trakt", "calendar", "movies", days],
         queryFn: () => traktClient.getCalendarMovies(undefined, days),
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
     });
 }
@@ -468,6 +511,7 @@ export function useTraktRecentEpisodes(days = 7) {
             return traktClient.getCalendarShows(startDate, days);
         },
         staleTime: CACHE_DURATION.SHORT,
+        gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
     });
 }
@@ -482,6 +526,7 @@ export function useTraktSlugFromTmdb(tmdbId: number | undefined) {
             return movie?.ids?.slug ?? null;
         },
         staleTime: CACHE_DURATION.LONG,
+        gcTime: CACHE_DURATION.LONG,
         enabled: !!tmdbId,
     });
 }
