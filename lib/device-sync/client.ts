@@ -5,7 +5,7 @@
  * Uses exponential backoff on disconnection (1s → 2s → 4s → 30s cap).
  */
 
-import type { ClientMessage, ServerMessage, DeviceInfo, RemoteAction, TransferPayload } from "./protocol";
+import type { ClientMessage, ServerMessage, DeviceInfo, RemoteAction, TransferPayload, DeviceStreamingPrefs } from "./protocol";
 import { detectDevice } from "./protocol";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -19,6 +19,8 @@ export interface DeviceSyncClientOptions {
     onMessage: (msg: ServerMessage) => void;
     /** Called when connection status changes */
     onStatusChange?: (status: ConnectionStatus) => void;
+    /** Returns current streaming prefs so the target device's quality profile is visible to controllers */
+    getStreamingPrefs?: () => DeviceStreamingPrefs | undefined;
 }
 
 const MIN_RECONNECT_MS = 1000;
@@ -75,10 +77,13 @@ export class DeviceSyncClient {
                 this.reconnectDelay = MIN_RECONNECT_MS;
                 this.setStatus("connected");
 
-                // Register this device
+                // Register this device with streaming prefs
                 this.send({
                     type: "register",
-                    device: this.device,
+                    device: {
+                        ...this.device,
+                        streamingPrefs: this.options.getStreamingPrefs?.(),
+                    },
                 });
             };
 

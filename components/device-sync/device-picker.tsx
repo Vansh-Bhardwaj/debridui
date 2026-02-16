@@ -167,7 +167,7 @@ export const DevicePicker = memo(function DevicePicker() {
                 </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuContent align="end" className="w-64" collisionPadding={8}>
                 <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground font-normal">
                     Play on
                 </DropdownMenuLabel>

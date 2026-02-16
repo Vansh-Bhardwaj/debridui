@@ -9,6 +9,21 @@
 
 export type DeviceType = "desktop" | "mobile" | "tablet" | "tv";
 
+/** Compact streaming preferences sent over WebSocket so the controller
+ *  can run source selection with the target device's quality settings. */
+export interface DeviceStreamingPrefs {
+    profileId: string;
+    customRange?: {
+        minResolution: string;
+        maxResolution: string;
+        minSourceQuality: string;
+        maxSourceQuality: string;
+    };
+    allowUncached: boolean;
+    preferredLanguage: string;
+    preferCached: boolean;
+}
+
 export interface DeviceInfo {
     id: string;
     name: string;
@@ -17,6 +32,9 @@ export interface DeviceInfo {
     isPlaying: boolean;
     nowPlaying: NowPlayingInfo | null;
     lastSeen: number;
+    /** Streaming quality prefs — sent on registration so remote controllers
+     *  can select sources matching this device's profile. */
+    streamingPrefs?: DeviceStreamingPrefs;
 }
 
 export interface TrackInfo {
@@ -121,7 +139,7 @@ export interface QueueItem {
 // ── Client → Server Messages ───────────────────────────────────────────────
 
 export type ClientMessage =
-    | { type: "register"; device: Pick<DeviceInfo, "id" | "name" | "deviceType" | "browser"> }
+    | { type: "register"; device: Pick<DeviceInfo, "id" | "name" | "deviceType" | "browser" | "streamingPrefs"> }
     | { type: "now-playing"; state: NowPlayingInfo | null }
     | { type: "command"; target: string; action: RemoteAction; payload?: Record<string, unknown> }
     | { type: "transfer"; target: string; playback: TransferPayload }

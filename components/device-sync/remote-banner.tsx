@@ -32,6 +32,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useStreamingStore } from "@/lib/stores/streaming";
 import { PlaybackQueue } from "@/components/device-sync/playback-queue";
 import { RemoteFileBrowser } from "@/components/device-sync/remote-file-browser";
 
@@ -74,6 +75,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const sendCommand = useDeviceSyncStore((s) => s.sendCommand);
     const enabled = useDeviceSyncStore((s) => s.enabled);
     const transferPending = useDeviceSyncStore((s) => s.transferPending);
+    const allFetchedSources = useStreamingStore((s) => s.allFetchedSources);
 
     const [collapsed, setCollapsed] = useState(true);
     const [seekActive, setSeekActive] = useState(false);
@@ -106,6 +108,16 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
     const nowPlaying = targetDevice?.nowPlaying ?? null;
 
+    // Controller-side source play for remote targets that don't report their own sources
+    const handleLocalSourcePlay = useCallback((index: number) => {
+        const source = allFetchedSources[index];
+        if (!source?.url) return;
+        const store = useStreamingStore.getState();
+        store.playSource(source, nowPlaying?.title ?? "Video", {
+            progressKey: store.getProgressKey() ?? undefined,
+        });
+    }, [allFetchedSources, nowPlaying?.title]);
+
     // Auto-expand when playback starts — subscribe to store changes outside render
     useEffect(() => {
         let prev = false;
@@ -132,6 +144,23 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const isMuted = volume === 0;
     const audioTracks = nowPlaying?.audioTracks ?? [];
     const subtitleTracks = nowPlaying?.subtitleTracks ?? [];
+
+    // Merge controller-side sources when target doesn't report its own
+    const remoteSources = nowPlaying?.sources;
+    const hasRemoteSources = remoteSources && remoteSources.length > 0;
+    const displaySources = hasRemoteSources
+        ? remoteSources
+        : allFetchedSources.length > 0
+        ? allFetchedSources.map((s, i): SourceSummary => ({
+            index: i,
+            title: s.title,
+            resolution: s.resolution,
+            quality: s.quality,
+            size: s.size,
+            isCached: s.isCached,
+            addonName: s.addonName,
+        }))
+        : undefined;
 
     return (
         <div role="region" aria-label="Remote player" className="pointer-events-auto mx-auto max-w-lg px-2 sm:px-4 pb-3 sm:pb-4">
@@ -299,11 +328,12 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                             {/* Playback queue */}
                             <PlaybackQueue compact />
 
-                            {/* Sources (alternative streams) */}
-                            {nowPlaying.sources && nowPlaying.sources.length > 0 && (
+                            {/* Sources (alternative streams) — uses target-reported or controller-cached */}
+                            {displaySources && displaySources.length > 0 && (
                                 <BannerSourcesSection
-                                    sources={nowPlaying.sources}
-                                    onCommand={cmd}
+                                    sources={displaySources}
+                                    onCommand={hasRemoteSources ? cmd : undefined}
+                                    onPlayLocalSource={!hasRemoteSources ? handleLocalSourcePlay : undefined}
                                 />
                             )}
 
@@ -426,9 +456,11 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 function BannerSourcesSection({
     sources,
     onCommand,
+    onPlayLocalSource,
 }: {
     sources: SourceSummary[];
-    onCommand: (action: RemoteAction, payload?: Record<string, unknown>) => void;
+    onCommand?: (action: RemoteAction, payload?: Record<string, unknown>) => void;
+    onPlayLocalSource?: (index: number) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
 
@@ -456,7 +488,7 @@ function BannerSourcesSection({
                         return (
                             <button
                                 key={source.index}
-                                onClick={() => onCommand("play-source", { index: source.index })}
+                                onClick={() => onPlayLocalSource ? onPlayLocalSource(source.index) : onCommand?.("play-source", { index: source.index })}
                                 className="flex items-start gap-1.5 w-full rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-muted/30"
                             >
                                 <span className="text-[10px] w-4 text-center shrink-0 tabular-nums text-muted-foreground mt-0.5">

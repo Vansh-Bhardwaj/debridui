@@ -406,6 +406,16 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                 onStatusChange: (status) => {
                     set({ connectionStatus: status });
                 },
+                getStreamingPrefs: () => {
+                    const s = useSettingsStore.getState().get("streaming");
+                    return {
+                        profileId: s.profileId,
+                        customRange: s.customRange,
+                        allowUncached: s.allowUncached,
+                        preferredLanguage: s.preferredLanguage,
+                        preferCached: s.preferCached,
+                    };
+                },
             });
         }
 

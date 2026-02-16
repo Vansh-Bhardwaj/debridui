@@ -8,7 +8,7 @@ import { queryClient } from "@/lib/query-client";
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
-import { useSettingsStore } from "./settings";
+import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings } from "./settings";
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 
@@ -66,6 +66,49 @@ let preloadRequestId = 0;
 // Minimum time toast must be visible before dismissing (allows mount animation)
 const MIN_TOAST_DURATION = 300;
 const TOAST_POSITION = "bottom-center" as const;
+
+const MAX_QUALITY_RANGE = QUALITY_PROFILES.find((p) => p.id === "max-quality")!.range;
+
+/**
+ * Get effective streaming settings — when targeting a remote device,
+ * use its streaming prefs so source selection matches what that device
+ * would pick if it auto-played locally.
+ */
+async function getEffectiveStreamingSettings(): Promise<StreamingSettings> {
+    const localSettings = useSettingsStore.getState().get("streaming");
+    const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
+    const { activeTarget, devices } = useDeviceSyncStore.getState();
+    if (!activeTarget) return localSettings;
+
+    // Find the target device's streaming prefs
+    const target = devices.find((d) => d.id === activeTarget);
+    const prefs = target?.streamingPrefs;
+    if (!prefs) {
+        // Target connected before this feature — fall back to max quality
+        return { ...localSettings, profileId: "max-quality", customRange: MAX_QUALITY_RANGE };
+    }
+
+    // Build StreamingSettings from the target device's prefs
+    const profileId = (QUALITY_PROFILES.some((p) => p.id === prefs.profileId) || prefs.profileId === "custom")
+        ? prefs.profileId as StreamingSettings["profileId"]
+        : localSettings.profileId;
+
+    return {
+        ...localSettings,
+        profileId,
+        customRange: prefs.customRange
+            ? {
+                minResolution: prefs.customRange.minResolution as StreamingSettings["customRange"]["minResolution"],
+                maxResolution: prefs.customRange.maxResolution as StreamingSettings["customRange"]["maxResolution"],
+                minSourceQuality: prefs.customRange.minSourceQuality as StreamingSettings["customRange"]["minSourceQuality"],
+                maxSourceQuality: prefs.customRange.maxSourceQuality as StreamingSettings["customRange"]["maxSourceQuality"],
+            }
+            : localSettings.customRange,
+        allowUncached: prefs.allowUncached,
+        preferredLanguage: prefs.preferredLanguage,
+        preferCached: prefs.preferCached,
+    };
+}
 
 type SubtitleQueryResult = {
     addonName: string;
@@ -413,7 +456,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const allSources = sourcesResults.flat();
             const englishSubtitles = combineEnglishSubtitles(subtitleResults);
 
-            const streamingSettings = useSettingsStore.getState().get("streaming");
+            const streamingSettings = await getEffectiveStreamingSettings();
             const result = selectBestSource(allSources, streamingSettings);
 
             set({ allFetchedSources: result.allSorted, selectedSource: result.source });
@@ -536,7 +579,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const allSources = sourcesResults.flat();
             const englishSubtitles = combineEnglishSubtitles(subtitleResults);
 
-            const streamingSettings = useSettingsStore.getState().get("streaming");
+            const streamingSettings = await getEffectiveStreamingSettings();
             const result = selectBestSource(allSources, streamingSettings);
 
             if (result.source) {

@@ -25,6 +25,7 @@ interface DeviceInfo {
     isPlaying: boolean;
     nowPlaying: NowPlayingInfo | null;
     lastSeen: number;
+    streamingPrefs?: Record<string, unknown>;
 }
 
 interface NowPlayingInfo {
