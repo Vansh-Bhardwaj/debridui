@@ -22,6 +22,10 @@ export interface TraktMedia {
     trailer?: string;
     homepage?: string;
     status?: string;
+    /** Movie release date (YYYY-MM-DD) from extended=full */
+    released?: string;
+    /** Show first aired date (ISO 8601) */
+    first_aired?: string;
     aired_episodes?: number;
     certification?: string;
 }

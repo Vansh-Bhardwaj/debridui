@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, useCallback } from "react";
 import { PageHeader } from "@/components/common/page-header";
 import { MediaSection } from "@/components/mdb/media-section";
 import { MediaCard } from "@/components/mdb/media-card";
@@ -13,13 +13,72 @@ import {
     useTraktRecentEpisodes,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
-import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell } from "lucide-react";
-import { type TraktCalendarItem } from "@/lib/trakt";
+import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell, Monitor, Clapperboard, Clock } from "lucide-react";
+import { type TraktCalendarItem, type TraktWatchlistItem, type TraktMedia } from "@/lib/trakt";
 import Link from "next/link";
 import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { cn } from "@/lib/utils";
 import { getPosterUrl } from "@/lib/utils/media";
+
+// ── Watchlist Filters ──────────────────────────────────────────────────────
+
+type WatchlistFilter = "all" | "digital" | "in-cinema" | "upcoming";
+
+const FILTERS: { id: WatchlistFilter; label: string; icon: typeof Bookmark }[] = [
+    { id: "all", label: "All", icon: Bookmark },
+    { id: "digital", label: "Digital Release", icon: Monitor },
+    { id: "in-cinema", label: "In Cinemas", icon: Clapperboard },
+    { id: "upcoming", label: "Upcoming", icon: Clock },
+];
+
+// Typical theatrical-to-digital window ~45 days, in-cinema window ~90 days
+const DIGITAL_THRESHOLD_DAYS = 45;
+const CINEMA_WINDOW_DAYS = 90;
+
+function daysSinceRelease(media: TraktMedia): number | null {
+    const dateStr = media.released ?? media.first_aired;
+    if (!dateStr) return null;
+    const released = new Date(dateStr);
+    if (isNaN(released.getTime())) return null;
+    return Math.floor((Date.now() - released.getTime()) / 86400000);
+}
+
+function matchesFilter(media: TraktMedia, type: "movie" | "show", filter: WatchlistFilter): boolean {
+    if (filter === "all") return true;
+
+    const status = media.status?.toLowerCase();
+    const days = daysSinceRelease(media);
+
+    if (type === "show") {
+        switch (filter) {
+            case "digital":
+                // Shows are available digitally if they have aired episodes
+                return status === "returning series" || status === "ended" || status === "canceled"
+                    || (media.aired_episodes != null && media.aired_episodes > 0);
+            case "in-cinema":
+                // Shows don't have cinema releases
+                return false;
+            case "upcoming":
+                return status === "in production" || status === "planned" || status === "pilot"
+                    || status === "upcoming" || (days !== null && days < 0);
+        }
+    }
+
+    // Movies
+    switch (filter) {
+        case "digital":
+            // Released more than DIGITAL_THRESHOLD_DAYS ago → likely available digitally
+            return status === "released" && days !== null && days >= DIGITAL_THRESHOLD_DAYS;
+        case "in-cinema":
+            // Released within CINEMA_WINDOW_DAYS → likely still in theaters
+            return status === "released" && days !== null && days >= 0 && days < CINEMA_WINDOW_DAYS;
+        case "upcoming":
+            // Not yet released
+            return status !== "released" && status !== "canceled"
+                || (days !== null && days < 0);
+    }
+}
 
 // Group calendar items by date
 function groupByDate(items: TraktCalendarItem[]): Record<string, TraktCalendarItem[]> {
@@ -228,6 +287,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
 const WatchlistPage = memo(function WatchlistPage() {
     const { data: settings } = useUserSettings();
     const isTraktConnected = !!settings?.trakt_access_token;
+    const [filter, setFilter] = useState<WatchlistFilter>("all");
 
     const watchlistMovies = useTraktWatchlistMovies();
     const watchlistShows = useTraktWatchlistShows();
@@ -244,15 +304,50 @@ const WatchlistPage = memo(function WatchlistPage() {
         }).length;
     }, [recentEpisodes.data]);
 
+    // Apply filter to watchlist items
+    const filterWatchlist = useCallback(
+        (items: TraktWatchlistItem[] | undefined, type: "movie" | "show") => {
+            if (!items) return undefined;
+            if (filter === "all") return items;
+            return items.filter((item) => {
+                const media = type === "movie" ? item.movie : item.show;
+                return media && matchesFilter(media, type, filter);
+            });
+        },
+        [filter]
+    );
+
     // Convert watchlist items → TraktMediaItem-compatible for MediaSection
     const movieItems = useMemo(
-        () => watchlistMovies.data?.filter((i) => i.movie).map((i) => ({ movie: i.movie, show: undefined })),
-        [watchlistMovies.data]
+        () => filterWatchlist(watchlistMovies.data, "movie")?.filter((i) => i.movie).map((i) => ({ movie: i.movie, show: undefined })),
+        [watchlistMovies.data, filterWatchlist]
     );
     const showItems = useMemo(
-        () => watchlistShows.data?.filter((i) => i.show).map((i) => ({ show: i.show, movie: undefined })),
-        [watchlistShows.data]
+        () => filterWatchlist(watchlistShows.data, "show")?.filter((i) => i.show).map((i) => ({ show: i.show, movie: undefined })),
+        [watchlistShows.data, filterWatchlist]
     );
+
+    // Count per filter for badges
+    const filterCounts = useMemo(() => {
+        const movies = watchlistMovies.data ?? [];
+        const shows = watchlistShows.data ?? [];
+        const counts: Record<WatchlistFilter, number> = { all: movies.length + shows.length, digital: 0, "in-cinema": 0, upcoming: 0 };
+        for (const item of movies) {
+            if (item.movie) {
+                for (const f of ["digital", "in-cinema", "upcoming"] as const) {
+                    if (matchesFilter(item.movie, "movie", f)) counts[f]++;
+                }
+            }
+        }
+        for (const item of shows) {
+            if (item.show) {
+                for (const f of ["digital", "in-cinema", "upcoming"] as const) {
+                    if (matchesFilter(item.show, "show", f)) counts[f]++;
+                }
+            }
+        }
+        return counts;
+    }, [watchlistMovies.data, watchlistShows.data]);
 
     if (!isTraktConnected) {
         return (
@@ -295,6 +390,37 @@ const WatchlistPage = memo(function WatchlistPage() {
                 </TabsList>
 
                 <TabsContent value="watchlist" className="space-y-8 pt-6">
+                    {/* Filter chips */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {FILTERS.map((f) => {
+                            const Icon = f.icon;
+                            const count = filterCounts[f.id];
+                            const isActive = filter === f.id;
+                            return (
+                                <button
+                                    key={f.id}
+                                    onClick={() => setFilter(f.id)}
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-sm border transition-colors duration-200",
+                                        isActive
+                                            ? "bg-primary/10 border-primary/30 text-primary"
+                                            : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                                    )}>
+                                    <Icon className="size-3.5" />
+                                    {f.label}
+                                    {f.id !== "all" && count > 0 && (
+                                        <span className={cn(
+                                            "ml-0.5 tabular-nums",
+                                            isActive ? "text-primary/70" : "text-muted-foreground/50"
+                                        )}>
+                                            {count}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+
                     <SectionErrorBoundary section="Watchlist Movies">
                         <MediaSection
                             title="Movies"
@@ -304,15 +430,24 @@ const WatchlistPage = memo(function WatchlistPage() {
                             rows={2}
                         />
                     </SectionErrorBoundary>
-                    <SectionErrorBoundary section="Watchlist Shows">
-                        <MediaSection
-                            title="TV Shows"
-                            items={showItems}
-                            isLoading={watchlistShows.isLoading}
-                            error={watchlistShows.error}
-                            rows={2}
-                        />
-                    </SectionErrorBoundary>
+                    {/* Shows aren't shown in cinema — hide section for that filter */}
+                    {filter !== "in-cinema" && (
+                        <SectionErrorBoundary section="Watchlist Shows">
+                            <MediaSection
+                                title="TV Shows"
+                                items={showItems}
+                                isLoading={watchlistShows.isLoading}
+                                error={watchlistShows.error}
+                                rows={2}
+                            />
+                        </SectionErrorBoundary>
+                    )}
+                    {filter !== "all" && !watchlistMovies.isLoading && !watchlistShows.isLoading
+                        && (movieItems?.length === 0) && (filter === "in-cinema" || showItems?.length === 0) && (
+                        <p className="text-sm text-muted-foreground py-8 text-center">
+                            No items match the selected filter
+                        </p>
+                    )}
                 </TabsContent>
 
                 <TabsContent value="calendar" className="space-y-10 pt-6">
