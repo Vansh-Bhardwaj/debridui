@@ -286,6 +286,18 @@ function handleTransfer(playback: TransferPayload, fromName: string) {
           }
         : undefined;
 
+    // Set episode context so next/previous navigation works on the target device
+    if (playback.imdbId && playback.mediaType === "show" && playback.season != null && playback.episode != null) {
+        import("@/lib/stores/streaming").then(({ useStreamingStore }) => {
+            useStreamingStore.getState().setEpisodeContext({
+                imdbId: playback.imdbId!,
+                title: playback.title,
+                season: playback.season!,
+                episode: playback.episode!,
+            });
+        });
+    }
+
     // Respect the target device's media player preference
     const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
 

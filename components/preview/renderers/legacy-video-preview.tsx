@@ -1082,6 +1082,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 const cueText = lines.slice(timeLineIdx + 1).join("\n")
                     // Strip SSA/ASS style tags: {\an8}, {\i1}, etc.
                     .replace(/\{[^}]+\}/g, "")
+                    // Strip HTML formatting tags: <i>, </i>, <b>, <font ...>, etc.
+                    .replace(/<\/?[^>]+(>|$)/g, "")
                     .trim();
                 cues.push({ start, end, text: cueText });
             }
