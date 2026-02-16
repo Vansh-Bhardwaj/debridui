@@ -163,7 +163,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
         : undefined;
 
     return (
-        <div role="region" aria-label="Remote player" className="pointer-events-auto mx-auto max-w-lg px-2 sm:px-4 pb-3 sm:pb-4">
+        <div role="region" aria-label="Remote player" className="pointer-events-auto w-full max-w-lg mx-auto px-3 sm:px-4 pb-3 sm:pb-4">
             <div className="rounded-sm border border-border bg-card/95 backdrop-blur-md shadow-xl overflow-hidden w-full">
                     {/* Collapse toggle — title bar */}
                     <div

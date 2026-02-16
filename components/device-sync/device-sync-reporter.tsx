@@ -278,6 +278,41 @@ export function DeviceSyncReporter() {
         return () => window.removeEventListener("device-sync-play-episode", handler);
     }, [enabled]);
 
+    // ── Handle remote next/previous for browser playback ─────────────
+
+    useEffect(() => {
+        if (!enabled) return;
+
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as { direction: "next" | "previous" };
+            if (!detail?.direction) return;
+
+            // Only handle if browser video is active (VLC mini-player has its own listener)
+            const video = document.querySelector("video");
+            if (!video) return;
+
+            const addons = queryClient.getQueryData<Addon[]>(["user-addons"]) ?? [];
+            const enabledAddons = addons
+                .filter((a) => a.enabled)
+                .sort((a, b) => a.order - b.order)
+                .map((a) => ({ id: a.id, url: a.url, name: a.name }));
+
+            if (enabledAddons.length === 0) return;
+
+            ensureStreamingStore().then(({ useStreamingStore }) => {
+                const store = useStreamingStore.getState();
+                if (detail.direction === "next") {
+                    store.playNextEpisode(enabledAddons);
+                } else {
+                    store.playPreviousEpisode(enabledAddons);
+                }
+            });
+        };
+
+        window.addEventListener("device-sync-navigate", handler);
+        return () => window.removeEventListener("device-sync-navigate", handler);
+    }, [enabled]);
+
     // ── Handle remote play-source commands ────────────────────────────
 
     useEffect(() => {

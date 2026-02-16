@@ -195,7 +195,16 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
         case "set-audio-track": {
             const trackId = payload?.trackId as number | undefined;
             if (trackId === undefined) break;
-            // Audio track switching only supported via VLC
+            // Try browser video first (Safari supports HTMLMediaElement.audioTracks)
+            const audioVideo = document.querySelector("video");
+            const audioTrackList = (audioVideo as unknown as { audioTracks?: { length: number; [index: number]: { enabled: boolean } } } | null)?.audioTracks;
+            if (audioTrackList?.length) {
+                for (let i = 0; i < audioTrackList.length; i++) {
+                    audioTrackList[i].enabled = i === trackId;
+                }
+                break;
+            }
+            // Fallback to VLC
             import("@/lib/stores/vlc").then(({ useVLCStore }) => {
                 useVLCStore.getState().setAudioTrack(trackId);
             });
