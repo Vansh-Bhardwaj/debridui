@@ -428,31 +428,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         onError?.(new Error(errorMessage));
     }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl]);
 
-    const handleTimeUpdate = useCallback(() => {
-        const el = videoRef.current;
-        if (!el) return;
-
-        const now = el.currentTime;
-        const total = el.duration;
-        setCurrentTime(now);
-
-        // Preload next episode at 90%
-        if (total > 0 && now / total > 0.9 && !hasPreloaded.current) {
-            hasPreloaded.current = true;
-            onPreload?.();
-        }
-
-        // Update progress (throttled)
-        if (now - lastProgressUpdateRef.current > 5 || (total > 0 && now / total > 0.95)) {
-            updateProgress(now, total);
-            lastProgressUpdateRef.current = now;
-
-            if (total > 0 && now / total > 0.95) {
-                markCompleted();
-            }
-        }
-    }, [updateProgress, markCompleted, onPreload]);
-
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
@@ -605,11 +580,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setCurrentTime(time);
             if (!duration && Number.isFinite(dur)) setDuration(dur);
 
+            // Preload next episode at 90%
+            if (dur > 0 && time / dur > 0.9 && !hasPreloaded.current) {
+                hasPreloaded.current = true;
+                onPreload?.();
+            }
+
             // Update progress in localStorage (throttled)
             const now = Date.now();
             if (progressKey && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
                 lastProgressUpdateRef.current = now;
                 updateProgress(time, dur);
+            }
+
+            // Mark completed at 95%
+            if (progressKey && dur > 0 && time / dur > 0.95) {
+                markCompleted();
             }
         };
         const onWaiting = () => setIsLoading(true);
@@ -652,7 +638,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
         };
-    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, scrobble]);
+    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble]);
 
 
     // Keep fullscreen state in sync (native + CSS fake fullscreen)
@@ -956,7 +942,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "M":
                     event.preventDefault();
                     toggleMute();
-                    showOsd(videoRef.current?.muted ? "� Muted" : "🔊 Unmuted");
+                    showOsd(videoRef.current?.muted ? "🔇 Muted" : "🔊 Unmuted");
                     break;
                 case "f":
                 case "F":
@@ -969,9 +955,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     event.preventDefault();
                     setActiveSubtitleIndex((prev) => {
                         if (subtitles.length === 0) return -1;
-                        if (prev === -1) return 0;
+                        if (prev === -1) {
+                            showOsd(`Subtitles: ${subtitles[0].name || "Track 1"}`);
+                            return 0;
+                        }
                         const next = prev + 1;
-                        return next < subtitles.length ? next : -1;
+                        if (next < subtitles.length) {
+                            showOsd(`Subtitles: ${subtitles[next].name || `Track ${next + 1}`}`);
+                            return next;
+                        }
+                        showOsd("Subtitles Off");
+                        return -1;
                     });
                     break;
             }
@@ -1197,7 +1191,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         className="w-full h-full object-contain bg-black"
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
-                        onTimeUpdate={handleTimeUpdate}
                         onLoadedData={handleLoad}
                         onError={handleError}
                     />

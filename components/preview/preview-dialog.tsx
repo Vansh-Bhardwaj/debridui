@@ -9,8 +9,6 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { ChevronLeft, ChevronRight, Download, X, Loader2 } from "lucide-react";
 import { PreviewContent } from "./preview-content";
 import { formatSize, downloadLinks, getFileType } from "@/lib/utils";
@@ -134,9 +132,15 @@ export function PreviewDialog() {
         if (!isOpen) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip arrow key interception for video content — let the video player handle ±5s seeking
+            const currentFileType = isSingleMode
+                ? (fileType ?? getFileType(directTitle || ""))
+                : getFileType(currentFile?.name || "");
+            const isVideoContent = currentFileType === "video";
+
             switch (e.key) {
                 case "ArrowLeft":
-                    // Only intercept if we have prev ability (gallery or series)
+                    if (isVideoContent) break; // Let video player handle seeking
                     if (!isSingleMode || episodeContext) {
                         e.preventDefault();
                         handlePrev();
@@ -144,6 +148,7 @@ export function PreviewDialog() {
                     }
                     break;
                 case "ArrowRight":
+                    if (isVideoContent) break; // Let video player handle seeking
                     if (!isSingleMode || episodeContext) {
                         e.preventDefault();
                         handleNext();
@@ -159,7 +164,7 @@ export function PreviewDialog() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, isSingleMode, episodeContext, handleNext, handlePrev, closePreview]);
+    }, [isOpen, isSingleMode, episodeContext, handleNext, handlePrev, closePreview, fileType, directTitle, currentFile]);
 
     const handleDownload = useCallback(() => {
         if (linkInfo) {
@@ -200,10 +205,10 @@ export function PreviewDialog() {
                             )}
                             {hasNav && (
                                 <>
-                                    {!isSingleMode && activeFile.size && <Separator orientation="vertical" className="h-4" />}
-                                    <Badge variant="outline" className="text-xs">
+                                    {!isSingleMode && activeFile.size && <span className="text-muted-foreground">&middot;</span>}
+                                    <span className="text-xs text-muted-foreground">
                                         {position}
-                                    </Badge>
+                                    </span>
                                 </>
                             )}
                         </div>

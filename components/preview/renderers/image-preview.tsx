@@ -53,9 +53,13 @@ export function ImagePreview({ file, downloadUrl, onLoad, onError }: ImagePrevie
     };
 
     const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
         const delta = e.deltaY > 0 ? -WHEEL_SCALE_STEP : WHEEL_SCALE_STEP;
-        setScale((prev) => Math.max(MIN_SCALE, Math.min(prev + delta, MAX_SCALE)));
+        const nextScale = Math.max(MIN_SCALE, Math.min(scale + delta, MAX_SCALE));
+        // Only prevent default scroll if we're actually zooming (not at bounds)
+        if (nextScale !== scale) {
+            e.preventDefault();
+        }
+        setScale(nextScale);
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -169,7 +173,7 @@ export function ImagePreview({ file, downloadUrl, onLoad, onError }: ImagePrevie
 
                     {/* Zoom Level Indicator */}
                     {!loading && scale !== 1 && (
-                        <div className="absolute bottom-4 left-4 bg-black/50 text-white px-3 py-1.5 rounded text-sm z-20">
+                        <div className="absolute bottom-4 left-4 bg-black/50 text-white px-3 py-1.5 rounded-sm text-sm z-20">
                             {Math.round(scale * 100)}%
                         </div>
                     )}

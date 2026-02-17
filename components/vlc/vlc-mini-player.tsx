@@ -161,7 +161,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
 
     return (
         <div role="region" aria-label="Media player" className="pointer-events-auto w-full max-w-3xl mx-auto px-4 pb-2">
-            <div className="rounded-sm border border-border bg-card/95 backdrop-blur-md shadow-xl overflow-hidden">
+            <div className="rounded-sm border border-border/50 bg-card/95 backdrop-blur-md shadow-xl overflow-hidden">
                     {/* Collapse toggle */}
                     <button
                         onClick={() => setCollapsed((c) => !c)}
@@ -206,6 +206,12 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                     onTouchEnd={() => {
                                         seek(seekValue);
                                         setIsSeeking(false);
+                                    }}
+                                    onKeyUp={(e) => {
+                                        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+                                            seek(Number((e.target as HTMLInputElement).value));
+                                            setIsSeeking(false);
+                                        }
                                     }}
                                     className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
                                     style={{

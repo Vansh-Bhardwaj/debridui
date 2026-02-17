@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, createContext, useContext } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Keyboard } from "lucide-react";
 
 interface Shortcut {
@@ -87,6 +87,7 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
                             <Keyboard className="size-4" />
                             Keyboard Shortcuts
                         </DialogTitle>
+                        <DialogDescription className="sr-only">Available keyboard shortcuts for navigation and playback</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-5 pt-1">
                         {SHORTCUT_GROUPS.map((group) => (
