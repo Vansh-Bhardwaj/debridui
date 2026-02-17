@@ -282,7 +282,9 @@ async function openInVLCBridge(url: string, subtitles?: string[], progressKey?: 
     const bridge = getVLCBridge();
 
     // Proxy subtitle URLs through the app so VLC can fetch them reliably
-    const subs = subtitles?.slice(0, 3).map((u, i) => proxySubtitleUrl(u, i)).filter(Boolean) as string[] | undefined;
+    const subs = subtitles?.length
+        ? (await Promise.all(subtitles.slice(0, 3).map((u, i) => proxySubtitleUrl(u, i)))).filter(Boolean) as string[]
+        : undefined;
 
     const result = await bridge.play(url, subs?.length ? { subtitles: subs } : undefined);
 
@@ -312,8 +314,23 @@ async function openInVLCBridge(url: string, subtitles?: string[], progressKey?: 
 
 /** Convert a raw subtitle URL to a proxied URL with a descriptive filename
  *  so VLC can detect the language and type from the path. */
-function proxySubtitleUrl(url: string, index?: number): string {
+async function proxySubtitleUrl(url: string, index?: number): Promise<string> {
     if (typeof window === "undefined") return url;
     const label = index && index > 0 ? `English_${index + 1}.srt` : "English.srt";
+
+    try {
+        const res = await fetch(
+            `/api/subtitles/vlc-sign?url=${encodeURIComponent(url)}&label=${encodeURIComponent(label)}`,
+            { credentials: "include", cache: "no-store" }
+        );
+
+        if (res.ok) {
+            const data = await res.json() as { url?: string };
+            if (data.url) return data.url;
+        }
+    } catch {
+        // Fallback below
+    }
+
     return `${window.location.origin}/api/subtitles/vlc/${label}?url=${encodeURIComponent(url)}`;
 }

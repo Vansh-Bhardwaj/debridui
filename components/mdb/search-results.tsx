@@ -62,6 +62,7 @@ export function SearchResults({
     const hasTraktResults = traktResults && traktResults.length > 0;
     const hasSourceResults = sourceResults && sourceResults.length > 0;
     const isSearching = trimmedQuery.length > 2;
+    const isQueryLoading = isFileSearching || isTraktSearching || isSourceSearching;
     const bothLoaded = !isFileSearching && !isTraktSearching && !isSourceSearching;
     const hasAnyResults = hasFileResults || hasTraktResults || hasSourceResults;
 
@@ -80,11 +81,15 @@ export function SearchResults({
                 {isSearching && (
                     <>
                         {/* Loading indicator */}
-                        {(isFileSearching || isTraktSearching || isSourceSearching) && <LoadingIndicator />}
+                        {isQueryLoading && (
+                            <div className="animate-in fade-in-0 duration-150 [animation-delay:120ms] [animation-fill-mode:backwards] motion-reduce:animate-none">
+                                <LoadingIndicator />
+                            </div>
+                        )}
 
                         {/* File results section */}
                         {hasFileResults && (
-                            <CommandGroup className="space-y-3 p-0">
+                            <CommandGroup className="space-y-3 p-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                                 <span className="text-xs tracking-widest uppercase text-muted-foreground">
                                     Your Files
                                 </span>
@@ -103,7 +108,7 @@ export function SearchResults({
 
                         {/* Trakt results section */}
                         {hasTraktResults && (
-                            <CommandGroup className="space-y-3 p-0">
+                            <CommandGroup className="space-y-3 p-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                                 <span className="text-xs tracking-widest uppercase text-muted-foreground">
                                     Movies & Shows
                                 </span>
@@ -126,7 +131,7 @@ export function SearchResults({
 
                         {/* Source results */}
                         {hasSourceResults && (
-                            <CommandGroup className="space-y-3 p-0">
+                            <CommandGroup className="space-y-3 p-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                                 <span className="text-xs tracking-widest uppercase text-muted-foreground">Sources</span>
                                 <div className="border border-border/50 rounded-sm overflow-hidden">
                                     {sourceResults.map((result) => (
@@ -167,11 +172,15 @@ export function SearchResults({
             {isSearching && (
                 <>
                     {/* Loading indicator */}
-                    {(isFileSearching || isTraktSearching || isSourceSearching) && <LoadingIndicator />}
+                    {isQueryLoading && (
+                        <div className="animate-in fade-in-0 duration-150 [animation-delay:120ms] [animation-fill-mode:backwards] motion-reduce:animate-none">
+                            <LoadingIndicator />
+                        </div>
+                    )}
 
                     {/* File results section */}
                     {hasFileResults && (
-                        <section className="space-y-4">
+                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Your Files" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 {fileResults.map((file) => (
@@ -183,7 +192,7 @@ export function SearchResults({
 
                     {/* Trakt results section */}
                     {hasTraktResults && (
-                        <section className="space-y-4">
+                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Movies & Shows" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 {traktResults.map((result) => {
@@ -204,7 +213,7 @@ export function SearchResults({
 
                     {/* Source results */}
                     {hasSourceResults && (
-                        <section className="space-y-4">
+                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Sources" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 {sourceResults.map((result) => (

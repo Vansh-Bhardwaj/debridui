@@ -69,7 +69,7 @@ export function PreviewDialog() {
     // from the debrid provider using the resolved download URL or intermediate redirect URLs.
     // This enables iOS Safari to use HLS instead of raw download URLs, and lets TorBox
     // extract torrent_id/file_id from API URLs in the redirect chain.
-    const { data: fetchedStreamingLinks, isLoading: isFetchingStreamingLinks } = useQuery({
+    const { data: fetchedStreamingLinks, isLoading: isFetchingStreamingLinks } = useQuery<Record<string, string>>({
         queryKey: ["preview", "streaming-links", directUrl, currentAccount.id],
         queryFn: async () => {
             // Try the resolved URL first
@@ -84,7 +84,7 @@ export function PreviewDialog() {
                 }
             }
 
-            return undefined;
+            return {};
         },
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,
@@ -234,7 +234,7 @@ export function PreviewDialog() {
 
                 {/* Preview Content */}
                 <div
-                    className="flex-1 relative overflow-hidden min-h-0"
+                    className="flex-1 relative overflow-hidden min-h-0 animate-in fade-in-0 duration-200 motion-reduce:animate-none"
                     key={isSingleMode ? directUrl : currentFile?.id}>
                     {!isSingleMode && isLoading ? (
                         <div className="flex items-center justify-center h-full">

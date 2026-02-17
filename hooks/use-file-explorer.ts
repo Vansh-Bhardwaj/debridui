@@ -1,7 +1,7 @@
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useState, useMemo } from "react";
 import { PAGE_SIZE } from "@/lib/constants";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { sortTorrentFiles } from "@/lib/utils/file";
 
@@ -20,6 +20,7 @@ export function useFileExplorer() {
     const { data, isLoading } = useQuery({
         queryKey: [currentAccount.id, "getTorrentList", currentPage, sortBy, sortOrder],
         queryFn: () => client.getTorrentList({ offset, limit }),
+        placeholderData: keepPreviousData,
         staleTime: 0, // Always revalidate on mount — refetchInterval manages freshness while mounted
         // Adaptive polling: fast when downloads are active, slow when idle
         // Saves ~80% Worker requests vs fixed 3s polling
@@ -54,7 +55,7 @@ export function useFileExplorer() {
     }, [data, sortBy, sortOrder]);
 
     const setPage = (page: number) => {
-        if (page >= 1) {
+        if (page >= 1 && page <= totalPages) {
             setCurrentPage(page);
         }
     };

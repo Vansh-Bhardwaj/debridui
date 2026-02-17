@@ -31,7 +31,7 @@ import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/li
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
 import { cn } from "@/lib/utils";
 import { useUserSettings, useSaveUserSettings, useDisconnectTrakt, hydrateSettingsFromServer } from "@/hooks/use-user-settings";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 function TraktLogo({ className }: { className?: string }) {
@@ -68,6 +68,7 @@ const SOURCE_QUALITY_OPTIONS: { value: SourceQuality | "any"; label: string }[] 
 ];
 
 export default function SettingsPage() {
+    const TMDB_SAVE_DEBOUNCE_MS = 600;
     const { theme, setTheme } = useTheme();
     const { currentAccount } = useAuthGuaranteed();
     const buildDate = new Date(BUILD_TIME);
@@ -85,6 +86,8 @@ export default function SettingsPage() {
     const { data: serverSettings } = useUserSettings();
     const { mutate: saveSettings } = useSaveUserSettings();
     const { mutate: disconnectTrakt, isPending: isDisconnecting } = useDisconnectTrakt();
+    const tmdbSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [tmdbSaveState, setTmdbSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
     const isTraktConnected = !!serverSettings?.trakt_access_token;
 
@@ -114,7 +117,7 @@ export default function SettingsPage() {
         const redirectUri = `${window.location.origin}/api/trakt/callback`;
         // Generate OAuth state for CSRF protection
         const state = crypto.randomUUID();
-        document.cookie = `trakt_oauth_state=${state}; path=/; max-age=600; samesite=lax`;
+        document.cookie = `trakt_oauth_state=${state}; path=/; max-age=600; samesite=lax; secure`;
         const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
         window.location.href = url;
     }, []);
@@ -123,9 +126,36 @@ export default function SettingsPage() {
         hydrateSettingsFromServer(serverSettings ?? null);
     }, [serverSettings]);
 
+    useEffect(() => {
+        return () => {
+            if (tmdbSaveTimeout.current) {
+                clearTimeout(tmdbSaveTimeout.current);
+            }
+        };
+    }, []);
+
     const handleTmdbKeyChange = (value: string) => {
         set("tmdbApiKey", value);
-        saveSettings({ tmdb_api_key: value || undefined });
+        setTmdbSaveState("saving");
+
+        if (tmdbSaveTimeout.current) {
+            clearTimeout(tmdbSaveTimeout.current);
+        }
+
+        tmdbSaveTimeout.current = setTimeout(() => {
+            saveSettings(
+                { tmdb_api_key: value || undefined },
+                {
+                    onSuccess: () => {
+                        setTmdbSaveState("saved");
+                        setTimeout(() => setTmdbSaveState("idle"), 1500);
+                    },
+                    onError: () => {
+                        setTmdbSaveState("error");
+                    },
+                }
+            );
+        }, TMDB_SAVE_DEBOUNCE_MS);
     };
 
     const updateStreaming = (updates: Partial<StreamingSettings>) => {
@@ -191,7 +221,7 @@ export default function SettingsPage() {
                 <SectionDivider label="Integrations" />
 
                 {/* Trakt — prominent card */}
-                <div className="rounded-sm border border-border/50 overflow-hidden">
+                <div className="rounded-sm border border-border/50 overflow-hidden transition-colors duration-200">
                     <div className="flex items-center justify-between gap-4 p-4">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-[#ED1C24]/10">
@@ -235,7 +265,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* TMDB */}
-                <div className="rounded-sm border border-border/50 overflow-hidden">
+                <div className="rounded-sm border border-border/50 overflow-hidden transition-colors duration-200">
                     <div className="p-4 space-y-3">
                         <div className="flex items-center gap-3">
                             <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-[#01b4e4]/10">
@@ -249,6 +279,20 @@ export default function SettingsPage() {
                                         Get a free key
                                     </a>
                                 </p>
+                                {tmdbSaveState !== "idle" && (
+                                    <p
+                                        className={cn(
+                                            "text-[11px] tracking-wide uppercase",
+                                            tmdbSaveState === "error"
+                                                ? "text-destructive"
+                                                : "text-muted-foreground"
+                                        )}
+                                    >
+                                        {tmdbSaveState === "saving" && "Saving..."}
+                                        {tmdbSaveState === "saved" && "Saved"}
+                                        {tmdbSaveState === "error" && "Save failed"}
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <Input
@@ -263,7 +307,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Device Sync */}
-                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4">
+                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200">
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10">
                             <RefreshCw className="size-5 text-primary" />

@@ -123,8 +123,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "Timeout" }, { status: 504 });
         }
 
+        console.error("[addon/resolve] resolve failure", error);
+
         return NextResponse.json(
-            { error: `Failed to resolve: ${error instanceof Error ? error.message : "Unknown"}` },
+            { error: "Failed to resolve stream URL" },
             { status: 502 },
         );
     }

@@ -105,6 +105,10 @@ export default function RootLayout({
         <html lang="en" suppressHydrationWarning>
             <head>
                 <meta name="theme-color" content="#09090b" />
+                <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://wsrv.nl" />
+                <link rel="preconnect" href="https://walter.trakt.tv" />
+                <link rel="preload" href="https://cdn.jsdelivr.net/gh/viperadnan-git/fonts@main/public/styrene/StyreneB-Regular-Trial.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
             </head>
             <body className={cn("font-sans antialiased")}>
                 <Script id="polyfill-name" strategy="beforeInteractive">

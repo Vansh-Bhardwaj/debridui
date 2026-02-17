@@ -19,6 +19,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/auth/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
 import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
+import { RouteTransition } from "@/components/common/route-transition";
 import { Keyboard } from "lucide-react";
 
 
@@ -69,7 +70,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                 <SearchButton className="shrink-0" />
                             </div>
                         </header>
-                        <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
+                        <RouteTransition>
+                            <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
+                        </RouteTransition>
                     </SidebarInset>
                 </SidebarProvider>
                 <PreviewDialog />

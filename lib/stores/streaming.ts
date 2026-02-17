@@ -11,6 +11,7 @@ import { openInPlayer } from "@/lib/utils/media-player";
 import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings } from "./settings";
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
+import { createDevTimer } from "@/lib/utils/dev-timing";
 
 export interface StreamingRequest {
     imdbId: string;
@@ -62,6 +63,16 @@ let toastId: string | number | null = null;
 let toastCreatedAt = 0;
 let requestId = 0;
 let preloadRequestId = 0;
+
+type ResolvedStreamCacheEntry = {
+    url: string;
+    chain?: string[];
+    cachedAt: number;
+};
+
+const resolvedStreamCache = new Map<string, ResolvedStreamCacheEntry>();
+const RESOLVED_STREAM_CACHE_TTL_MS = 2 * 60 * 1000;
+const RESOLVED_STREAM_CACHE_MAX_SIZE = 200;
 
 // Minimum time toast must be visible before dismissing (allows mount animation)
 const MIN_TOAST_DURATION = 300;
@@ -215,17 +226,39 @@ interface ShowSourceToastParams {
  */
 async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: string[] }> {
     if (typeof window === "undefined") return { url };
+
+    const cached = resolvedStreamCache.get(url);
+    if (cached && Date.now() - cached.cachedAt < RESOLVED_STREAM_CACHE_TTL_MS) {
+        return { url: cached.url, chain: cached.chain };
+    }
+
+    if (cached) {
+        resolvedStreamCache.delete(url);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10_000);
         const res = await fetch(`/api/addon/resolve?url=${encodeURIComponent(url)}`, {
             signal: controller.signal,
         });
-        clearTimeout(timeout);
         if (!res.ok) return { url };
         const data = (await res.json()) as { url?: string; status?: number; chain?: string[] };
-        if (data.url && (data.status ?? 999) < 400) return { url: data.url, chain: data.chain };
+        if (data.url && (data.status ?? 999) < 400) {
+            const resolved = { url: data.url, chain: data.chain };
+            resolvedStreamCache.set(url, { ...resolved, cachedAt: Date.now() });
+
+            if (resolvedStreamCache.size > RESOLVED_STREAM_CACHE_MAX_SIZE) {
+                const oldestKey = resolvedStreamCache.keys().next().value;
+                if (oldestKey) resolvedStreamCache.delete(oldestKey);
+            }
+
+            return resolved;
+        }
     } catch { /* resolve failed — use original */ }
+    finally {
+        clearTimeout(timeout);
+    }
     return { url };
 }
 
@@ -357,6 +390,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
     play: async (request, addons, options) => {
         const forceAutoPlay = options?.forceAutoPlay ?? false;
+        const timer = createDevTimer("streaming.play", {
+            imdbId: request.imdbId,
+            type: request.type,
+            addonCount: addons.length,
+        });
         // Clear preloaded data if we are playing something unrelated
         set({ preloadedData: null });
 
@@ -412,6 +450,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         try {
             // Classify addons by capability — only query addons for what they support
             const { streamAddons, subtitleAddons } = await classifyAddons(addons);
+            timer.step("classified-addons", {
+                streamAddons: streamAddons.length,
+                subtitleAddons: subtitleAddons.length,
+            });
 
             const sourcePromises = streamAddons.map(async (addon) => {
                 const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
@@ -455,9 +497,18 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
             const allSources = sourcesResults.flat();
             const englishSubtitles = combineEnglishSubtitles(subtitleResults);
+            timer.step("fetched-stream-data", {
+                totalSources: allSources.length,
+                subtitles: englishSubtitles.length,
+            });
 
             const streamingSettings = await getEffectiveStreamingSettings();
             const result = selectBestSource(allSources, streamingSettings);
+            timer.step("selected-source", {
+                hasMatches: result.hasMatches,
+                cachedMatches: result.cachedMatches.length,
+                uncachedMatches: result.uncachedMatches.length,
+            });
 
             set({ allFetchedSources: result.allSorted, selectedSource: result.source });
 
@@ -471,6 +522,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             ? "No sources match your quality preferences"
                             : "No sources available from enabled addons",
                 });
+                timer.end({ status: "no-match" });
                 return;
             }
 
@@ -492,6 +544,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         subtitles: englishSubtitles.length > 0 ? englishSubtitles : undefined,
                     }),
             });
+            timer.end({ status: "ok", selectedCached: result.isCached });
         } catch (error) {
             console.error(error);
             if (requestId === currentRequestId) {
@@ -502,6 +555,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 });
                 set({ activeRequest: null });
             }
+            timer.end({ status: "error" });
         }
     },
 

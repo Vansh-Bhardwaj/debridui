@@ -118,7 +118,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                 <>
                                     <span className="text-border">·</span>
                                     <span className="flex items-center gap-1.5">
-                                        <Star className="size-4 fill-[#F5C518] text-[#F5C518]" />
+                                        <Star className="size-4 fill-primary text-primary" />
                                         <span className="text-foreground font-medium">{media.rating.toFixed(1)}</span>
                                         <span className="text-muted-foreground/60">/10</span>
                                     </span>

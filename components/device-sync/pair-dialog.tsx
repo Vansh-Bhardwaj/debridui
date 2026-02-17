@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Copy, Link2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "react-qr-code";
+import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
 /**
  * Pair Dialog — allows authenticated users to share a pairing link
@@ -38,7 +39,10 @@ export const PairDialog = memo(function PairDialog({
     const generatePairLink = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch("/api/remote/token");
+            const res = await fetchWithTimeout("/api/remote/token", undefined, 8000);
+            if (handleUnauthorizedResponse(res, { toastMessage: "Session expired. Please sign in again." })) {
+                return;
+            }
             if (!res.ok) throw new Error("Failed to generate token");
             const { token } = (await res.json()) as { token: string };
             const url = `${window.location.origin}/pair?token=${encodeURIComponent(token)}`;

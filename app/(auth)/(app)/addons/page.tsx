@@ -14,6 +14,7 @@ import { AddonCard, AddonCardSkeleton } from "@/components/addons/addon-card";
 import { CachedBadge } from "@/components/common/display";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { SectionDivider } from "@/components/common/section-divider";
+import { EmptyState } from "@/components/common/async-state";
 
 const ADDON_PRESETS = [
     {
@@ -67,8 +68,11 @@ export default function AddonsPage() {
 
     const handleRefresh = useCallback(async () => {
         setIsRefreshing(true);
-        await refetch();
-        setIsRefreshing(false);
+        try {
+            await refetch();
+        } finally {
+            setIsRefreshing(false);
+        }
     }, [refetch]);
 
     const handleAddAddon = async (url?: string) => {
@@ -121,9 +125,13 @@ export default function AddonsPage() {
     const confirmRemoveAddon = async () => {
         if (!addonToDelete) return;
 
-        await removeAddonMutation.mutateAsync(addonToDelete.id);
-        toast.success(`Removed ${addonToDelete.name} addon`);
-        setAddonToDelete(null);
+        try {
+            await removeAddonMutation.mutateAsync(addonToDelete.id);
+            toast.success(`Removed ${addonToDelete.name} addon`);
+            setAddonToDelete(null);
+        } catch {
+            toast.error("Failed to remove addon");
+        }
     };
 
     const handleToggleAddon = async (addon: Addon) => {
@@ -300,12 +308,10 @@ export default function AddonsPage() {
                         ))}
                     </div>
                 ) : sortedAddons.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <p className="text-sm font-light text-foreground">No addons added yet</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Add your first addon to start fetching sources
-                        </p>
-                    </div>
+                    <EmptyState
+                        title="No addons added yet"
+                        description="Add your first addon to start fetching sources"
+                    />
                 ) : (
                     <div className="space-y-3">
                         {sortedAddons.map((addon, index) => (
@@ -357,6 +363,7 @@ export default function AddonsPage() {
                 description={`Are you sure you want to remove "${addonToDelete?.name}"? This action cannot be undone.`}
                 confirmText="Remove"
                 cancelText="Cancel"
+                isConfirming={removeAddonMutation.isPending}
                 variant="destructive"
                 onConfirm={confirmRemoveAddon}
             />

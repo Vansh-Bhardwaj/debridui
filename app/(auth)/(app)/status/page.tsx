@@ -24,6 +24,8 @@ import { useSettingsStore } from "@/lib/stores/settings";
 import { MediaPlayer } from "@/lib/types";
 import { isMobileOrTablet } from "@/lib/utils/media-player";
 import type { CheckStatus, HealthResponse } from "@/lib/health";
+import { ErrorState, LoadingState } from "@/components/common/async-state";
+import { fetchWithTimeout } from "@/lib/utils/error-handling";
 
 type StatusMeta = {
     label: string;
@@ -418,7 +420,7 @@ export default function StatusPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch(`/api/health?ts=${Date.now()}`, { cache: "no-store" });
+            const response = await fetchWithTimeout(`/api/health?ts=${Date.now()}`, { cache: "no-store" }, 10000);
             const json = (await response.json()) as HealthResponse;
             setData(json);
             if (!response.ok) {
@@ -499,7 +501,9 @@ export default function StatusPage() {
                     </CardHeader>
                     <CardContent className="space-y-0.5">
                         {error ? (
-                            <div className="text-xs text-destructive">Error: {error}</div>
+                            <ErrorState title="Status check failed" description={error} className="py-6" />
+                        ) : isLoading && !data ? (
+                            <LoadingState label="Checking system status" className="py-6" />
                         ) : (
                             <>
                                 <ServiceRow label="Database" status={data?.checks.db.status} />
@@ -597,7 +601,7 @@ export default function StatusPage() {
                     <div>
                         <button
                             onClick={() => setRawExpanded(!rawExpanded)}
-                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+                            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
                         >
                             <ChevronDown className={`size-3.5 transition-transform duration-300 ${rawExpanded ? "rotate-0" : "-rotate-90"}`} />
                             <span className="tracking-widest uppercase">Diagnostics</span>
@@ -605,9 +609,13 @@ export default function StatusPage() {
                         {rawExpanded && (
                             <Card>
                                 <CardContent className="pt-4">
-                                    <pre className="max-h-80 overflow-auto rounded-sm border border-border/50 bg-muted/30 p-4 text-xs">
-                                        {rawJson || "Loading..."}
-                                    </pre>
+                                    {rawJson ? (
+                                        <pre className="max-h-80 overflow-auto rounded-sm border border-border/50 bg-muted/30 p-4 text-xs">
+                                            {rawJson}
+                                        </pre>
+                                    ) : (
+                                        <LoadingState label="Loading diagnostics" className="py-6" />
+                                    )}
                                 </CardContent>
                             </Card>
                         )}

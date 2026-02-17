@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { addons } from "@/lib/db/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { addonSchema, addonOrderUpdateSchema } from "@/lib/schemas";
 import { type CreateAddon } from "@/lib/types";
@@ -121,9 +121,9 @@ export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean
 
 /**
  * Update addon orders (for reordering).
- * Uses a single batched UPDATE with CASE WHEN to avoid N individual queries.
- * Previous approach: 2N sequential queries to work around unique constraint.
- * New approach: Single raw SQL update — no constraint issues because it's atomic.
+ * Uses sequential single-row UPDATEs with a temp order to break the unique
+ * constraint cycle. Works on Neon (no SET CONSTRAINTS / DEFERRABLE support
+ * through their pooler).
  */
 export async function updateAddonOrders(updates: { id: string; order: number }[]) {
     const { data: session } = await auth.getSession();
@@ -138,16 +138,27 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
         return { success: true };
     }
 
-    // Build a single UPDATE with CASE WHEN for all updates
-    const ids = validated.map((u) => u.id);
-    const caseClauses = validated.map((u) => sql`WHEN ${addons.id} = ${u.id} THEN ${u.order}`);
+    await db.transaction(async (tx) => {
+        // Move first row to a temp order to free its slot
+        await tx
+            .update(addons)
+            .set({ order: -2147483647 })
+            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, session.user.id)));
 
-    await db
-        .update(addons)
-        .set({
-            order: sql`CASE ${sql.join(caseClauses, sql` `)} END`,
-        })
-        .where(and(eq(addons.userId, session.user.id), inArray(addons.id, ids)));
+        // Assign final orders to remaining rows (the freed slot is now available)
+        for (let i = 1; i < validated.length; i++) {
+            await tx
+                .update(addons)
+                .set({ order: validated[i].order })
+                .where(and(eq(addons.id, validated[i].id), eq(addons.userId, session.user.id)));
+        }
+
+        // Assign first row its final order
+        await tx
+            .update(addons)
+            .set({ order: validated[0].order })
+            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, session.user.id)));
+    });
 
     return { success: true };
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
 /**
  * Progress key identifies a unique media item (movie or episode)
@@ -59,7 +60,7 @@ function writeLocalProgress(key: ProgressKey, data: ProgressData): void {
  */
 async function syncToServer(key: ProgressKey, data: ProgressData): Promise<void> {
     try {
-        await fetch("/api/progress", {
+        const res = await fetchWithTimeout("/api/progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -71,6 +72,7 @@ async function syncToServer(key: ProgressKey, data: ProgressData): Promise<void>
                 durationSeconds: data.durationSeconds,
             }),
         });
+        handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired while syncing progress." });
     } catch (error) {
         console.error("[progress] sync error:", error);
     }
@@ -205,7 +207,7 @@ export function useProgress(key: ProgressKey | null) {
             if (key.season != null) params.set("season", String(key.season));
             if (key.episode != null) params.set("episode", String(key.episode));
 
-            fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
+            fetchWithTimeout(`/api/progress?${params}`, { method: "DELETE" }, 8000).catch(() => { });
         }
     }, [key, isLoggedIn]);
 
@@ -277,7 +279,10 @@ export function useContinueWatching() {
             // If logged in, also fetch from server and merge
             if (isLoggedIn) {
                 try {
-                    const res = await fetch("/api/progress", { cache: "no-store" });
+                    const res = await fetchWithTimeout("/api/progress", { cache: "no-store" }, 10000);
+                    if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Showing local progress only." })) {
+                        throw new Error("Unauthorized");
+                    }
                     if (res.ok) {
                         const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & ProgressData> };
 

@@ -15,6 +15,34 @@ const BLOCKED_HOSTNAMES = new Set([
     "metadata.google.com",
 ]);
 
+const BLOCKED_SUFFIXES = [
+    ".local",
+    ".internal",
+    ".localhost",
+    ".localdomain",
+    ".localtest.me",
+    ".nip.io",
+    ".sslip.io",
+];
+
+function normalizeIPv4FromDecimal(hostname: string): string | null {
+    if (!/^\d+$/.test(hostname)) return null;
+    const value = Number(hostname);
+    if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) return null;
+
+    const a = (value >>> 24) & 255;
+    const b = (value >>> 16) & 255;
+    const c = (value >>> 8) & 255;
+    const d = value & 255;
+    return `${a}.${b}.${c}.${d}`;
+}
+
+function normalizeIPv4FromMappedIPv6(hostname: string): string | null {
+    const ipv6 = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const match = ipv6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+    return match?.[1] ?? null;
+}
+
 /**
  * Check if a hostname is a private/internal IP address.
  * Covers RFC 1918 (10.x, 172.16-31.x, 192.168.x), link-local (169.254.x),
@@ -52,7 +80,18 @@ export function isBlockedUrl(urlString: string): boolean {
         const url = new URL(urlString);
         const hostname = url.hostname.toLowerCase();
 
+        // Never allow embedded credentials in proxied URLs
+        if (url.username || url.password) return true;
+
         if (BLOCKED_HOSTNAMES.has(hostname)) return true;
+        if (BLOCKED_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) return true;
+
+        const decimalIPv4 = normalizeIPv4FromDecimal(hostname);
+        if (decimalIPv4 && isPrivateIP(decimalIPv4)) return true;
+
+        const mappedIPv4 = normalizeIPv4FromMappedIPv6(hostname);
+        if (mappedIPv4 && isPrivateIP(mappedIPv4)) return true;
+
         if (isPrivateIP(hostname)) return true;
 
         return false;

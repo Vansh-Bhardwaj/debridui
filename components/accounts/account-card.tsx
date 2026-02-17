@@ -121,7 +121,7 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                             <div
                                 className={cn(
                                     "text-xs sm:text-sm",
-                                    userInfo.isPremium && "text-green-600 dark:text-green-500"
+                                    userInfo.isPremium && "text-secondary"
                                 )}>
                                 {userInfo.isPremium ? "Premium" : "Free"}
                             </div>

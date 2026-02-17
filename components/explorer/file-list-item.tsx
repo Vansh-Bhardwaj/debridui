@@ -79,7 +79,7 @@ const TransferDetails = memo(function TransferDetails({
                     <span className="text-border">·</span>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <span className="text-blue-600 dark:text-blue-400">
+                            <span className="text-primary">
                                 Speed: {formatSpeed(downloadSpeed)}
                             </span>
                         </TooltipTrigger>
@@ -92,7 +92,7 @@ const TransferDetails = memo(function TransferDetails({
                     <span className="text-border">·</span>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <span className="text-green-600 dark:text-green-400">
+                            <span className="text-secondary">
                                 Speed: {formatSpeed(uploadSpeed)}
                             </span>
                         </TooltipTrigger>
@@ -145,8 +145,8 @@ export const FileListItem = memo(function FileListItem({
         <FileItemContextMenu file={file}>
             <div
                 className={cn(
-                    "flex items-center gap-1 sm:gap-2 md:gap-3 px-1 sm:px-2 md:px-4 py-1.5 sm:py-2 md:py-3 border-b border-border/50 transition-colors duration-300 bg-card max-md:select-none",
-                    canExpand && "cursor-pointer hover:bg-muted/30",
+                    "flex items-center gap-1 sm:gap-2 md:gap-3 px-1 sm:px-2 md:px-4 py-1.5 sm:py-2 md:py-3 border-b border-border/50 transition-colors duration-300 bg-card max-md:select-none [content-visibility:auto] [contain-intrinsic-size:0_56px]",
+                    canExpand && "cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                     className
                 )}
                 {...(canExpand
@@ -184,7 +184,7 @@ export const FileListItem = memo(function FileListItem({
                             </div>
                             <div className="flex items-center gap-2">
                                 {showProgress && (
-                                    <Badge className="px-1 md:px-1.5 pb-0 border-0 rounded-sm text-xs md:text-sm bg-blue-500/10 text-blue-500">
+                                    <Badge className="px-1 md:px-1.5 pb-0 border-0 rounded-sm text-xs md:text-sm bg-primary/10 text-primary">
                                         {file.progress?.toFixed(2)}%
                                     </Badge>
                                 )}

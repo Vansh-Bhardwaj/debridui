@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, memo } from "react";
+import React, { useState, useMemo, useCallback, memo, useEffect } from "react";
 import { FolderOpen } from "lucide-react";
 import { SortControls } from "./sort-controls";
 import { FileList, FileListBody, FileListEmpty, FileListLoading } from "./file-list";
@@ -12,12 +12,14 @@ import { AddContent } from "./add-content";
 import { useFileExplorer } from "@/hooks/use-file-explorer";
 import { SearchSection } from "./search-section";
 import { ListPagination } from "@/components/common/pagination";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { DebridFile } from "@/lib/types";
 import { PAGE_SIZE } from "@/lib/constants";
+import { useDelayedFlag } from "@/hooks/use-delayed-flag";
 
 export const FileExplorer = memo(function FileExplorer() {
     const { files, isLoading, currentPage, totalPages, setPage } = useFileExplorer();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
     const queryParam = searchParams.get("q") || "";
     const isIdSearch = queryParam.trim().startsWith("id:");
@@ -25,6 +27,7 @@ export const FileExplorer = memo(function FileExplorer() {
     const [searchResults, setSearchResults] = useState<DebridFile[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const [searchPage, setSearchPage] = useState(1);
+    const showLoading = useDelayedFlag(isLoading || isSearching, 120);
 
     const selectedFileIds = useSelectionStore((state) => state.selectedFileIds);
     const selectAll = useSelectionStore((state) => state.selectAll);
@@ -74,6 +77,22 @@ export const FileExplorer = memo(function FileExplorer() {
         if (someFilesSelected) return "indeterminate";
         return false;
     }, [activeData, selectedFileIds]);
+
+    // Persist and restore scroll position for heavy list view navigation.
+    useEffect(() => {
+        const key = `scroll:${pathname}`;
+        const saved = sessionStorage.getItem(key);
+        if (saved) {
+            const y = Number(saved);
+            if (Number.isFinite(y) && y > 0) {
+                requestAnimationFrame(() => window.scrollTo(0, y));
+            }
+        }
+
+        return () => {
+            sessionStorage.setItem(key, String(window.scrollY));
+        };
+    }, [pathname]);
 
     // Wrapped page change handlers that scroll to top
     const handlePageChange = useCallback(
@@ -130,7 +149,7 @@ export const FileExplorer = memo(function FileExplorer() {
                                     ))}
                                 </>
                             )}
-                            {isLoading || isSearching ? (
+                            {showLoading ? (
                                 <FileListLoading />
                             ) : (
                                 activeData.length === 0 && <FileListEmpty />
@@ -146,7 +165,7 @@ export const FileExplorer = memo(function FileExplorer() {
                                     currentPage={searchPage}
                                     totalPages={searchTotalPages}
                                     onPageChange={handleSearchPageChange}
-                                    disabled={isLoading}
+                                    disabled={showLoading}
                                 />
                             )}
                             {!queryParam && totalPages > 1 && (
@@ -154,7 +173,7 @@ export const FileExplorer = memo(function FileExplorer() {
                                     currentPage={currentPage}
                                     totalPages={totalPages}
                                     onPageChange={handlePageChange}
-                                    disabled={isLoading}
+                                    disabled={showLoading}
                                 />
                             )}
                         </>

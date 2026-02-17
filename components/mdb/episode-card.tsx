@@ -40,7 +40,7 @@ const ThumbnailContent = memo(function ThumbnailContent({
             </span>
             {rating && (
                 <span className="absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 hidden sm:inline-flex items-center gap-1 text-xs font-medium text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
-                    <Star className="size-3 fill-[#F5C518] text-[#F5C518]" />
+                    <Star className="size-3 fill-primary text-primary" />
                     {rating.toFixed(1)}
                 </span>
             )}
@@ -105,7 +105,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                 />
                                 {/* Watched/New overlay badges */}
                                 {isWatched && (
-                                    <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-emerald-400 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                    <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-primary bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
                                         <Check className="size-2.5" />
                                         Watched
                                     </span>
@@ -126,7 +126,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                 rating={episode.rating}
                             />
                             {isWatched && (
-                                <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-emerald-400 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+                                <span className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 inline-flex items-center gap-1 text-[10px] font-medium tracking-wider text-primary bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
                                     <Check className="size-2.5" />
                                     Watched
                                 </span>
@@ -180,10 +180,10 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                     onClick={(e) => { e.stopPropagation(); onToggleWatched(); }}
                                     disabled={isTogglingWatched}
                                     className={cn(
-                                        "inline-flex items-center gap-1.5 text-xs rounded-sm px-2 py-1 transition-colors duration-200",
+                                        "inline-flex items-center gap-1.5 text-xs rounded-sm px-2 py-1 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                                         isWatched
-                                            ? "text-emerald-400 hover:text-red-400 hover:bg-red-500/10"
-                                            : "text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/10"
+                                            ? "text-primary hover:text-destructive hover:bg-destructive/10"
+                                            : "text-muted-foreground hover:text-primary hover:bg-primary/10"
                                     )}
                                     aria-label={isWatched ? "Mark as unwatched" : "Mark as watched"}>
                                     {isTogglingWatched ? (

@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, ChevronDown, ChevronUp, Calendar, MapPin, Skull, Star, Film, Tv } from "lucide-react";
 import { getPosterUrl } from "@/lib/utils/media";
 import { formatLocalizedDate, calculateAge } from "@/lib/utils";
+import { EmptyState, ErrorState } from "@/components/common/async-state";
 
 // Person Header Component
 const PersonHeader = memo(function PersonHeader({
@@ -418,7 +419,13 @@ const CreditsGrid = memo(function CreditsGrid({
     }
 
     if (credits.length === 0) {
-        return <p className="text-sm text-muted-foreground py-8 text-center">No credits found</p>;
+        return (
+            <EmptyState
+                title="No credits found"
+                description="This profile does not have available movie or show credits yet."
+                className="py-8"
+            />
+        );
     }
 
     return (
@@ -614,7 +621,11 @@ const FilmographyTabs = memo(function FilmographyTabs({ slug }: { slug: string }
                     <span className="text-xs tracking-widest uppercase text-muted-foreground">Filmography</span>
                     <div className="h-px flex-1 bg-border/50" />
                 </div>
-                <p className="text-sm text-muted-foreground py-8 text-center">No filmography available</p>
+                <EmptyState
+                    title="No filmography available"
+                    description="No cast or crew history is available for this person right now."
+                    className="py-8"
+                />
             </div>
         );
     }
@@ -669,12 +680,11 @@ const PersonPage = memo(function PersonPage() {
     if (error) {
         return (
             <div className="w-full lg:px-6 max-w-6xl mx-auto">
-                <div className="py-20 text-center">
-                    <h1 className="text-2xl font-light text-muted-foreground">Person not found</h1>
-                    <p className="text-sm text-muted-foreground/60 mt-2">
-                        The person you&apos;re looking for doesn&apos;t exist or has been removed.
-                    </p>
-                </div>
+                <ErrorState
+                    title="Person not found"
+                    description="The profile may not exist anymore or is temporarily unavailable."
+                    className="py-20"
+                />
             </div>
         );
     }

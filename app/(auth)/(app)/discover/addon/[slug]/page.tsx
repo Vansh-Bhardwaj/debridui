@@ -3,9 +3,10 @@
 import { use } from "react";
 import { memo, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Film, Tv, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Film, Tv } from "lucide-react";
 import { parseCatalogSlug, useAddonCatalogDef, useAddonCatalog } from "@/hooks/use-addons";
 import { MediaCard } from "@/components/mdb/media-card";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 
 const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
     const parsed = useMemo(() => parseCatalogSlug(slug), [slug]);
@@ -22,9 +23,11 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
 
     if (!parsed) {
         return (
-            <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
-                <AlertCircle className="size-8" />
-                <p className="text-sm">Invalid catalog link.</p>
+            <div className="space-y-4 py-10">
+                <ErrorState
+                    title="Invalid catalog link"
+                    description="This discover URL appears malformed or incomplete."
+                />
                 <Link href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
                     Back to Discover
                 </Link>
@@ -33,18 +36,16 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
     }
 
     if (defLoading) {
-        return (
-            <div className="flex items-center justify-center py-24">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-            </div>
-        );
+        return <LoadingState label="Loading catalog..." className="py-24" />;
     }
 
     if (!catalog) {
         return (
-            <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
-                <AlertCircle className="size-8" />
-                <p className="text-sm">Catalog not found. The addon may have been removed.</p>
+            <div className="space-y-4 py-10">
+                <EmptyState
+                    title="Catalog not found"
+                    description="The addon may have been removed or no longer exposes this catalog."
+                />
                 <Link href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
                     Back to Discover
                 </Link>
@@ -77,16 +78,19 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
 
             {/* Content */}
             {error ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
-                    <AlertCircle className="size-4" />
-                    <span>Failed to load catalog content.</span>
-                </div>
+                <ErrorState title="Failed to load catalog content" description="Please refresh and try again." className="py-14" />
             ) : itemsLoading ? (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
                     {Array.from({ length: 21 }, (_, i) => (
                         <div key={i} className="aspect-2/3 bg-muted/30 rounded-sm animate-pulse" />
                     ))}
                 </div>
+            ) : !items?.length ? (
+                <EmptyState
+                    title="No items in this catalog"
+                    description="Try another addon catalog or refresh discover data."
+                    className="py-14"
+                />
             ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
                     {items?.map((item, index) => {
@@ -96,7 +100,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                         return (
                             <div
                                 key={`${type}-${media.ids?.slug || index}`}
-                                className="animate-in fade-in-0 slide-in-from-bottom-2"
+                                className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                                 style={{
                                     animationDelay: `${Math.min(index * 20, 400)}ms`,
                                     animationDuration: "400ms",

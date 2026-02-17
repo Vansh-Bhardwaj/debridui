@@ -53,6 +53,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive }: Hero
                         className="w-full h-full object-cover"
                         loading={index < 2 ? "eager" : "lazy"}
                         decoding="async"
+                        fetchPriority={index === 0 ? "high" : undefined}
                     />
                 </div>
 
@@ -185,6 +186,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive }: Hero
                         className="w-full h-full object-cover"
                         loading={index < 2 ? "eager" : "lazy"}
                         decoding="async"
+                        fetchPriority={index === 0 ? "high" : undefined}
                     />
                 </div>
 

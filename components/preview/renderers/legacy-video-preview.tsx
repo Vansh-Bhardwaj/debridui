@@ -1665,7 +1665,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         <button
                                             key={player}
                                             type="button"
-                                            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
+                                            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/20 hover:bg-primary/30 text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                             onClick={() => openInExternalPlayer(player)}>
                                             <ExternalLink className="h-3 w-3" />
                                             {player}

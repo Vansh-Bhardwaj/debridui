@@ -34,40 +34,53 @@ export async function GET(req: Request) {
     }
 
     try {
-        const response = await fetch(url, {
-            headers: {
-                accept: "application/json, text/plain, */*",
-                // Use a standard browser user-agent — some addons may limit
-                // results for unrecognized user-agent strings
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                // Prevent upstream HTTP caching (AIOStreams, Cloudflare edge, etc.)
-                "cache-control": "no-cache",
-                "pragma": "no-cache",
-            },
-            redirect: "follow",
-        });
-
-        if (!response.ok) {
-            return new NextResponse(response.body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: { "content-type": response.headers.get("content-type") ?? "application/json" },
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    accept: "application/json, text/plain, */*",
+                    // Use a standard browser user-agent — some addons may limit
+                    // results for unrecognized user-agent strings
+                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    // Prevent upstream HTTP caching (AIOStreams, Cloudflare edge, etc.)
+                    "cache-control": "no-cache",
+                    "pragma": "no-cache",
+                },
+                redirect: "follow",
+                signal: controller.signal,
             });
+
+            if (!response.ok) {
+                return new NextResponse(response.body, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: { "content-type": response.headers.get("content-type") ?? "application/json" },
+                });
+            }
+
+            const data = await response.text();
+            return new NextResponse(data, {
+                status: 200,
+                headers: {
+                    "content-type": response.headers.get("content-type") ?? "application/json",
+                    // No caching — stream results change frequently and can be partial
+                    // during initial aggregation by meta-addons (AIOStreams, etc.)
+                    "cache-control": "no-store",
+                },
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+    } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+            return NextResponse.json({ error: "Upstream timeout" }, { status: 504 });
         }
 
-        const data = await response.text();
-        return new NextResponse(data, {
-            status: 200,
-            headers: {
-                "content-type": response.headers.get("content-type") ?? "application/json",
-                // No caching — stream results change frequently and can be partial
-                // during initial aggregation by meta-addons (AIOStreams, etc.)
-                "cache-control": "no-store",
-            },
-        });
-    } catch (error) {
+        console.error("[addon/proxy] proxy failure", error);
+
         return NextResponse.json(
-            { error: `Proxy error: ${error instanceof Error ? error.message : "Unknown error"}` },
+            { error: "Proxy request failed" },
             { status: 502 }
         );
     }

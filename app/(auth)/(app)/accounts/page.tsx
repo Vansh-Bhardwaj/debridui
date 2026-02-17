@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AccountCard } from "@/components/accounts/account-card";
 import { PageHeader } from "@/components/common/page-header";
 import { useAuth } from "@/components/auth/auth-provider";
+import { EmptyState } from "@/components/common/async-state";
 
 export default function AccountsPage() {
     const router = useRouter();
@@ -47,10 +48,11 @@ export default function AccountsPage() {
             />
 
             {userAccounts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <p className="text-sm font-light text-foreground">No accounts added yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Add your first debrid account to get started</p>
-                </div>
+                <EmptyState
+                    title="No accounts added yet"
+                    description="Add your first debrid account to get started."
+                    className="py-12"
+                />
             ) : (
                 <div className="space-y-3">
                     {userAccounts.map((account) => (

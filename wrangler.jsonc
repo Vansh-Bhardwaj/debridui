@@ -19,7 +19,7 @@
     {
       "binding": "HYPERDRIVE",
       "id": "e7bd6156f2a5469aac3b6b370dae5e41",
-      "localConnectionString": "postgresql://neondb_owner:npg_9JiVGvOZ3tjq@ep-empty-scene-a1gs3bqr-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+      "localConnectionString": "postgresql://user:password@localhost:5432/dbname?sslmode=require"
     }
   ],
   // Public variables (safe to commit)

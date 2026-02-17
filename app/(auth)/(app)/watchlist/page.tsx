@@ -20,6 +20,7 @@ import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { cn } from "@/lib/utils";
 import { getPosterUrl } from "@/lib/utils/media";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 
 // ── Watchlist Filters ──────────────────────────────────────────────────────
 
@@ -118,27 +119,16 @@ const CalendarSection = memo(function CalendarSection({
 
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                {[1, 2, 3].map((i) => (
-                    <div key={i} className="space-y-3 animate-pulse">
-                        <div className="h-4 w-32 bg-muted rounded" />
-                        <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
-                            {[1, 2, 3].map((j) => (
-                                <div key={j} className="aspect-2/3 bg-muted rounded-sm" />
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <LoadingState label="Loading calendar..." className="py-12" />
         );
     }
 
     if (error) {
-        return <p className="text-sm text-muted-foreground py-8">Failed to load calendar</p>;
+        return <ErrorState title="Failed to load calendar" description="Please retry in a moment." className="py-12" />;
     }
 
     if (sortedDates.length === 0) {
-        return <p className="text-sm text-muted-foreground py-8">{emptyMessage}</p>;
+        return <EmptyState title={emptyMessage} className="py-12" />;
     }
 
     return (
@@ -154,7 +144,7 @@ const CalendarSection = memo(function CalendarSection({
                             return (
                                 <div
                                     key={`${type}-${media.ids?.trakt || i}`}
-                                    className="animate-in fade-in-0 slide-in-from-bottom-2"
+                                    className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                                     style={{ animationDelay: `${Math.min(i * 30, 200)}ms`, animationDuration: "400ms", animationFillMode: "backwards" }}>
                                     <MediaCard media={media} type={type as "movie" | "show"} />
                                     {item.episode && (
@@ -239,7 +229,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
                             <Link
                                 key={`${show.ids?.trakt}-${ep.season}-${ep.number}-${i}`}
                                 href={`/shows/${slug}?season=${ep.season}`}
-                                className="group/item flex items-center gap-3.5 px-3 py-2.5 rounded-sm hover:bg-muted/30 transition-colors duration-300 animate-in fade-in-0 slide-in-from-bottom-1"
+                                className="group/item flex items-center gap-3.5 px-3 py-2.5 rounded-sm hover:bg-muted/30 transition-colors duration-300 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none"
                                 style={{
                                     animationDelay: `${Math.min(i * 40, 300)}ms`,
                                     animationDuration: "400ms",

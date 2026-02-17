@@ -119,6 +119,7 @@ export const DevicePicker = memo(function DevicePicker() {
     const activeTarget = useDeviceSyncStore((s) => s.activeTarget);
     const setActiveTarget = useDeviceSyncStore((s) => s.setActiveTarget);
     const sendCommand = useDeviceSyncStore((s) => s.sendCommand);
+    const connect = useDeviceSyncStore((s) => s.connect);
 
     const handleSelectDevice = useCallback(
         (deviceId: string | null) => {
@@ -160,8 +161,8 @@ export const DevicePicker = memo(function DevicePicker() {
                     {/* Indicator dot */}
                     {isConnected && (
                         <span className={cn(
-                            "absolute -top-0.5 -right-0.5 size-2 rounded-full",
-                            isRemoteActive ? "bg-primary animate-pulse" : hasDevices ? "bg-green-500" : "bg-muted-foreground/50"
+                            "absolute -top-0.5 -right-0.5 size-2 rounded-full transition-colors",
+                            isRemoteActive ? "bg-primary animate-pulse" : hasDevices ? "bg-secondary" : "bg-muted-foreground/50"
                         )} />
                     )}
                 </Button>
@@ -191,11 +192,25 @@ export const DevicePicker = memo(function DevicePicker() {
 
                 {/* Connection status */}
                 {!isConnected && (
-                    <DropdownMenuItem className="focus:bg-transparent cursor-default" onSelect={(e) => e.preventDefault()}>
-                        <p className="text-xs text-muted-foreground">
-                            {connectionStatus === "connecting" ? "Connecting..." : "Disconnected"}
-                        </p>
-                    </DropdownMenuItem>
+                    <>
+                        <DropdownMenuItem className="focus:bg-transparent cursor-default" onSelect={(e) => e.preventDefault()}>
+                            <p className="text-xs text-muted-foreground">
+                                {connectionStatus === "connecting" ? "Connecting..." : "Disconnected"}
+                            </p>
+                        </DropdownMenuItem>
+                        {connectionStatus !== "connecting" && (
+                            <DropdownMenuItem
+                                onSelect={(e) => {
+                                    e.preventDefault();
+                                    void connect();
+                                }}
+                                className="cursor-pointer"
+                            >
+                                <Link2 className="size-4 mr-2 text-muted-foreground" />
+                                <span className="text-sm">Reconnect</span>
+                            </DropdownMenuItem>
+                        )}
+                    </>
                 )}
 
                 {/* Other devices */}

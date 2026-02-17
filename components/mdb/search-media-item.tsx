@@ -53,7 +53,7 @@ export const SearchMediaItem = memo(function SearchMediaItem({
                     <span
                         className={cn(
                             "text-xs tracking-wide uppercase shrink-0",
-                            type === "movie" ? "text-blue-500" : "text-purple-500"
+                            type === "movie" ? "text-primary" : "text-secondary"
                         )}>
                         {type === "movie" ? "Film" : "Series"}
                     </span>

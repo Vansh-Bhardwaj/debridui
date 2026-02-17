@@ -9,6 +9,7 @@ import type { ProgressKey } from "@/hooks/use-progress";
 import { getVLCBridgeClient } from "@/lib/utils/media-player";
 import { traktClient, TraktClient } from "@/lib/trakt";
 import { queryClient } from "@/lib/query-client";
+import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function writeLocal(key: ProgressKey, progressSeconds: number, durationSeconds: 
 
 async function syncToServer(key: ProgressKey, progressSeconds: number, durationSeconds: number) {
     try {
-        await fetch("/api/progress", {
+        const res = await fetchWithTimeout("/api/progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -54,7 +55,8 @@ async function syncToServer(key: ProgressKey, progressSeconds: number, durationS
                 progressSeconds,
                 durationSeconds,
             }),
-        });
+        }, 10000);
+        handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired while syncing VLC progress." });
     } catch {
         // network error — ignore, will retry
     }

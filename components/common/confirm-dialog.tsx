@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -20,6 +21,7 @@ interface ConfirmDialogProps {
     confirmText?: string;
     cancelText?: string;
     onConfirm: () => void;
+    isConfirming?: boolean;
     variant?: "destructive" | "default";
 }
 
@@ -31,6 +33,7 @@ export function ConfirmDialog({
     confirmText = "Confirm",
     cancelText = "Cancel",
     onConfirm,
+    isConfirming = false,
     variant = "default",
 }: ConfirmDialogProps) {
     const isMobile = useIsMobile();
@@ -43,11 +46,19 @@ export function ConfirmDialog({
                     <AlertDialogDescription>{description}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>{cancelText}</AlertDialogCancel>
+                    <AlertDialogCancel disabled={isConfirming}>{cancelText}</AlertDialogCancel>
                     <AlertDialogAction
                         onClick={onConfirm}
+                        disabled={isConfirming}
                         variant={variant === "destructive" ? "destructive" : "default"}>
-                        {confirmText}
+                        {isConfirming ? (
+                            <>
+                                <Loader2 className="size-4 animate-spin" />
+                                Working...
+                            </>
+                        ) : (
+                            confirmText
+                        )}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

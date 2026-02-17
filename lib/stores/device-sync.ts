@@ -29,6 +29,7 @@ import type {
 import { detectDevice, getDeviceId } from "@/lib/device-sync/protocol";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { toast } from "sonner";
+import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,7 @@ interface DeviceSyncState {
 let wsClient: DeviceSyncClient | null = null;
 let broadcast: DeviceSyncBroadcast | null = null;
 let tokenCache: { token: string; expiresAt: number } | null = null;
+let transferPendingTimer: ReturnType<typeof setTimeout> | null = null;
 
 const SYNC_WORKER_URL = process.env.NEXT_PUBLIC_DEVICE_SYNC_URL ?? "";
 
@@ -108,7 +110,10 @@ async function fetchToken(): Promise<string | null> {
     }
 
     try {
-        const res = await fetch("/api/remote/token");
+        const res = await fetchWithTimeout("/api/remote/token", undefined, 8000);
+        if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Device sync paused." })) {
+            return null;
+        }
         if (!res.ok) return null;
         const data = (await res.json()) as { token: string };
         // Token is valid 24hr, cache it
@@ -447,6 +452,11 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
         wsClient?.disconnect();
         wsClient = null;
 
+        if (transferPendingTimer) {
+            clearTimeout(transferPendingTimer);
+            transferPendingTimer = null;
+        }
+
         broadcast?.stop();
         broadcast = null;
 
@@ -455,22 +465,40 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
         set({
             devices: [],
             connectionStatus: "disconnected",
+            transferPending: null,
         });
     },
 
     sendCommand: (targetId, action, payload) => {
-        wsClient?.sendCommand(targetId, action, payload);
+        if (!wsClient?.sendCommand(targetId, action, payload)) {
+            toast.error("Device sync unavailable", {
+                description: "Reconnect and try again.",
+                duration: 2500,
+            });
+        }
     },
 
     transferPlayback: (targetId, playback) => {
         if (!wsClient) return;
 
-        wsClient.transferTo(targetId, playback);
+        const sent = wsClient.transferTo(targetId, playback);
+        if (!sent) {
+            toast.error("Transfer failed", {
+                description: "Connection lost. Reconnect and retry.",
+                duration: 3000,
+            });
+            set({ transferPending: null });
+            return;
+        }
         set({ transferPending: playback.title ?? "Loading..." });
 
         // Clear pending state after 30s timeout (fallback if device never reports)
-        setTimeout(() => {
+        if (transferPendingTimer) {
+            clearTimeout(transferPendingTimer);
+        }
+        transferPendingTimer = setTimeout(() => {
             if (get().transferPending) set({ transferPending: null });
+            transferPendingTimer = null;
         }, 30000);
 
         const target = get().devices.find((d) => d.id === targetId);
@@ -620,6 +648,10 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
             }
             case "now-playing-update": {
                 const isActiveTarget = msg.deviceId === get().activeTarget;
+                if (isActiveTarget && msg.state && transferPendingTimer) {
+                    clearTimeout(transferPendingTimer);
+                    transferPendingTimer = null;
+                }
                 set((state) => ({
                     devices: state.devices.map((d) =>
                         d.id === msg.deviceId

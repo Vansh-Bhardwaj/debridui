@@ -468,7 +468,7 @@ function BannerSourcesSection({
         <div className="border-t border-border/30 -mx-3 sm:-mx-4">
             <button
                 onClick={() => setExpanded((e) => !e)}
-                className="flex items-center justify-between w-full px-3 sm:px-4 py-2 text-left hover:bg-muted/20 transition-colors"
+                className="flex items-center justify-between w-full px-3 sm:px-4 py-2 text-left hover:bg-muted/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
                 <div className="flex items-center gap-1.5">
                     <Layers className="size-3 text-muted-foreground" />
@@ -489,7 +489,7 @@ function BannerSourcesSection({
                             <button
                                 key={source.index}
                                 onClick={() => onPlayLocalSource ? onPlayLocalSource(source.index) : onCommand?.("play-source", { index: source.index })}
-                                className="flex items-start gap-1.5 w-full rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-muted/30"
+                                className="flex items-start gap-1.5 w-full rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                             >
                                 <span className="text-[10px] w-4 text-center shrink-0 tabular-nums text-muted-foreground mt-0.5">
                                     {source.index + 1}
@@ -501,7 +501,7 @@ function BannerSourcesSection({
                                             <span className="text-[10px] text-muted-foreground">{meta}</span>
                                         )}
                                         {source.isCached && (
-                                            <span className="text-[10px] text-green-500 font-medium">Cached</span>
+                                            <span className="text-[10px] text-primary font-medium">Cached</span>
                                         )}
                                     </div>
                                     <span className="text-[10px] text-muted-foreground/50">{source.addonName}</span>

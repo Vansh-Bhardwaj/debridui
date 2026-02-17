@@ -54,7 +54,7 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                         </span>
                     </div>
                     <div
-                        className="flex items-center gap-1 animate-in fade-in-0"
+                        className="flex items-center gap-1 animate-in fade-in-0 motion-reduce:animate-none"
                         style={{ animationDuration: "600ms", animationDelay: "400ms", animationFillMode: "backwards" }}>
                         {DISCORD_URL && (
                             <a
@@ -90,12 +90,12 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                 {/* Headline with staggered animation */}
                 <div className="space-y-2">
                     <h1
-                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight animate-in fade-in-0 slide-in-from-bottom-4"
+                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
                         style={{ animationDuration: "600ms" }}>
                         Discover
                     </h1>
                     <h1
-                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-4"
+                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
                         style={{ animationDuration: "600ms", animationDelay: "100ms", animationFillMode: "backwards" }}>
                         & Stream
                     </h1>
@@ -103,7 +103,7 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
 
                 {/* Description */}
                 <p
-                    className="text-sm text-muted-foreground max-w-md leading-relaxed animate-in fade-in-0"
+                    className="text-sm text-muted-foreground max-w-md leading-relaxed animate-in fade-in-0 motion-reduce:animate-none"
                     style={{ animationDuration: "600ms", animationDelay: "200ms", animationFillMode: "backwards" }}>
                     A modern debrid client for managing your files, discovering trending movies and shows — with addon
                     support and streaming to your preferred media player.
@@ -111,11 +111,11 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
 
                 {/* Search bar */}
                 <div
-                    className="max-w-md animate-in fade-in-0 slide-in-from-bottom-2"
+                    className="max-w-md animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                     style={{ animationDuration: "600ms", animationDelay: "300ms", animationFillMode: "backwards" }}>
                     <button
                         onClick={onSearchClick}
-                        className="group w-full flex items-center gap-3 h-11 px-4 text-sm text-muted-foreground bg-transparent hover:bg-muted/30 border border-border/50 hover:border-border rounded-sm transition-all duration-300">
+                        className="group w-full flex items-center gap-3 h-11 px-4 text-sm text-muted-foreground bg-transparent hover:bg-muted/30 border border-border/50 hover:border-border rounded-sm transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
                         <SearchIcon className="size-4 text-muted-foreground/60 group-hover:text-foreground transition-colors duration-300" />
                         <span className="flex-1 text-left">Search movies, shows, files...</span>
                         <kbd className="hidden sm:inline-flex h-6 items-center gap-1 rounded-sm border border-border/50 bg-muted/30 px-2 font-mono text-xs text-muted-foreground">
@@ -139,7 +139,7 @@ interface ContentSectionProps {
 const ContentSection = memo(function ContentSection({ label, icon, children, delay = 0 }: ContentSectionProps) {
     return (
         <div
-            className="space-y-8 animate-in fade-in-0 slide-in-from-bottom-4"
+            className="space-y-8 animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
             style={{
                 animationDelay: `${delay}ms`,
                 animationDuration: "600ms",
@@ -244,18 +244,81 @@ const AddonCatalogs = memo(function AddonCatalogs() {
     );
 });
 
+/** Wrapper: defers its children's Trakt queries until the component scrolls into viewport. */
+function LazyTraktSection({
+    label,
+    icon,
+    delay,
+    children,
+}: {
+    label: string;
+    icon: React.ReactNode;
+    delay: number;
+    children: (visible: boolean) => React.ReactNode;
+}) {
+    const [visible, setVisible] = useState(false);
+    const setRef = useCallback((node: HTMLDivElement | null) => {
+        if (!node || visible) return;
+        const io = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) { setVisible(true); io.disconnect(); } },
+            { rootMargin: "200% 0px" }
+        );
+        io.observe(node);
+    }, [visible]);
+
+    return (
+        <div ref={setRef}>
+            <ContentSection label={label} icon={icon} delay={delay}>
+                {children(visible)}
+            </ContentSection>
+        </div>
+    );
+}
+
+const PopularSection = memo(function PopularSection({ visible }: { visible: boolean }) {
+    const popularMovies = useTraktPopularMovies(20, visible);
+    const popularShows = useTraktPopularShows(20, visible);
+    return (
+        <>
+            <MediaSection title="Movies" items={popularMovies.data} isLoading={popularMovies.isLoading} error={popularMovies.error} />
+            <MediaSection title="TV Shows" items={popularShows.data} isLoading={popularShows.isLoading} error={popularShows.error} />
+        </>
+    );
+});
+
+const BoxOfficeSection = memo(function BoxOfficeSection({ visible }: { visible: boolean }) {
+    const boxOfficeMovies = useTraktBoxOfficeMovies(visible);
+    return <MediaSection title="Top Grossing" items={boxOfficeMovies.data} isLoading={boxOfficeMovies.isLoading} error={boxOfficeMovies.error} />;
+});
+
+const MostWatchedSection = memo(function MostWatchedSection({ visible }: { visible: boolean }) {
+    const mostWatchedMovies = useTraktMostWatchedMovies("weekly", 20, visible);
+    const mostWatchedShows = useTraktMostWatchedShows("weekly", 20, visible);
+    return (
+        <>
+            <MediaSection title="Movies" items={mostWatchedMovies.data} isLoading={mostWatchedMovies.isLoading} error={mostWatchedMovies.error} />
+            <MediaSection title="TV Shows" items={mostWatchedShows.data} isLoading={mostWatchedShows.isLoading} error={mostWatchedShows.error} />
+        </>
+    );
+});
+
+const AnticipatedSection = memo(function AnticipatedSection({ visible }: { visible: boolean }) {
+    const anticipatedMovies = useTraktAnticipatedMovies(20, visible);
+    const anticipatedShows = useTraktAnticipatedShows(20, visible);
+    return (
+        <>
+            <MediaSection title="Movies" items={anticipatedMovies.data} isLoading={anticipatedMovies.isLoading} error={anticipatedMovies.error} />
+            <MediaSection title="TV Shows" items={anticipatedShows.data} isLoading={anticipatedShows.isLoading} error={anticipatedShows.error} />
+        </>
+    );
+});
+
 const DashboardPage = memo(function DashboardPage() {
     const [searchOpen, setSearchOpen] = useState(false);
 
+    // Above-the-fold: always fetch
     const trendingMovies = useTraktTrendingMovies(20);
     const trendingShows = useTraktTrendingShows(20);
-    const popularMovies = useTraktPopularMovies(20);
-    const popularShows = useTraktPopularShows(20);
-    const mostWatchedMovies = useTraktMostWatchedMovies("weekly", 20);
-    const mostWatchedShows = useTraktMostWatchedShows("weekly", 20);
-    const anticipatedMovies = useTraktAnticipatedMovies(20);
-    const anticipatedShows = useTraktAnticipatedShows(20);
-    const boxOffice = useTraktBoxOfficeMovies();
 
     return (
         <div className="pb-12">
@@ -302,62 +365,24 @@ const DashboardPage = memo(function DashboardPage() {
                 </ContentSection>
 
                 {/* Popular */}
-                <ContentSection label="Popular" icon={<Sparkles className="size-3.5" />} delay={100}>
-                    <MediaSection
-                        title="Movies"
-                        items={popularMovies.data}
-                        isLoading={popularMovies.isLoading}
-                        error={popularMovies.error}
-                    />
-                    <MediaSection
-                        title="TV Shows"
-                        items={popularShows.data}
-                        isLoading={popularShows.isLoading}
-                        error={popularShows.error}
-                    />
-                </ContentSection>
+                <LazyTraktSection label="Popular" icon={<Sparkles className="size-3.5" />} delay={100}>
+                    {(visible) => <PopularSection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Box Office */}
-                <ContentSection label="Box Office" icon={<Ticket className="size-3.5" />} delay={200}>
-                    <MediaSection
-                        title="Top Grossing"
-                        items={boxOffice.data}
-                        isLoading={boxOffice.isLoading}
-                        error={boxOffice.error}
-                    />
-                </ContentSection>
+                <LazyTraktSection label="Box Office" icon={<Ticket className="size-3.5" />} delay={200}>
+                    {(visible) => <BoxOfficeSection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Most Watched */}
-                <ContentSection label="Most Watched This Week" icon={<Film className="size-3.5" />} delay={300}>
-                    <MediaSection
-                        title="Movies"
-                        items={mostWatchedMovies.data}
-                        isLoading={mostWatchedMovies.isLoading}
-                        error={mostWatchedMovies.error}
-                    />
-                    <MediaSection
-                        title="TV Shows"
-                        items={mostWatchedShows.data}
-                        isLoading={mostWatchedShows.isLoading}
-                        error={mostWatchedShows.error}
-                    />
-                </ContentSection>
+                <LazyTraktSection label="Most Watched This Week" icon={<Film className="size-3.5" />} delay={300}>
+                    {(visible) => <MostWatchedSection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Coming Soon */}
-                <ContentSection label="Coming Soon" icon={<Calendar className="size-3.5" />} delay={400}>
-                    <MediaSection
-                        title="Movies"
-                        items={anticipatedMovies.data}
-                        isLoading={anticipatedMovies.isLoading}
-                        error={anticipatedMovies.error}
-                    />
-                    <MediaSection
-                        title="TV Shows"
-                        items={anticipatedShows.data}
-                        isLoading={anticipatedShows.isLoading}
-                        error={anticipatedShows.error}
-                    />
-                </ContentSection>
+                <LazyTraktSection label="Coming Soon" icon={<Calendar className="size-3.5" />} delay={400}>
+                    {(visible) => <AnticipatedSection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Footer */}
                 <MdbFooter className="pt-10 border-t border-border/50" />

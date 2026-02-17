@@ -2,6 +2,23 @@ import { type AddonSource } from "@/lib/addons/types";
 import { getResolutionIndex, getSourceQualityIndex } from "@/lib/addons/parser";
 import { type QualityRange, type StreamingSettings, getActiveRange } from "@/lib/stores/settings";
 
+const LANGUAGE_PATTERNS: Record<string, RegExp> = {
+    english: /\b(eng|english|en)\b/i,
+    spanish: /\b(esp|spanish|español|spa|es)\b/i,
+    french: /\b(french|français|fra|fr)\b/i,
+    german: /\b(german|deutsch|ger|de)\b/i,
+    italian: /\b(italian|italiano|ita|it)\b/i,
+    portuguese: /\b(portuguese|português|por|pt)\b/i,
+    russian: /\b(russian|русский|rus|ru)\b/i,
+    japanese: /\b(japanese|日本語|jpn|ja)\b/i,
+    korean: /\b(korean|한국어|kor|ko)\b/i,
+    chinese: /\b(chinese|中文|chi|zh)\b/i,
+    hindi: /\b(hindi|हिन्दी|hin|hi)\b/i,
+    arabic: /\b(arabic|العربية|ara|ar)\b/i,
+};
+
+const SIZE_PATTERN = /([\d.]+)\s*(GB|MB|KB)?/i;
+
 function matchesResolutionRange(source: AddonSource, range: QualityRange): boolean {
     if (!source.resolution) return true; // Unknown resolution passes
 
@@ -30,23 +47,7 @@ function matchesSourceQualityRange(source: AddonSource, range: QualityRange): bo
 function detectLanguage(source: AddonSource): string | null {
     const text = (source.title || source.description || "").toLowerCase();
 
-    // Common language indicators
-    const languagePatterns: Record<string, RegExp> = {
-        english: /\b(eng|english|en)\b/i,
-        spanish: /\b(esp|spanish|español|spa|es)\b/i,
-        french: /\b(french|français|fra|fr)\b/i,
-        german: /\b(german|deutsch|ger|de)\b/i,
-        italian: /\b(italian|italiano|ita|it)\b/i,
-        portuguese: /\b(portuguese|português|por|pt)\b/i,
-        russian: /\b(russian|русский|rus|ru)\b/i,
-        japanese: /\b(japanese|日本語|jpn|ja)\b/i,
-        korean: /\b(korean|한국어|kor|ko)\b/i,
-        chinese: /\b(chinese|中文|chi|zh)\b/i,
-        hindi: /\b(hindi|हिन्दी|hin|hi)\b/i,
-        arabic: /\b(arabic|العربية|ara|ar)\b/i,
-    };
-
-    for (const [lang, pattern] of Object.entries(languagePatterns)) {
+    for (const [lang, pattern] of Object.entries(LANGUAGE_PATTERNS)) {
         if (pattern.test(text)) return lang;
     }
 
@@ -94,7 +95,7 @@ function calculateScore(
     // Size consideration - prefer smaller files if similar quality (tie-breaker)
     if (source.size) {
         // Parse size string (e.g., "4.5 GB") to number
-        const sizeMatch = source.size.match(/([\d.]+)\s*(GB|MB|KB)?/i);
+        const sizeMatch = source.size.match(SIZE_PATTERN);
         if (sizeMatch) {
             let sizeGB = parseFloat(sizeMatch[1]);
             const unit = (sizeMatch[2] || "GB").toUpperCase();
@@ -141,9 +142,19 @@ export function selectBestSource(
     const cachedMatches = matchingSources.filter((s) => s.isCached);
     const uncachedMatches = matchingSources.filter((s) => !s.isCached);
 
+    const scoreCache = new Map<string, number>();
+    const getScore = (source: AddonSource) => {
+        const key = source.url || `${source.addonId || ""}-${source.title || ""}`;
+        const cached = scoreCache.get(key);
+        if (cached !== undefined) return cached;
+        const next = calculateScore(source, options);
+        scoreCache.set(key, next);
+        return next;
+    };
+
     // Sort by calculated score (lower = better)
     const sortByScore = (a: AddonSource, b: AddonSource) => {
-        return calculateScore(a, options) - calculateScore(b, options);
+        return getScore(a) - getScore(b);
     };
 
     cachedMatches.sort(sortByScore);

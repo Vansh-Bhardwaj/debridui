@@ -242,7 +242,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                         {favLoading ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
-                            <Heart className={cn("size-4", isInFavorites && "fill-current text-red-500")} />
+                            <Heart className={cn("size-4", isInFavorites && "fill-current text-destructive")} />
                         )}
                     </Button>
                 </TooltipTrigger>
@@ -258,10 +258,10 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                                 {ratingLoading ? (
                                     <Loader2 className="size-4 animate-spin" />
                                 ) : (
-                                    <Star className={cn("size-4", currentRating > 0 && "fill-[#F5C518] text-[#F5C518]")} />
+                                    <Star className={cn("size-4", currentRating > 0 && "fill-primary text-primary")} />
                                 )}
                                 {currentRating > 0 && (
-                                    <span className="absolute -bottom-0.5 text-[9px] font-bold text-[#F5C518]">{currentRating}</span>
+                                    <span className="absolute -bottom-0.5 text-[9px] font-bold text-primary">{currentRating}</span>
                                 )}
                             </Button>
                         </DropdownMenuTrigger>

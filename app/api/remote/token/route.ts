@@ -50,7 +50,7 @@ export async function GET() {
             { token },
             {
                 headers: {
-                    "Cache-Control": "private, max-age=3600", // Cache 1hr (token valid 24hr)
+                    "Cache-Control": "no-store", // Do not cache auth token responses
                 },
             }
         );

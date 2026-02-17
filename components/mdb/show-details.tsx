@@ -225,7 +225,7 @@ const EpisodesSection = memo(function EpisodesSection({
                     )}
                     <span className="text-xs tracking-wider uppercase text-muted-foreground">
                         {watchedSet.size > 0 && (
-                            <span className="text-emerald-400/80 normal-case">{watchedSet.size}/{displayEpisodes?.length ?? "?"} watched <span className="text-border mx-1">·</span></span>
+                            <span className="text-primary/80 normal-case">{watchedSet.size}/{displayEpisodes?.length ?? "?"} watched <span className="text-border mx-1">·</span></span>
                         )}
                         {displayEpisodes ? `${displayEpisodes.length} Episodes` : null}
                     </span>

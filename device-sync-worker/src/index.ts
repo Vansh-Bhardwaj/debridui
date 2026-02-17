@@ -143,6 +143,11 @@ export class DeviceSync extends DurableObject<Env> {
         `);
     }
 
+    /** Max concurrent WebSocket connections per user room */
+    private static readonly MAX_CONNECTIONS = 20;
+    /** Max items in the shared playback queue */
+    private static readonly MAX_QUEUE_SIZE = 100;
+
     async fetch(request: Request): Promise<Response> {
         if (request.headers.get("Upgrade") !== "websocket") {
             return new Response("Expected WebSocket upgrade", { status: 426 });
@@ -152,6 +157,11 @@ export class DeviceSync extends DurableObject<Env> {
         const deviceId = url.searchParams.get("deviceId");
         if (!deviceId) {
             return new Response("Missing deviceId", { status: 400 });
+        }
+
+        // Guard: reject if too many connections already open
+        if (this.ctx.getWebSockets().length >= DeviceSync.MAX_CONNECTIONS) {
+            return new Response("Too many connections", { status: 429 });
         }
 
         const pair = new WebSocketPair();
@@ -180,7 +190,7 @@ export class DeviceSync extends DurableObject<Env> {
         const validTypes = new Set([
             "register", "now-playing", "command", "transfer",
             "control-claim", "control-release", "browse-request", "browse-response",
-            "notify", "queue-add", "queue-remove", "queue-clear", "queue-reorder", "queue-get",
+            "notify", "queue-add", "queue-remove", "queue-clear", "queue-reorder", "queue-get", "ping",
         ]);
         if (!msg || typeof msg !== "object" || typeof msg.type !== "string" || !validTypes.has(msg.type)) {
             this.send(ws, { type: "error", message: "Invalid message type" });
@@ -189,6 +199,11 @@ export class DeviceSync extends DurableObject<Env> {
 
         const attachment = ws.deserializeAttachment() as { deviceId: string; device?: DeviceInfo; registered: boolean } | null;
         if (!attachment) return;
+
+        if (msg.type !== "register" && !attachment.registered) {
+            this.send(ws, { type: "error", message: "Device not registered" });
+            return;
+        }
 
         switch (msg.type) {
             case "register":
@@ -230,6 +245,8 @@ export class DeviceSync extends DurableObject<Env> {
                 break;
             case "queue-get":
                 await this.handleQueueGet(ws);
+                break;
+            case "ping":
                 break;
         }
     }
@@ -413,6 +430,13 @@ export class DeviceSync extends DurableObject<Env> {
         attachment: { deviceId: string; device?: DeviceInfo },
         msg: Extract<ClientMessage, { type: "queue-add" }>
     ): Promise<void> {
+        // Guard: reject if queue is full
+        const count = this.ctx.storage.sql.exec("SELECT COUNT(*) as c FROM queue").one();
+        if ((count.c as number) >= DeviceSync.MAX_QUEUE_SIZE) {
+            this.send(ws, { type: "error", message: "Queue is full" });
+            return;
+        }
+
         const id = crypto.randomUUID();
         const item: QueueItem = { ...msg.item, id, addedAt: Date.now() };
 
@@ -611,8 +635,10 @@ export default {
             return new Response("Not found", { status: 404, headers: cors });
         }
 
-        // Verify auth token from query param
-        const token = url.searchParams.get("token");
+        // Verify auth token from Authorization header (preferred) or query param.
+        const authHeader = request.headers.get("Authorization") ?? "";
+        const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+        const token = bearer || url.searchParams.get("token");
         if (!token) {
             return new Response("Missing token", { status: 401, headers: cors });
         }
@@ -626,7 +652,13 @@ export default {
         const doId = env.DEVICE_SYNC.idFromName(userId);
         const stub = env.DEVICE_SYNC.get(doId);
 
+        // Strip token before forwarding to Durable Object to reduce token exposure
+        // in downstream logs/debug output.
+        const sanitizedUrl = new URL(request.url);
+        sanitizedUrl.searchParams.delete("token");
+        const forwarded = new Request(sanitizedUrl.toString(), request);
+
         // Forward the WebSocket upgrade to the DO
-        return stub.fetch(request);
+        return stub.fetch(forwarded);
     },
 } satisfies ExportedHandler<Env>;

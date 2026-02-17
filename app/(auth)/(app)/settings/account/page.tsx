@@ -29,6 +29,7 @@ import { useState, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { formatDistanceToNow } from "date-fns";
+import { EmptyState } from "@/components/common/async-state";
 
 const AUTH_ACCOUNTS_KEY = ["auth-accounts"];
 const USER_SESSIONS_KEY = ["user-sessions"];
@@ -481,7 +482,11 @@ function SessionsSection({ currentToken }: { currentToken?: string }) {
                         ))}
                     </>
                 ) : groupedSessions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4">No active sessions found</p>
+                    <EmptyState
+                        title="No active sessions"
+                        description="No active login sessions were found for this account."
+                        className="py-4"
+                    />
                 ) : (
                     <>
                         {groupedSessions.map((group) => {

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { TraktMediaItem } from "@/lib/trakt";
-import { getUserAddons, addAddon, removeAddon, toggleAddon, toggleAddonCatalogs, updateAddonOrders } from "@/lib/actions/addons";
+import { getUserAddons, addAddon, removeAddon, toggleAddon, toggleAddonCatalogs, updateAddonOrders } from "@/lib/actions/data";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams, catalogMetasToMediaItems } from "@/lib/addons/parser";
 import { type Addon, type AddonManifest, type AddonSource, type AddonSubtitle, type TvSearchParams, addonSupportsStreams, addonSupportsSubtitles, addonSupportsCatalogs } from "@/lib/addons/types";

@@ -14,7 +14,7 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
         <ThemeProvider attribute="class" defaultTheme="dark">
             <ProgressProvider height="4px" color="var(--primary)" options={{ showSpinner: false }} shallowRouting>
                 <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
-                    <TooltipProvider delayDuration={2000}>{children}</TooltipProvider>
+                    <TooltipProvider delayDuration={700}>{children}</TooltipProvider>
                 </PersistQueryClientProvider>
                 <Toaster position="top-right" closeButton richColors />
             </ProgressProvider>

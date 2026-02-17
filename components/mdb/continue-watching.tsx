@@ -166,7 +166,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 </p>
                 {media?.rating && (
                     <div className="flex items-center gap-1 mt-0.5">
-                        <Star className="size-2.5 fill-[#F5C518] text-[#F5C518]" />
+                        <Star className="size-2.5 fill-primary text-primary" />
                         <span className="text-[10px] text-muted-foreground">{media.rating.toFixed(1)}</span>
                     </div>
                 )}

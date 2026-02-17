@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient, type TraktMedia } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
 import { toast } from "sonner";
@@ -16,12 +16,22 @@ const CACHE_DURATION = {
 function createTraktHook<T extends any[], R>(
     keyParts: string[],
     fn: (...args: T) => Promise<R>,
-    cacheDuration: number
+    cacheDuration: number,
+    options?: { keepPrevious?: boolean }
 ) {
-    return (...args: T): UseQueryResult<R> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (...rawArgs: any[]): UseQueryResult<R> => {
+        // Convention: trailing boolean arg = `enabled` flag (not passed to queryFn)
+        const last = rawArgs[rawArgs.length - 1];
+        const hasEnabled = rawArgs.length > 0 && typeof last === "boolean";
+        const enabled = hasEnabled ? (last as boolean) : true;
+        const args = (hasEnabled ? rawArgs.slice(0, -1) : rawArgs) as unknown as T;
+
         return useQuery({
             queryKey: ["trakt", ...keyParts, ...args],
             queryFn: () => fn(...args),
+            enabled,
+            placeholderData: options?.keepPrevious ? keepPreviousData : undefined,
             staleTime: cacheDuration,
             gcTime: cacheDuration * 2,
         });
@@ -32,55 +42,64 @@ function createTraktHook<T extends any[], R>(
 export const useTraktTrendingMovies = createTraktHook(
     ["movies", "trending"],
     (limit = 20) => traktClient.getTrendingMovies(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktTrendingShows = createTraktHook(
     ["shows", "trending"],
     (limit = 20) => traktClient.getTrendingShows(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktPopularMovies = createTraktHook(
     ["movies", "popular"],
     (limit = 20) => traktClient.getPopularMovies(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktPopularShows = createTraktHook(
     ["shows", "popular"],
     (limit = 20) => traktClient.getPopularShows(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktMostWatchedMovies = createTraktHook(
     ["movies", "watched"],
     (period = "weekly", limit = 20) => traktClient.getMostWatchedMovies(period, limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktMostWatchedShows = createTraktHook(
     ["shows", "watched"],
     (period = "weekly", limit = 20) => traktClient.getMostWatchedShows(period, limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktAnticipatedMovies = createTraktHook(
     ["movies", "anticipated"],
     (limit = 20) => traktClient.getAnticipatedMovies(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktAnticipatedShows = createTraktHook(
     ["shows", "anticipated"],
     (limit = 20) => traktClient.getAnticipatedShows(limit),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 export const useTraktBoxOfficeMovies = createTraktHook(
     ["movies", "boxoffice"],
     () => traktClient.getBoxOfficeMovies(),
-    CACHE_DURATION.STANDARD
+    CACHE_DURATION.STANDARD,
+    { keepPrevious: true }
 );
 
 // Details hooks
@@ -165,6 +184,7 @@ export function useTraktWatchlistMovies() {
     return useQuery({
         queryKey: ["trakt", "watchlist", "movies"],
         queryFn: () => traktClient.getWatchlist("movies", "added"),
+        placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -176,6 +196,7 @@ export function useTraktWatchlistShows() {
     return useQuery({
         queryKey: ["trakt", "watchlist", "shows"],
         queryFn: () => traktClient.getWatchlist("shows", "added"),
+        placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -484,6 +505,7 @@ export function useTraktCalendarShows(days = 14) {
     return useQuery({
         queryKey: ["trakt", "calendar", "shows", days],
         queryFn: () => traktClient.getCalendarShows(undefined, days),
+        placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -494,6 +516,7 @@ export function useTraktCalendarMovies(days = 30) {
     return useQuery({
         queryKey: ["trakt", "calendar", "movies", days],
         queryFn: () => traktClient.getCalendarMovies(undefined, days),
+        placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -508,6 +531,7 @@ export function useTraktRecentEpisodes(days = 7) {
             const startDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
             return traktClient.getCalendarShows(startDate, days);
         },
+        placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),

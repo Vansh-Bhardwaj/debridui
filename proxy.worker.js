@@ -64,18 +64,43 @@ export default {
         try {
             const parsed = new URL(targetUrl);
             const hostname = parsed.hostname.toLowerCase();
+            const decimalIpv4 = /^\d+$/.test(hostname)
+                ? Number(hostname)
+                : NaN;
+            const normalizedDecimalIpv4 = Number.isInteger(decimalIpv4) && decimalIpv4 >= 0 && decimalIpv4 <= 0xffffffff
+                ? `${(decimalIpv4 >>> 24) & 255}.${(decimalIpv4 >>> 16) & 255}.${(decimalIpv4 >>> 8) & 255}.${decimalIpv4 & 255}`
+                : "";
+            const ipv4Mapped = hostname.replace(/^\[|\]$/g, "").match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i)?.[1] || "";
             const blocked =
+                !!parsed.username ||
+                !!parsed.password ||
                 hostname === "localhost" ||
                 hostname === "127.0.0.1" ||
                 hostname === "[::1]" ||
                 hostname === "0.0.0.0" ||
                 hostname.endsWith(".local") ||
                 hostname.endsWith(".internal") ||
+                hostname.endsWith(".localhost") ||
+                hostname.endsWith(".localdomain") ||
+                hostname.endsWith(".localtest.me") ||
+                hostname.endsWith(".nip.io") ||
+                hostname.endsWith(".sslip.io") ||
                 hostname === "metadata.google.internal" ||
                 hostname === "169.254.169.254" ||
                 /^10\./.test(hostname) ||
                 /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-                /^192\.168\./.test(hostname);
+                /^192\.168\./.test(hostname) ||
+                /^127\./.test(hostname) ||
+                /^169\.254\./.test(normalizedDecimalIpv4) ||
+                /^10\./.test(normalizedDecimalIpv4) ||
+                /^172\.(1[6-9]|2\d|3[01])\./.test(normalizedDecimalIpv4) ||
+                /^192\.168\./.test(normalizedDecimalIpv4) ||
+                /^127\./.test(normalizedDecimalIpv4) ||
+                /^169\.254\./.test(ipv4Mapped) ||
+                /^10\./.test(ipv4Mapped) ||
+                /^172\.(1[6-9]|2\d|3[01])\./.test(ipv4Mapped) ||
+                /^192\.168\./.test(ipv4Mapped) ||
+                /^127\./.test(ipv4Mapped);
             if (blocked) {
                 return new Response("Blocked destination", { status: 403 });
             }

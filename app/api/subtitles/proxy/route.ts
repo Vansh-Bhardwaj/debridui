@@ -71,18 +71,31 @@ export async function GET(req: Request) {
 
     // Fetch subtitle file server-side and stream it back with permissive headers.
     // We intentionally do not forward cookies/credentials.
-    const upstream = await fetch(url, {
-        headers: {
-            // Many subtitle hosts behave better when we set an explicit UA + accept.
-            accept: "text/plain, text/vtt, application/x-subrip, */*",
-            "user-agent": "DebridUI",
-        },
-        redirect: "follow",
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let upstream: Response;
+    try {
+        upstream = await fetch(url, {
+            headers: {
+                // Many subtitle hosts behave better when we set an explicit UA + accept.
+                accept: "text/plain, text/vtt, application/x-subrip, */*",
+                "user-agent": "DebridUI",
+            },
+            redirect: "follow",
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+            return NextResponse.json({ error: "Upstream timeout" }, { status: 504 });
+        }
+        return NextResponse.json({ error: "Subtitle proxy unavailable" }, { status: 502 });
+    } finally {
+        clearTimeout(timeout);
+    }
 
     if (!upstream.ok) {
         return NextResponse.json(
-            { error: `Upstream error: ${upstream.status} ${upstream.statusText}` },
+            { error: "Upstream error" },
             { status: upstream.status }
         );
     }

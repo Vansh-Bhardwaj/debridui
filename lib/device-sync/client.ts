@@ -140,13 +140,13 @@ export class DeviceSyncClient {
     }
 
     /** Send now-playing state update. */
-    reportNowPlaying(state: DeviceInfo["nowPlaying"]): void {
-        this.send({ type: "now-playing", state });
+    reportNowPlaying(state: DeviceInfo["nowPlaying"]): boolean {
+        return this.send({ type: "now-playing", state });
     }
 
     /** Send a remote command to another device. */
-    sendCommand(targetDeviceId: string, action: RemoteAction, payload?: Record<string, unknown>): void {
-        this.send({
+    sendCommand(targetDeviceId: string, action: RemoteAction, payload?: Record<string, unknown>): boolean {
+        return this.send({
             type: "command",
             target: targetDeviceId,
             action,
@@ -155,8 +155,8 @@ export class DeviceSyncClient {
     }
 
     /** Transfer playback to another device. */
-    transferTo(targetDeviceId: string, playback: TransferPayload): void {
-        this.send({
+    transferTo(targetDeviceId: string, playback: TransferPayload): boolean {
+        return this.send({
             type: "transfer",
             target: targetDeviceId,
             playback,

@@ -24,7 +24,7 @@ const SourceContent = memo(function SourceContent({ result }: { result: TorBoxSe
                     {/* Cached indicator + type inline */}
                     <div className="flex items-center gap-2 mb-1">
                         {result.cached && (
-                            <span className="inline-flex items-center gap-1 text-xs tracking-wide text-green-600">
+                            <span className="inline-flex items-center gap-1 text-xs tracking-wide text-primary">
                                 <Zap className="size-4" /> Cached
                             </span>
                         )}

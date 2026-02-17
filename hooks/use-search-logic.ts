@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { getFindTorrentsCacheKey } from "@/lib/utils/cache-keys";
 import { type DebridFile, AccountType } from "@/lib/types";
@@ -21,8 +21,9 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
 
     // Trakt search for movies and TV shows
     const { data: traktResults, isLoading: isTraktSearching } = useQuery({
-        queryKey: ["trakt", "search", query],
-        queryFn: () => traktClient.search(query, ["movie", "show"]),
+        queryKey: ["trakt", "search", currentAccount.id, trimmedQuery],
+        queryFn: () => traktClient.search(trimmedQuery, ["movie", "show"]),
+        placeholderData: keepPreviousData,
         enabled: shouldSearch,
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
@@ -30,8 +31,9 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
 
     // File search using debrid client
     const { data: fileResults, isLoading: isFileSearching } = useQuery<DebridFile[]>({
-        queryKey: getFindTorrentsCacheKey(currentAccount.id, query),
-        queryFn: () => client.findTorrents(query),
+        queryKey: getFindTorrentsCacheKey(currentAccount.id, trimmedQuery),
+        queryFn: () => client.findTorrents(trimmedQuery),
+        placeholderData: keepPreviousData,
         enabled: shouldSearch,
         staleTime: 30_000, // 30s — file lists don't change in real-time
         gcTime: 60_000,
@@ -40,8 +42,9 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
     const isTorBoxUser = currentUser.type === AccountType.TORBOX;
 
     const { data: sourceResults, isLoading: isSourceSearching } = useQuery<TorBoxSearchResult[]>({
-        queryKey: ["torbox", "search", currentAccount.id, query],
-        queryFn: () => (client as TorBoxClient).searchTorrents(query),
+        queryKey: ["torbox", "search", currentAccount.id, trimmedQuery],
+        queryFn: () => (client as TorBoxClient).searchTorrents(trimmedQuery),
+        placeholderData: keepPreviousData,
         enabled: shouldSearch && isTorBoxUser,
         staleTime: 60 * 60 * 1000,
         gcTime: 6 * 60 * 60 * 1000,
