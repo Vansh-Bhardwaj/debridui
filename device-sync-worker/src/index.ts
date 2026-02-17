@@ -251,11 +251,16 @@ export class DeviceSync extends DurableObject<Env> {
         }
     }
 
-    async webSocketClose(ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {
+    async webSocketClose(ws: WebSocket, code: number, reason: string, _wasClean: boolean): Promise<void> {
         const attachment = ws.deserializeAttachment() as { deviceId: string } | null;
         if (!attachment) return;
 
         ws.close();
+
+        // Don't broadcast device-left if this socket was replaced by another connection
+        // from the same device — the new connection already sent device-joined.
+        if (code === 1000 && reason === "Replaced by new connection") return;
+
         this.broadcast({ type: "device-left", deviceId: attachment.deviceId }, ws);
         this.broadcastDeviceList(ws);
     }

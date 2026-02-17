@@ -97,9 +97,16 @@ export class DeviceSyncClient {
                 }
             };
 
-            this.ws.onclose = () => {
+            this.ws.onclose = (event) => {
                 this.ws = null;
                 this.setStatus("disconnected");
+
+                // Don't reconnect if this socket was replaced by another tab/connection
+                // with the same device identity. The other tab holds the WS; this tab
+                // still receives relayed messages via BroadcastChannel.
+                if (event.code === 1000 && event.reason === "Replaced by new connection") {
+                    return;
+                }
 
                 if (!this.intentionalClose) {
                     this.scheduleReconnect();

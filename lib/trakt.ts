@@ -429,6 +429,9 @@ export class TraktClient {
     private readonly clientId: string;
     private readonly apiVersion: string;
     private accessToken?: string;
+    private tokenExpiresAt?: number;
+    private refreshHandler?: () => Promise<string | null>;
+    private refreshPromise?: Promise<string | null>;
 
     constructor(config: TraktClientConfig) {
         this.baseUrl = config.baseUrl || "https://api.trakt.tv";
@@ -440,8 +443,9 @@ export class TraktClient {
     /**
      * Set or update the access token for authenticated requests
      */
-    public setAccessToken(token: string): void {
+    public setAccessToken(token: string, expiresAt?: number): void {
         this.accessToken = token;
+        if (expiresAt) this.tokenExpiresAt = expiresAt;
     }
 
     /**
@@ -449,6 +453,40 @@ export class TraktClient {
      */
     public getAccessToken(): string | undefined {
         return this.accessToken;
+    }
+
+    /**
+     * Register a handler that refreshes the token (called on 401 or near-expiry).
+     * Should return a new access token or null if refresh fails.
+     */
+    public setRefreshHandler(handler: () => Promise<string | null>): void {
+        this.refreshHandler = handler;
+    }
+
+    /**
+     * Proactively refresh the token if it's within 5 minutes of expiry.
+     * Deduplicates concurrent refresh calls.
+     */
+    private async ensureFreshToken(): Promise<void> {
+        if (!this.refreshHandler || !this.tokenExpiresAt) return;
+        // Refresh if within 5 minutes of expiry
+        if (Date.now() / 1000 < this.tokenExpiresAt - 300) return;
+
+        const newToken = await this.doRefresh();
+        if (newToken) this.accessToken = newToken;
+    }
+
+    /**
+     * Deduplicated refresh — prevents concurrent refresh requests.
+     */
+    private async doRefresh(): Promise<string | null> {
+        if (!this.refreshHandler) return null;
+        if (this.refreshPromise) return this.refreshPromise;
+
+        this.refreshPromise = this.refreshHandler().finally(() => {
+            this.refreshPromise = undefined;
+        });
+        return this.refreshPromise;
     }
 
     /**
@@ -480,6 +518,9 @@ export class TraktClient {
         requiresAuth = false,
         extended?: string
     ): Promise<T> {
+        // Proactively refresh token if near expiry
+        if (requiresAuth) await this.ensureFreshToken();
+
         let url = `${this.baseUrl}/${endpoint.replace(/^\//, "")}`;
 
         // Add extended parameter if provided
@@ -489,7 +530,7 @@ export class TraktClient {
         }
 
         try {
-            const response = await fetch(url, {
+            let response = await fetch(url, {
                 ...options,
                 headers: {
                     ...this.createHeaders(requiresAuth),
@@ -497,8 +538,23 @@ export class TraktClient {
                 },
             });
 
+            // Auto-refresh on 401 and retry once
+            if (response.status === 401 && requiresAuth && this.refreshHandler) {
+                const newToken = await this.doRefresh();
+                if (newToken) {
+                    this.accessToken = newToken;
+                    response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            ...this.createHeaders(true),
+                            ...options.headers,
+                        },
+                    });
+                }
+            }
+
             if (!response.ok) {
-                throw new TraktError(`API request failed: ${response.statusText}`, response.status, endpoint);
+                throw new TraktError(`API request failed: ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`, response.status, endpoint);
             }
 
             // Handle empty responses (204 No Content)

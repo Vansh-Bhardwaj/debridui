@@ -28,6 +28,8 @@ import {
     ChevronDown,
     ChevronUp,
     Layers,
+    Film,
+    ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +42,8 @@ import {
 import type { DeviceInfo, RemoteAction, NowPlayingInfo } from "@/lib/device-sync/protocol";
 import { cn } from "@/lib/utils";
 import { traktClient } from "@/lib/trakt";
-import type { TraktEpisode } from "@/lib/trakt";
+import type { TraktEpisode, TraktSearchResult, TraktSeason } from "@/lib/trakt";
+import { cdnUrl, getPosterUrl } from "@/lib/utils/media";
 
 function DeviceTypeIcon({ type, className }: { type: DeviceInfo["deviceType"]; className?: string }) {
     switch (type) {
@@ -385,6 +388,14 @@ function PairPageContent() {
                             ))}
                         </div>
                     </div>
+                )}
+
+                {/* Search media (movies/shows) to play on remote device */}
+                {effectiveSelectedId && client && (
+                    <MediaSearchSection
+                        client={client}
+                        targetId={effectiveSelectedId}
+                    />
                 )}
 
                 {/* Search files on remote device */}
@@ -830,6 +841,325 @@ function SourcesSection({
                         );
                     })}
                 </div>
+            )}
+        </div>
+    );
+}
+
+// ── Media Search Section (Trakt movies/shows) ─────────────────────────────
+
+function MediaSearchSection({
+    client,
+    targetId,
+}: {
+    client: DeviceSyncClient;
+    targetId: string;
+}) {
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<TraktSearchResult[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [expanded, setExpanded] = useState(true);
+    const [selectedShow, setSelectedShow] = useState<TraktSearchResult | null>(null);
+    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleSearch = useCallback(async (value: string) => {
+        if (!value.trim()) {
+            setResults([]);
+            return;
+        }
+        setSearching(true);
+        try {
+            const res = await traktClient.search(value.trim(), ["movie", "show"], "images");
+            setResults(res.slice(0, 20));
+        } catch {
+            setResults([]);
+        } finally {
+            setSearching(false);
+        }
+    }, []);
+
+    const onQueryChange = useCallback((value: string) => {
+        setQuery(value);
+        setSelectedShow(null);
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = setTimeout(() => handleSearch(value), 400);
+    }, [handleSearch]);
+
+    const handlePlayMovie = useCallback((result: TraktSearchResult) => {
+        const movie = result.movie;
+        if (!movie?.ids?.imdb) return;
+        client.sendCommand(targetId, "play-media", {
+            imdbId: movie.ids.imdb,
+            type: "movie",
+            title: movie.title,
+        });
+    }, [client, targetId]);
+
+    const handlePlayEpisode = useCallback((show: TraktSearchResult, season: number, episode: number, episodeTitle?: string) => {
+        const imdbId = show.show?.ids?.imdb;
+        if (!imdbId) return;
+        const showTitle = show.show?.title ?? "";
+        const epTag = `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
+        const title = episodeTitle ? `${showTitle} ${epTag} - ${episodeTitle}` : `${showTitle} ${epTag}`;
+        client.sendCommand(targetId, "play-media", {
+            imdbId,
+            type: "show",
+            title,
+            season,
+            episode,
+        });
+    }, [client, targetId]);
+
+    // Show detail view for a selected TV show
+    if (selectedShow?.show) {
+        return (
+            <div className="space-y-2">
+                <button
+                    onClick={() => setSelectedShow(null)}
+                    className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                    <ArrowLeft className="size-3.5" />
+                    Back to search
+                </button>
+                <ShowDetail
+                    key={selectedShow.show?.ids?.slug}
+                    show={selectedShow}
+                    onPlayEpisode={(season, episode, title) => handlePlayEpisode(selectedShow, season, episode, title)}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            <button
+                onClick={() => setExpanded((e) => !e)}
+                className="flex items-center justify-between w-full text-left"
+            >
+                <div className="flex items-center gap-1.5 px-1">
+                    <Film className="size-3.5 text-muted-foreground" />
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground">
+                        Play Media
+                    </p>
+                </div>
+                {expanded ? <ChevronUp className="size-3.5 text-muted-foreground" /> : <ChevronDown className="size-3.5 text-muted-foreground" />}
+            </button>
+            {expanded && (
+                <div className="space-y-3">
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => onQueryChange(e.target.value)}
+                        placeholder="Search movies & shows..."
+                        className="w-full h-9 rounded-sm border border-border/50 bg-muted/20 px-3 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+                    />
+
+                    {searching && (
+                        <div className="flex items-center justify-center py-6">
+                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+
+                    {!searching && results.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                            {results.map((result) => {
+                                const media = result.movie ?? result.show;
+                                if (!media) return null;
+                                const isMovie = result.type === "movie";
+                                const poster = getPosterUrl(media.images);
+                                const posterSrc = poster ? cdnUrl(poster, { w: 200, h: 300 }) : null;
+
+                                return (
+                                    <button
+                                        key={`${result.type}-${media.ids?.trakt}`}
+                                        className="group relative rounded-sm overflow-hidden border border-border/30 hover:border-primary/50 transition-colors text-left"
+                                        onClick={() => {
+                                            if (isMovie) handlePlayMovie(result);
+                                            else setSelectedShow(result);
+                                        }}
+                                    >
+                                        {/* Poster */}
+                                        <div className="aspect-[2/3] bg-muted/30">
+                                            {posterSrc ? (
+                                                <img
+                                                    src={posterSrc}
+                                                    alt={media.title}
+                                                    className="size-full object-cover"
+                                                    loading="lazy"
+                                                />
+                                            ) : (
+                                                <div className="size-full flex items-center justify-center">
+                                                    <Film className="size-6 text-muted-foreground/30" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Info */}
+                                        <div className="p-1.5 space-y-0.5">
+                                            <p className="text-[11px] font-medium truncate leading-tight">
+                                                {media.title}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground">
+                                                {media.year ?? ""}
+                                                {!isMovie && <> <span className="text-border">·</span> Series</>}
+                                            </p>
+                                        </div>
+                                        {/* Play overlay for movies */}
+                                        {isMovie && (
+                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <Play className="size-8 text-white fill-white" />
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {!searching && query.trim() && results.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-4">
+                            No results found
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Show Detail (season/episode picker for TV shows) ───────────────────────
+
+function ShowDetail({
+    show,
+    onPlayEpisode,
+}: {
+    show: TraktSearchResult;
+    onPlayEpisode: (season: number, episode: number, title?: string) => void;
+}) {
+    const media = show.show;
+    const imdbId = media?.ids?.imdb ?? media?.ids?.slug ?? "";
+    const [seasons, setSeasons] = useState<TraktSeason[]>([]);
+    const [selectedSeason, setSelectedSeason] = useState<number>(1);
+    const [episodes, setEpisodes] = useState<TraktEpisode[]>([]);
+    const [seasonsFetched, setSeasonsFetched] = useState(false);
+    const [episodesFetched, setEpisodesFetched] = useState(false);
+
+    const loadingSeasons = !!imdbId && !seasonsFetched;
+    const loadingEpisodes = !!imdbId && !episodesFetched;
+
+    // Fetch seasons
+    useEffect(() => {
+        if (!imdbId) return;
+        let cancelled = false;
+        traktClient.getShowSeasons(imdbId, "full").then((s) => {
+            if (cancelled) return;
+            const filtered = s.filter((ss) => ss.number > 0).sort((a, b) => a.number - b.number);
+            setSeasons(filtered);
+            if (filtered.length > 0) setSelectedSeason(filtered[0].number);
+        }).finally(() => {
+            if (!cancelled) setSeasonsFetched(true);
+        });
+        return () => { cancelled = true; };
+    }, [imdbId]);
+
+    // Fetch episodes when season changes
+    useEffect(() => {
+        if (!imdbId) return;
+        let cancelled = false;
+        traktClient.getShowEpisodes(imdbId, selectedSeason, "full").then((eps) => {
+            if (!cancelled) setEpisodes(eps);
+        }).catch(() => {
+            if (!cancelled) setEpisodes([]);
+        }).finally(() => {
+            if (!cancelled) setEpisodesFetched(true);
+        });
+        return () => { cancelled = true; };
+    }, [imdbId, selectedSeason]);
+
+    if (!media) return null;
+
+    const poster = getPosterUrl(media.images);
+    const posterSrc = poster ? cdnUrl(poster, { w: 200, h: 300 }) : null;
+
+    return (
+        <div className="space-y-3">
+            {/* Show header */}
+            <div className="flex gap-3">
+                {posterSrc && (
+                    <img
+                        src={posterSrc}
+                        alt={media.title}
+                        className="w-16 rounded-sm object-cover shrink-0"
+                    />
+                )}
+                <div className="space-y-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{media.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {media.year ?? ""}
+                        {media.rating && <> <span className="text-border">·</span> ★ {media.rating.toFixed(1)}</>}
+                        {media.runtime && <> <span className="text-border">·</span> {media.runtime}min</>}
+                    </p>
+                    {media.overview && (
+                        <p className="text-[11px] text-muted-foreground line-clamp-3 leading-relaxed">
+                            {media.overview}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {loadingSeasons ? (
+                <div className="flex items-center justify-center py-4">
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                </div>
+            ) : (
+                <>
+                    {/* Season selector */}
+                    {seasons.length > 1 && (
+                        <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+                            {seasons.map((s) => (
+                                <Button
+                                    key={s.number}
+                                    variant={s.number === selectedSeason ? "default" : "ghost"}
+                                    size="sm"
+                                    className={cn("h-7 text-[10px] shrink-0", s.number === selectedSeason && "pointer-events-none")}
+                                    onClick={() => setSelectedSeason(s.number)}
+                                >
+                                    S{String(s.number).padStart(2, "0")}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Episode list */}
+                    {loadingEpisodes ? (
+                        <div className="flex items-center justify-center py-4">
+                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                            {episodes.map((ep) => (
+                                <button
+                                    key={ep.number}
+                                    onClick={() => onPlayEpisode(selectedSeason, ep.number, ep.title)}
+                                    className="flex items-center gap-2 w-full rounded-sm px-2 py-2 text-left transition-colors hover:bg-muted/30 group"
+                                >
+                                    <span className="text-[10px] w-6 text-center shrink-0 tabular-nums text-muted-foreground">
+                                        {ep.number}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs truncate">
+                                            {ep.title || `Episode ${ep.number}`}
+                                        </p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {ep.runtime && <>{ep.runtime}min</>}
+                                            {ep.rating && <> <span className="text-border">·</span> ★ {ep.rating.toFixed(1)}</>}
+                                        </p>
+                                    </div>
+                                    <Play className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

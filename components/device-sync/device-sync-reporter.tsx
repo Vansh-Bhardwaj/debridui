@@ -278,6 +278,49 @@ export function DeviceSyncReporter() {
         return () => window.removeEventListener("device-sync-play-episode", handler);
     }, [enabled]);
 
+    // ── Handle remote play-media commands (movies + shows) ───────────
+
+    useEffect(() => {
+        if (!enabled) return;
+
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent).detail as {
+                imdbId: string;
+                type: "movie" | "show";
+                title: string;
+                season?: number;
+                episode?: number;
+            };
+            if (!detail?.imdbId || !detail.type) return;
+
+            const addons = queryClient.getQueryData<Addon[]>(["user-addons"]) ?? [];
+            const enabledAddons = addons
+                .filter((a) => a.enabled)
+                .sort((a, b) => a.order - b.order)
+                .map((a) => ({ id: a.id, url: a.url, name: a.name }));
+
+            if (enabledAddons.length === 0) return;
+
+            ensureStreamingStore().then(({ useStreamingStore }) => {
+                useStreamingStore.getState().play(
+                    {
+                        imdbId: detail.imdbId,
+                        type: detail.type,
+                        title: detail.title || (detail.type === "movie" ? "Movie" : "Episode"),
+                        ...(detail.type === "show" && detail.season != null && detail.episode != null
+                            ? { tvParams: { season: detail.season, episode: detail.episode } }
+                            : {}),
+                    },
+                    enabledAddons,
+                    { forceAutoPlay: true }
+                );
+            });
+        };
+
+        window.addEventListener("device-sync-play-media", handler);
+        return () => window.removeEventListener("device-sync-play-media", handler);
+    }, [enabled]);
+
     // ── Handle remote next/previous for browser playback ─────────────
 
     useEffect(() => {
@@ -302,9 +345,9 @@ export function DeviceSyncReporter() {
             ensureStreamingStore().then(({ useStreamingStore }) => {
                 const store = useStreamingStore.getState();
                 if (detail.direction === "next") {
-                    store.playNextEpisode(enabledAddons);
+                    store.playNextEpisode(enabledAddons, { forceAutoPlay: true });
                 } else {
-                    store.playPreviousEpisode(enabledAddons);
+                    store.playPreviousEpisode(enabledAddons, { forceAutoPlay: true });
                 }
             });
         };

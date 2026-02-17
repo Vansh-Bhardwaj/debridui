@@ -1,4 +1,4 @@
-import { getUserSettings, saveUserSettings, disconnectTrakt } from "@/lib/actions/settings";
+import { getUserSettings, saveUserSettings, disconnectTrakt, refreshTraktToken } from "@/lib/actions/settings";
 import type { ServerSettings } from "@/lib/types";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { traktClient } from "@/lib/trakt";
@@ -13,8 +13,22 @@ export function hydrateSettingsFromServer(settings: ServerSettings | null) {
     if (settings.tmdb_api_key !== undefined) set("tmdbApiKey", settings.tmdb_api_key);
     // Hydrate Trakt access token onto the global client
     if (settings.trakt_access_token) {
-        traktClient.setAccessToken(settings.trakt_access_token);
+        traktClient.setAccessToken(settings.trakt_access_token, settings.trakt_expires_at);
     }
+}
+
+// Register refresh handler once (module-level, runs at import time)
+let refreshHandlerSet = false;
+function ensureRefreshHandler() {
+    if (refreshHandlerSet) return;
+    refreshHandlerSet = true;
+    traktClient.setRefreshHandler(async () => {
+        const newToken = await refreshTraktToken();
+        if (newToken) {
+            traktClient.setAccessToken(newToken);
+        }
+        return newToken;
+    });
 }
 
 export function useUserSettings(enabled = true) {
@@ -30,8 +44,11 @@ export function useUserSettings(enabled = true) {
     // This ensures the global traktClient can make authenticated requests
     // regardless of which page the user visits first.
     if (query.data?.trakt_access_token && traktClient.getAccessToken() !== query.data.trakt_access_token) {
-        traktClient.setAccessToken(query.data.trakt_access_token);
+        traktClient.setAccessToken(query.data.trakt_access_token, query.data.trakt_expires_at);
     }
+
+    // Register the refresh handler so 401s and near-expiry tokens auto-refresh
+    ensureRefreshHandler();
 
     return query;
 }

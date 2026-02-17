@@ -261,6 +261,31 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             );
             break;
         }
+        case "play-media": {
+            // Remote device is requesting we play a movie or show episode
+            const imdbId = payload?.imdbId as string | undefined;
+            const type = payload?.type as "movie" | "show" | undefined;
+            const title = payload?.title as string | undefined;
+            if (!imdbId || !type) break;
+
+            if (type === "movie") {
+                window.dispatchEvent(
+                    new CustomEvent("device-sync-play-media", {
+                        detail: { imdbId, type, title: title ?? "" },
+                    })
+                );
+            } else {
+                const season = payload?.season as number | undefined;
+                const episode = payload?.episode as number | undefined;
+                if (season == null || episode == null) break;
+                window.dispatchEvent(
+                    new CustomEvent("device-sync-play-media", {
+                        detail: { imdbId, type, title: title ?? "", season, episode },
+                    })
+                );
+            }
+            break;
+        }
         case "play-source": {
             // Remote device is requesting we play a specific source by index
             const sourceIndex = payload?.index as number | undefined;
@@ -778,6 +803,16 @@ export function initDeviceSync() {
             store.setEnabled(true);
         } else if (!cur && store.enabled) {
             store.setEnabled(false);
+        }
+    });
+
+    // Reconnect when tab becomes visible (handles the case where this tab's WS
+    // was replaced by another tab that has since been closed)
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        const store = useDeviceSyncStore.getState();
+        if (store.enabled && store.connectionStatus === "disconnected") {
+            store.connect();
         }
     });
 

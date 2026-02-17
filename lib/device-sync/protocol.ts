@@ -168,7 +168,8 @@ export type RemoteAction =
     | "set-subtitle-track"
     | "fullscreen"
     | "play-episode"
-    | "play-source";
+    | "play-source"
+    | "play-media";
 
 // ── Server → Client Messages ───────────────────────────────────────────────
 

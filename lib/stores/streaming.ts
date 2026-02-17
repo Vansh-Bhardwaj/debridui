@@ -50,8 +50,8 @@ interface StreamingState {
 
     play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
     playSource: (source: AddonSource, title: string, options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }) => Promise<void>;
-    playNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
-    playPreviousEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
+    playNextEpisode: (addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
+    playPreviousEpisode: (addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
     setEpisodeContext: (context: EpisodeContext | null) => void;
     cancel: () => void;
     dismiss: () => void;
@@ -657,7 +657,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         }
     },
 
-    playNextEpisode: async (addons) => {
+    playNextEpisode: async (addons, options) => {
         const { episodeContext, play, preloadedData, playSource } = get();
         if (!episodeContext) {
             toast.error("No episode context", { description: "Cannot navigate to next episode", position: TOAST_POSITION });
@@ -725,7 +725,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         type: "show",
                         title: nextTitle,
                         tvParams: { season: targetSeason, episode: 1 }
-                    }, addons);
+                    }, addons, options);
                     return;
 
                 } catch {
@@ -742,7 +742,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     type: "show",
                     title: nextTitle,
                     tvParams: { season: targetSeason, episode: targetEpisode }
-                }, addons);
+                }, addons, options);
             }
         } catch (error) {
             console.error("Failed to navigate/fetch metadata:", error);
@@ -751,11 +751,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 type: "show",
                 title: episodeContext.title,
                 tvParams: { season: targetSeason, episode: targetEpisode }
-            }, addons);
+            }, addons, options);
         }
     },
 
-    playPreviousEpisode: async (addons) => {
+    playPreviousEpisode: async (addons, options) => {
         const { episodeContext, play } = get();
         if (!episodeContext) {
             toast.error("No episode context", { description: "Cannot navigate to previous episode", position: TOAST_POSITION });
@@ -774,7 +774,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         title: episodeContext.title,
                         tvParams: { season: prevSeason, episode: 1 }, // Imperfect, assumes 1
                     },
-                    addons
+                    addons,
+                    options
                 );
                 return;
             }
@@ -789,7 +790,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 title: episodeContext.title,
                 tvParams: { season: episodeContext.season, episode: prevEpisode },
             },
-            addons
+            addons,
+            options
         );
     },
 
