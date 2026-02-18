@@ -107,6 +107,8 @@ export interface PlaybackSettings {
     nextEpisodePromptSeconds: number;
     /** Preferred subtitle language (e.g. "english", "spanish"). Empty = disabled. */
     subtitleLanguage: string;
+    /** Auto-skip intros/recaps/outros using IntroDB community timestamps */
+    autoSkipIntro: boolean;
 }
 
 export function getActiveRange(settings: StreamingSettings): QualityRange {
@@ -237,6 +239,7 @@ const settingsConfig: SettingsConfig = {
             autoNextEpisode: true,
             nextEpisodePromptSeconds: 30,
             subtitleLanguage: "english",
+            autoSkipIntro: false,
         },
     },
     tmdbApiKey: {

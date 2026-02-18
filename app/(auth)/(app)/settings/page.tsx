@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw, ListVideo } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
@@ -375,7 +375,26 @@ export default function SettingsPage() {
                         />
                     </div>
 
-                    {/* Playback Speed */}
+                    {/* Auto-Skip Intro (IntroDB) */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <ListVideo className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="auto-skip-intro" className="text-sm">
+                                    Auto-Skip Intros
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Automatically skip intros, recaps &amp; credits using community timestamps from IntroDB
+                            </p>
+                        </div>
+                        <Switch
+                            id="auto-skip-intro"
+                            className="shrink-0"
+                            checked={playback.autoSkipIntro}
+                            onCheckedChange={(checked) => updatePlayback({ autoSkipIntro: checked })}
+                        />
+                    </div>
                     <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
                         <div className="space-y-0.5 min-w-0">
                             <div className="flex items-center gap-2">
@@ -654,8 +673,7 @@ export default function SettingsPage() {
                             onCheckedChange={(checked) => updateStreaming({ autoPlay: checked })}
                         />
                     </div>
-
-                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                    {/* Playback Speed */}                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
                         <div className="space-y-0.5 min-w-0">
                             <div className="flex items-center gap-2">
                                 <Zap className="size-4 text-muted-foreground shrink-0" />

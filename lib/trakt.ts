@@ -363,7 +363,9 @@ export interface TraktScrobbleMovie {
 }
 
 export interface TraktScrobbleEpisode {
-    ids: { imdb?: string; tmdb?: number; trakt?: number; tvdb?: number };
+    ids?: { imdb?: string; tmdb?: number; trakt?: number; tvdb?: number };
+    season?: number;
+    number?: number;
 }
 
 export interface TraktScrobbleShow {
@@ -990,11 +992,14 @@ export class TraktClient {
         if (type === "movie") {
             return { movie: { ids: { imdb: imdbId } }, progress };
         }
+        // For episodes: identify by show IMDB ID + season/episode number.
+        // Do NOT use show IMDB as episode IMDB — they are different identifiers.
         return {
-            episode: { ids: { imdb: imdbId } },
-            ...(season !== undefined && episode !== undefined
-                ? { show: { ids: { imdb: imdbId } } }
-                : {}),
+            show: { ids: { imdb: imdbId } },
+            episode: {
+                ...(season !== undefined ? { season } : {}),
+                ...(episode !== undefined ? { number: episode } : {}),
+            },
             progress,
         };
     }

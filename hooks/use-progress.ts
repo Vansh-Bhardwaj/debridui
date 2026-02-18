@@ -159,6 +159,49 @@ export function useProgress(key: ProgressKey | null) {
         };
     }, [key, isLoggedIn]);
 
+    // Cross-device resume: fetch server progress on mount and update if it's more recent
+    useEffect(() => {
+        if (!key || !isLoggedIn) return;
+
+        const params = new URLSearchParams({ imdbId: key.imdbId });
+        if (key.season != null) params.set("season", String(key.season));
+        if (key.episode != null) params.set("episode", String(key.episode));
+
+        const controller = new AbortController();
+        // Timeout: don't block video start for more than 5 seconds
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
+        fetch(`/api/progress?${params}`, { signal: controller.signal })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                type ServerItem = ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string };
+                const srv = (data as { progress: ServerItem | null } | null)?.progress;
+                if (!srv) return;
+                const srvUpdatedAt = new Date(srv.updatedAt).getTime();
+                const local = readLocalProgress(key);
+
+                // Only apply server value if it is more recent than local
+                if (!local || srvUpdatedAt > local.updatedAt) {
+                    writeLocalProgress(key, {
+                        progressSeconds: srv.progressSeconds,
+                        durationSeconds: srv.durationSeconds,
+                        updatedAt: srvUpdatedAt,
+                    });
+                    const percent = srv.durationSeconds > 0
+                        ? (srv.progressSeconds / srv.durationSeconds) * 100
+                        : 0;
+                    setInitialProgress(percent >= 1 && percent <= 95 ? srv.progressSeconds : null);
+                }
+            })
+            .catch(() => { /* aborted or network error — local data is fine */ })
+            .finally(() => clearTimeout(timeout));
+
+        return () => {
+            controller.abort();
+            clearTimeout(timeout);
+        };
+    }, [key, isLoggedIn]);
+
     /**
      * Update progress (called on timeupdate, throttled by caller)
      */
@@ -245,7 +288,6 @@ export function useContinueWatching() {
                             const parts = key.replace("progress:", "").split(":");
                             const imdbId = parts[0];
 
-                            // Parse season/episode if present
                             let season: number | undefined;
                             let episode: number | undefined;
                             if (parts[1]) {
@@ -256,7 +298,6 @@ export function useContinueWatching() {
                                 }
                             }
 
-                            // Filter to items between 1% and 95% progress
                             const percent = data.durationSeconds > 0
                                 ? (data.progressSeconds / data.durationSeconds) * 100
                                 : 0;
@@ -276,7 +317,7 @@ export function useContinueWatching() {
                 }
             }
 
-            // If logged in, also fetch from server and merge
+            // If logged in, use server as the authoritative source
             if (isLoggedIn) {
                 try {
                     const res = await fetchWithTimeout("/api/progress", { cache: "no-store" }, 10000);
@@ -284,48 +325,73 @@ export function useContinueWatching() {
                         throw new Error("Unauthorized");
                     }
                     if (res.ok) {
-                        const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & ProgressData> };
+                        const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }> };
 
-                        // Merge: prefer most recent between local and server
+                        // Build a set of keys that exist on the server
+                        const serverKeys = new Set(
+                            serverProgress.map((item) =>
+                                getStorageKey({ imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode })
+                            )
+                        );
+
+                        // Grace period: local items newer than this may not have synced yet
+                        const SERVER_SYNC_GRACE = 2 * 60 * 1000;
+                        const now = Date.now();
+
                         const merged = new Map<string, ProgressKey & ProgressData>();
 
-                        for (const item of localItems) {
-                            const key = getStorageKey(item);
-                            merged.set(key, item);
-                        }
-
+                        // Server items are authoritative
                         for (const item of serverProgress) {
-                            const progressKey: ProgressKey = {
-                                imdbId: item.imdbId,
-                                type: item.type,
-                                season: item.season,
-                                episode: item.episode,
-                            };
-                            const key = getStorageKey(progressKey);
-                            const existing = merged.get(key);
-
+                            const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
+                            const storageKey = getStorageKey(key);
                             const serverUpdatedAt = new Date(item.updatedAt).getTime();
-                            if (!existing || serverUpdatedAt > existing.updatedAt) {
-                                // Filter to items between 1% and 95%
-                                const percent = item.durationSeconds > 0
-                                    ? (item.progressSeconds / item.durationSeconds) * 100
-                                    : 0;
-                                if (percent >= 1 && percent <= 95) {
-                                    merged.set(key, {
-                                        ...progressKey,
-                                        progressSeconds: item.progressSeconds,
-                                        durationSeconds: item.durationSeconds,
-                                        updatedAt: serverUpdatedAt,
-                                    });
-                                }
+                            const percent = item.durationSeconds > 0
+                                ? (item.progressSeconds / item.durationSeconds) * 100
+                                : 0;
+                            if (percent >= 1 && percent <= 95) {
+                                merged.set(storageKey, {
+                                    ...key,
+                                    progressSeconds: item.progressSeconds,
+                                    durationSeconds: item.durationSeconds,
+                                    updatedAt: serverUpdatedAt,
+                                });
                             }
                         }
 
-                        // Sort by most recently updated
+                        // Local items: include if more recent than server, OR if very recent and not yet synced
+                        for (const item of localItems) {
+                            const storageKey = getStorageKey(item);
+                            const existing = merged.get(storageKey);
+
+                            if (!serverKeys.has(storageKey)) {
+                                if (now - item.updatedAt < SERVER_SYNC_GRACE) {
+                                    // Recently watched, not yet synced to server — show it
+                                    merged.set(storageKey, item);
+                                } else {
+                                    // Older than grace period and not on server → was deleted remotely;
+                                    // clean up this device's stale localStorage entry too
+                                    try { localStorage.removeItem(storageKey); } catch { }
+                                }
+                            } else if (existing && item.updatedAt > existing.updatedAt) {
+                                // Local is more recent (e.g. actively watching right now)
+                                merged.set(storageKey, item);
+                            }
+                        }
+
+                        // Sort by most recently updated, then deduplicate shows to one entry each
                         const sorted = Array.from(merged.values())
                             .sort((a, b) => b.updatedAt - a.updatedAt);
 
-                        setProgress(sorted);
+                        const seen = new Set<string>();
+                        const deduped = sorted.filter((item) => {
+                            // For shows: keep only the most recent episode per series
+                            const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
+                            if (seen.has(dedupeKey)) return false;
+                            seen.add(dedupeKey);
+                            return true;
+                        });
+
+                        setProgress(deduped);
                         setLoading(false);
                         return;
                     }
@@ -334,9 +400,16 @@ export function useContinueWatching() {
                 }
             }
 
-            // Fallback to local only
-            localItems.sort((a, b) => b.updatedAt - a.updatedAt);
-            setProgress(localItems);
+            // Fallback: local only (not logged in or server failed)
+            const sorted = localItems.sort((a, b) => b.updatedAt - a.updatedAt);
+            const seen = new Set<string>();
+            const deduped = sorted.filter((item) => {
+                const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
+                if (seen.has(dedupeKey)) return false;
+                seen.add(dedupeKey);
+                return true;
+            });
+            setProgress(deduped);
             setLoading(false);
         }
 

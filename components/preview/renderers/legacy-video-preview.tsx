@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2 } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
@@ -22,6 +22,7 @@ import { LegacyPlayerSubtitleStyle } from "@/components/preview/legacy-player-su
 import { VideoCodecWarning } from "@/components/preview/video-codec-warning";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
 import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
+import { useIntroSegments } from "@/hooks/use-intro-segments";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
@@ -211,6 +212,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     // User's preferred audio language from streaming settings
     const preferredAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
+    // IntroDB: auto-skip intro/recap/outro
+    const autoSkipIntro = useSettingsStore((s) => s.settings.playback.autoSkipIntro);
+    const { data: introSegments } = useIntroSegments(progressKey);
+    // Track which segments have been auto-skipped (reset on new episode)
+    const skippedSegmentsRef = useRef<Set<string>>(new Set());
+    // Active skip-prompt segment: null | 'intro' | 'recap' | 'outro'
+    const [activeSkipSegment, setActiveSkipSegment] = useState<'intro' | 'recap' | 'outro' | null>(null);
+    // Grace-period timer: keep skip button visible 5s after exiting a segment
+    const skipGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Manual subtitle rendering (bypasses Windows OS caption override)
     const [parsedCues, setParsedCues] = useState<SubtitleCue[][]>([]);
@@ -280,6 +290,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const hasSeenkedToInitialRef = useRef(false);
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
 
+    // Reset skipped-segment tracking whenever the episode changes
+    const prevProgressKeyRef = useRef(progressKey);
+    useEffect(() => {
+        if (prevProgressKeyRef.current !== progressKey) {
+            prevProgressKeyRef.current = progressKey;
+            skippedSegmentsRef.current = new Set();
+            if (skipGraceTimerRef.current) {
+                clearTimeout(skipGraceTimerRef.current);
+                skipGraceTimerRef.current = null;
+            }
+            setActiveSkipSegment(null);
+        }
+    }, [progressKey]);
+
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
         queryKey: ["trakt", "original-language", progressKey?.imdbId, progressKey?.type],
@@ -332,6 +356,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         onLoad?.();
     }, [onLoad, startFromSeconds, initialProgress, subtitles, activeSubtitleIndex, preferredSubLang]);
+
+    // Cross-device resume: if server progress arrives after the video has already loaded
+    // and the user hasn't watched much yet (< 5s), apply the position now.
+    useEffect(() => {
+        if (initialProgress === null || !hasSeenkedToInitialRef.current) return;
+        const video = videoRef.current;
+        if (!video || video.currentTime >= 5) return;
+        if (initialProgress > 5 && initialProgress < video.duration - 5) {
+            video.currentTime = initialProgress;
+            const mins = Math.floor(initialProgress / 60);
+            const secs = Math.floor(initialProgress % 60);
+            toast.info(`Resumed at ${mins}:${secs.toString().padStart(2, "0")}`, { duration: 2000 });
+        }
+    }, [initialProgress]);
 
     // Watch for subtitles arriving later (e.g. from async fetch)
     useEffect(() => {
@@ -580,10 +618,46 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setCurrentTime(time);
             if (!duration && Number.isFinite(dur)) setDuration(dur);
 
-            // Preload next episode at 90%
-            if (dur > 0 && time / dur > 0.9 && !hasPreloaded.current) {
+            // Preload next episode at outro start (if available) or 90%
+            const outroSec = introSegments?.outro?.start_sec;
+            const preloadThreshold = outroSec ?? (dur > 0 ? dur * 0.9 : Infinity);
+            if (dur > 0 && time >= preloadThreshold && !hasPreloaded.current) {
                 hasPreloaded.current = true;
                 onPreload?.();
+            }
+
+            // IntroDB: detect active segment + auto-skip
+            if (introSegments) {
+                let detected: 'intro' | 'recap' | 'outro' | null = null;
+                for (const type of ['intro', 'recap', 'outro'] as const) {
+                    const seg = introSegments[type];
+                    if (seg && time >= seg.start_sec && time < seg.end_sec) {
+                        if (!skippedSegmentsRef.current.has(type)) {
+                            detected = type;
+                            if (autoSkipIntro) {
+                                skippedSegmentsRef.current.add(type);
+                                video.currentTime = seg.end_sec;
+                            }
+                        }
+                        break;
+                    }
+                }
+                if (detected) {
+                    // Inside segment: show button, clear any grace timer
+                    if (skipGraceTimerRef.current) {
+                        clearTimeout(skipGraceTimerRef.current);
+                        skipGraceTimerRef.current = null;
+                    }
+                    setActiveSkipSegment(detected);
+                } else {
+                    // Outside segment: keep button for 5s grace period then hide
+                    if (!skipGraceTimerRef.current) {
+                        skipGraceTimerRef.current = setTimeout(() => {
+                            skipGraceTimerRef.current = null;
+                            setActiveSkipSegment(null);
+                        }, 5000);
+                    }
+                }
             }
 
             // Update progress in localStorage (throttled)
@@ -637,8 +711,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("durationchange", onDurationChange);
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
+            if (skipGraceTimerRef.current) {
+                clearTimeout(skipGraceTimerRef.current);
+                skipGraceTimerRef.current = null;
+            }
         };
-    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble]);
+    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
 
 
     // Keep fullscreen state in sync (native + CSS fake fullscreen)
@@ -1195,10 +1273,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onError={handleError}
                     />
 
-                    {/* Centered Loading Spinner */}
-                    {isLoading && !error && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-30">
-                            <Loader2 className="h-12 w-12 text-white animate-spin drop-shadow-lg" />
+                    {/* Unified loading overlay — subtitle prep takes priority */}
+                    {(!canStartPlayback || (isLoading && !error)) && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 z-40">
+                            <Loader2 className="h-10 w-10 text-white animate-spin" />
+                            {!canStartPlayback && (
+                                <p className="text-xs tracking-widest uppercase text-white/50">Preparing subtitles</p>
+                            )}
                         </div>
                     )}
 
@@ -1242,14 +1323,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onOpenInPlayer={openInExternalPlayer}
                     />
 
-                    {/* Brief "preparing subtitles" gate (proxy conversion) */}
-                    {!canStartPlayback && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60 text-white z-40">
-                            <Loader2 className="h-10 w-10 animate-spin" />
-                            <p className="text-sm font-medium">Preparing subtitles…</p>
-                        </div>
-                    )}
-
                     {/* Manual subtitle overlay */}
                     {activeCueText && (
                         <div
@@ -1267,12 +1340,62 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
+                    {/* IntroDB: Skip Intro / Skip Recap / Skip Credits button */}
+                    {activeSkipSegment && !autoSkipIntro && (
+                        <div className="absolute bottom-24 right-4 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const seg = introSegments?.[activeSkipSegment];
+                                    if (seg && videoRef.current) {
+                                        skippedSegmentsRef.current.add(activeSkipSegment);
+                                        videoRef.current.currentTime = seg.end_sec;
+                                        setActiveSkipSegment(null);
+                                    }
+                                }}
+                                className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95">
+                                <SkipForward className="size-4" />
+                                {activeSkipSegment === 'intro' ? 'Skip Intro' : activeSkipSegment === 'recap' ? 'Skip Recap' : 'Skip Credits'}
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Dismiss"
+                                onClick={() => {
+                                    skippedSegmentsRef.current.add(activeSkipSegment);
+                                    setActiveSkipSegment(null);
+                                }}
+                                className="flex items-center justify-center rounded-sm border border-white/30 bg-black/70 p-2 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white active:scale-95">
+                                <X className="size-3" />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Custom control bar */}
                     <div
                         className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
                             <div className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
                                 {/* Seek bar */}
                                 <div className="group/seekbar relative flex items-center gap-3">
+                                    {/* IntroDB segment markers on seekbar */}
+                                    {introSegments && duration > 0 && (
+                                        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                                            {(['intro', 'recap', 'outro'] as const).map((type) => {
+                                                const seg = introSegments[type];
+                                                if (!seg) return null;
+                                                const left = (seg.start_sec / duration) * 100;
+                                                const width = ((seg.end_sec - seg.start_sec) / duration) * 100;
+                                                const colorClass = type === 'intro' ? 'bg-primary/80' : type === 'recap' ? 'bg-primary/50' : 'bg-primary/30';
+                                                return (
+                                                    <div
+                                                        key={type}
+                                                        title={type === 'intro' ? 'Intro' : type === 'recap' ? 'Recap' : 'Credits'}
+                                                        className={`absolute top-1/2 -translate-y-1/2 h-2 rounded-full ${colorClass}`}
+                                                        style={{ left: `${left}%`, width: `${width}%` }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                     <input
                                         type="range"
                                         min={0}

@@ -14,6 +14,7 @@ import { PreviewContent } from "./preview-content";
 import { formatSize, downloadLinks, getFileType } from "@/lib/utils";
 import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";
 import { DebridFileNode } from "@/lib/types";
+import { type ProgressKey } from "@/hooks/use-progress";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -48,6 +49,24 @@ export function PreviewDialog() {
     } = usePreviewStore();
 
     const isSingleMode = mode === "single";
+
+    // In gallery mode, derive progressKey from episodeContext + filename S/E match
+    // so progress tracking and IntroDB skip-intro work even when playing from file explorer
+    const effectiveProgressKey = useMemo<ProgressKey | undefined>(() => {
+        if (progressKey) return progressKey;
+        if (!isSingleMode && episodeContext && currentFile) {
+            const m = /[Ss](\d{1,4})[Ee](\d{1,4})/.exec(currentFile.name);
+            if (m && parseInt(m[1]) === episodeContext.season && parseInt(m[2]) === episodeContext.episode) {
+                return {
+                    imdbId: episodeContext.imdbId,
+                    type: 'show',
+                    season: episodeContext.season,
+                    episode: episodeContext.episode,
+                };
+            }
+        }
+        return progressKey ?? undefined;
+    }, [progressKey, isSingleMode, episodeContext, currentFile]);
 
     // Create mock file node for single mode
     const singleFileNode = useMemo<DebridFileNode | null>(() => {
@@ -260,7 +279,7 @@ export function PreviewDialog() {
                             onNext={hasNav ? handleNext : undefined}
                             onPrev={hasNav ? handlePrev : undefined}
                             onPreload={handlePreload}
-                            progressKey={progressKey ?? undefined}
+                            progressKey={effectiveProgressKey}
                         />
                     ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground">

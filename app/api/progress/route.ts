@@ -27,20 +27,49 @@ function isRateLimited(userId: string): boolean {
     return false;
 }
 
-// GET /api/progress - Fetch all user progress for continue watching
-export async function GET() {
+// GET /api/progress              → all user progress (continue watching list)
+// GET /api/progress?imdbId=...  → single item (cross-device resume lookup)
+export async function GET(request: NextRequest) {
     const { data: session } = await auth.getSession();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
+        const { searchParams } = new URL(request.url);
+        const imdbId = searchParams.get("imdbId");
+
+        if (imdbId) {
+            // Single-item lookup for cross-device resume
+            const seasonRaw = searchParams.get("season");
+            const episodeRaw = searchParams.get("episode");
+            const season = seasonRaw ? parseInt(seasonRaw) : NaN;
+            const episode = episodeRaw ? parseInt(episodeRaw) : NaN;
+
+            const conditions = [
+                eq(userProgress.userId, session.user.id),
+                eq(userProgress.imdbId, imdbId),
+            ];
+            if (!isNaN(season)) conditions.push(eq(userProgress.season, season));
+            if (!isNaN(episode)) conditions.push(eq(userProgress.episode, episode));
+
+            const [item] = await db
+                .select()
+                .from(userProgress)
+                .where(and(...conditions))
+                .limit(1);
+
+            return NextResponse.json({ progress: item ?? null }, {
+                headers: { "Cache-Control": "private, no-store" },
+            });
+        }
+
         const progress = await db
             .select()
             .from(userProgress)
             .where(eq(userProgress.userId, session.user.id))
             .orderBy(desc(userProgress.updatedAt))
-            .limit(50); // Limit to recent 50 items
+            .limit(50);
 
         return NextResponse.json({ progress }, {
             headers: { "Cache-Control": "private, no-store" },
