@@ -4,7 +4,7 @@ import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hook
 import { WatchButton } from "@/components/common/watch-button";
 import { Play, X, Star, SkipForward } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
@@ -199,6 +199,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 
 export function ContinueWatching() {
     const { progress, loading } = useContinueWatching();
+    const queryClient = useQueryClient();
     const [items, setItems] = useState<Array<ProgressKey & ProgressData>>([]);
 
     useEffect(() => {
@@ -206,7 +207,7 @@ export function ContinueWatching() {
     }, [progress]);
 
     const handleRemove = useCallback((key: ProgressKey) => {
-        // Remove from local state immediately
+        // Optimistic removal from UI immediately
         setItems((prev) => prev.filter((item) =>
             !(item.imdbId === key.imdbId &&
                 item.season === key.season &&
@@ -221,12 +222,14 @@ export function ContinueWatching() {
             localStorage.removeItem(storageKey);
         } catch { }
 
-        // Remove from server
+        // Remove from server, then invalidate cache so other components reflect the deletion
         const params = new URLSearchParams({ imdbId: key.imdbId });
         if (key.season != null && !isNaN(key.season)) params.set("season", String(key.season));
         if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
-        fetch(`/api/progress?${params}`, { method: "DELETE" }).catch(() => { });
-    }, []);
+        fetch(`/api/progress?${params}`, { method: "DELETE" })
+            .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching"] }))
+            .catch(() => { });
+    }, [queryClient]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
@@ -263,158 +264,141 @@ export function useProgress(key: ProgressKey | null) {
 }
 
 /**
- * Hook to fetch all progress for continue watching UI
+ * Hook to fetch all progress for continue watching UI.
+ * Uses React Query so the result is cached in memory + IndexedDB — no re-fetch
+ * on every mount, shared across components, participates in global staleTime.
  */
 export function useContinueWatching() {
     const { data: session } = authClient.useSession();
     const isLoggedIn = !!session?.user;
-    const [progress, setProgress] = useState<Array<ProgressKey & ProgressData>>([]);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        async function fetchProgress() {
-            setLoading(true);
+    const { data = [], isLoading } = useQuery({
+        queryKey: ["continue-watching", isLoggedIn],
+        queryFn: () => fetchContinueWatching(isLoggedIn),
+        staleTime: 5 * 60 * 1000, // 5 minutes — continue watching changes often
+        gcTime: 10 * 60 * 1000,
+        refetchOnWindowFocus: true,
+    });
 
-            // First, gather from localStorage
-            const localItems: Array<ProgressKey & ProgressData> = [];
-            if (typeof window !== "undefined") {
+    return { progress: data, loading: isLoading };
+}
+
+async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<ProgressKey & ProgressData>> {
+    // Gather from localStorage
+    const localItems: Array<ProgressKey & ProgressData> = [];
+    if (typeof window !== "undefined") {
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key?.startsWith("progress:")) continue;
+
                 try {
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (!key?.startsWith("progress:")) continue;
+                    const data = JSON.parse(localStorage.getItem(key) || "");
+                    const parts = key.replace("progress:", "").split(":");
+                    const imdbId = parts[0];
 
-                        try {
-                            const data = JSON.parse(localStorage.getItem(key) || "");
-                            const parts = key.replace("progress:", "").split(":");
-                            const imdbId = parts[0];
-
-                            let season: number | undefined;
-                            let episode: number | undefined;
-                            if (parts[1]) {
-                                const match = parts[1].match(/s(\d+)e(\d+)/);
-                                if (match) {
-                                    season = parseInt(match[1]);
-                                    episode = parseInt(match[2]);
-                                }
-                            }
-
-                            const percent = data.durationSeconds > 0
-                                ? (data.progressSeconds / data.durationSeconds) * 100
-                                : 0;
-                            if (percent >= 1 && percent <= 95) {
-                                localItems.push({
-                                    imdbId,
-                                    type: season !== undefined ? "show" : "movie",
-                                    season,
-                                    episode,
-                                    ...data,
-                                });
-                            }
-                        } catch { }
-                    }
-                } catch (e) {
-                    console.warn("[continue-watching] localStorage access failed:", e);
-                }
-            }
-
-            // If logged in, use server as the authoritative source
-            if (isLoggedIn) {
-                try {
-                    const res = await fetchWithTimeout("/api/progress", { cache: "no-store" }, 10000);
-                    if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Showing local progress only." })) {
-                        throw new Error("Unauthorized");
-                    }
-                    if (res.ok) {
-                        const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }> };
-
-                        // Build a set of keys that exist on the server
-                        const serverKeys = new Set(
-                            serverProgress.map((item) =>
-                                getStorageKey({ imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode })
-                            )
-                        );
-
-                        // Grace period: local items newer than this may not have synced yet
-                        const SERVER_SYNC_GRACE = 2 * 60 * 1000;
-                        const now = Date.now();
-
-                        const merged = new Map<string, ProgressKey & ProgressData>();
-
-                        // Server items are authoritative
-                        for (const item of serverProgress) {
-                            const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
-                            const storageKey = getStorageKey(key);
-                            const serverUpdatedAt = new Date(item.updatedAt).getTime();
-                            const percent = item.durationSeconds > 0
-                                ? (item.progressSeconds / item.durationSeconds) * 100
-                                : 0;
-                            if (percent >= 1 && percent <= 95) {
-                                merged.set(storageKey, {
-                                    ...key,
-                                    progressSeconds: item.progressSeconds,
-                                    durationSeconds: item.durationSeconds,
-                                    updatedAt: serverUpdatedAt,
-                                });
-                            }
+                    let season: number | undefined;
+                    let episode: number | undefined;
+                    if (parts[1]) {
+                        const match = parts[1].match(/s(\d+)e(\d+)/);
+                        if (match) {
+                            season = parseInt(match[1]);
+                            episode = parseInt(match[2]);
                         }
+                    }
 
-                        // Local items: include if more recent than server, OR if very recent and not yet synced
-                        for (const item of localItems) {
-                            const storageKey = getStorageKey(item);
-                            const existing = merged.get(storageKey);
-
-                            if (!serverKeys.has(storageKey)) {
-                                if (now - item.updatedAt < SERVER_SYNC_GRACE) {
-                                    // Recently watched, not yet synced to server — show it
-                                    merged.set(storageKey, item);
-                                } else {
-                                    // Older than grace period and not on server → was deleted remotely;
-                                    // clean up this device's stale localStorage entry too
-                                    try { localStorage.removeItem(storageKey); } catch { }
-                                }
-                            } else if (existing && item.updatedAt > existing.updatedAt) {
-                                // Local is more recent (e.g. actively watching right now)
-                                merged.set(storageKey, item);
-                            }
-                        }
-
-                        // Sort by most recently updated, then deduplicate shows to one entry each
-                        const sorted = Array.from(merged.values())
-                            .sort((a, b) => b.updatedAt - a.updatedAt);
-
-                        const seen = new Set<string>();
-                        const deduped = sorted.filter((item) => {
-                            // For shows: keep only the most recent episode per series
-                            const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
-                            if (seen.has(dedupeKey)) return false;
-                            seen.add(dedupeKey);
-                            return true;
+                    const percent = data.durationSeconds > 0
+                        ? (data.progressSeconds / data.durationSeconds) * 100
+                        : 0;
+                    if (percent >= 1 && percent <= 95) {
+                        localItems.push({
+                            imdbId,
+                            type: season !== undefined ? "show" : "movie",
+                            season,
+                            episode,
+                            ...data,
                         });
-
-                        setProgress(deduped);
-                        setLoading(false);
-                        return;
                     }
-                } catch (error) {
-                    console.error("[continue-watching] fetch error:", error);
-                }
+                } catch { }
             }
-
-            // Fallback: local only (not logged in or server failed)
-            const sorted = localItems.sort((a, b) => b.updatedAt - a.updatedAt);
-            const seen = new Set<string>();
-            const deduped = sorted.filter((item) => {
-                const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
-                if (seen.has(dedupeKey)) return false;
-                seen.add(dedupeKey);
-                return true;
-            });
-            setProgress(deduped);
-            setLoading(false);
+        } catch (e) {
+            console.warn("[continue-watching] localStorage access failed:", e);
         }
+    }
 
-        fetchProgress();
-    }, [isLoggedIn]);
+    if (isLoggedIn) {
+        try {
+            const res = await fetchWithTimeout("/api/progress", { cache: "no-store" }, 10000);
+            if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Showing local progress only." })) {
+                throw new Error("Unauthorized");
+            }
+            if (res.ok) {
+                const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }> };
 
-    return { progress, loading };
+                const serverKeys = new Set(
+                    serverProgress.map((item) =>
+                        getStorageKey({ imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode })
+                    )
+                );
+
+                const SERVER_SYNC_GRACE = 2 * 60 * 1000;
+                const now = Date.now();
+                const merged = new Map<string, ProgressKey & ProgressData>();
+
+                for (const item of serverProgress) {
+                    const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
+                    const storageKey = getStorageKey(key);
+                    const serverUpdatedAt = new Date(item.updatedAt).getTime();
+                    const percent = item.durationSeconds > 0
+                        ? (item.progressSeconds / item.durationSeconds) * 100
+                        : 0;
+                    if (percent >= 1 && percent <= 95) {
+                        merged.set(storageKey, {
+                            ...key,
+                            progressSeconds: item.progressSeconds,
+                            durationSeconds: item.durationSeconds,
+                            updatedAt: serverUpdatedAt,
+                        });
+                    }
+                }
+
+                for (const item of localItems) {
+                    const storageKey = getStorageKey(item);
+                    const existing = merged.get(storageKey);
+
+                    if (!serverKeys.has(storageKey)) {
+                        if (now - item.updatedAt < SERVER_SYNC_GRACE) {
+                            merged.set(storageKey, item);
+                        } else {
+                            try { localStorage.removeItem(storageKey); } catch { }
+                        }
+                    } else if (existing && item.updatedAt > existing.updatedAt) {
+                        merged.set(storageKey, item);
+                    }
+                }
+
+                const sorted = Array.from(merged.values())
+                    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+                const seen = new Set<string>();
+                return sorted.filter((item) => {
+                    const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
+                    if (seen.has(dedupeKey)) return false;
+                    seen.add(dedupeKey);
+                    return true;
+                });
+            }
+        } catch (error) {
+            console.error("[continue-watching] fetch error:", error);
+        }
+    }
+
+    const sorted = localItems.sort((a, b) => b.updatedAt - a.updatedAt);
+    const seen = new Set<string>();
+    return sorted.filter((item) => {
+        const dedupeKey = item.type === "show" ? item.imdbId : `movie:${item.imdbId}`;
+        if (seen.has(dedupeKey)) return false;
+        seen.add(dedupeKey);
+        return true;
+    });
 }
