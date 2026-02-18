@@ -650,6 +650,23 @@ export class TraktClient {
     }
 
     /**
+     * Get personalized recommendations — requires Trakt auth
+     */
+    public async getRecommendations(
+        type: "movies" | "shows",
+        limit = 5,
+        extended = "full,images"
+    ): Promise<TraktMediaItem[]> {
+        const raw = await this.makeRequest<TraktMedia[]>(
+            `recommendations/${type}?limit=${limit}`,
+            {},
+            true,
+            extended
+        );
+        return raw.map((item) => (type === "movies" ? { movie: item } : { show: item }));
+    }
+
+    /**
      * Get trending mixed (movies and shows) sorted by watchers
      */
     public async getTrendingMixed(limit = 20, extended = "full,images"): Promise<{ mixed: TraktMediaItem[] }> {

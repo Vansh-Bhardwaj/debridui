@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { traktClient, type TraktMedia } from "@/lib/trakt";
+import { traktClient, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
 import { toast } from "sonner";
 
@@ -138,6 +138,35 @@ export function useTraktTrendingMixed(limit = 20) {
         queryFn: () => traktClient.getTrendingMixed(limit),
         staleTime: CACHE_DURATION.STANDARD,
         gcTime: CACHE_DURATION.STANDARD * 2,
+    });
+}
+
+export function useTraktRecommendations(enabled = true) {
+    return useQuery({
+        queryKey: ["trakt", "recommendations"],
+        queryFn: async () => {
+            const [movies, shows] = await Promise.all([
+                traktClient.getRecommendations("movies", 5),
+                traktClient.getRecommendations("shows", 5),
+            ]);
+            // Interleave movies and shows for variety
+            const mixed: TraktMediaItem[] = [];
+            const max = Math.max(movies.length, shows.length);
+            for (let i = 0; i < max; i++) {
+                if (movies[i]) mixed.push(movies[i]);
+                if (shows[i]) mixed.push(shows[i]);
+            }
+            const items = mixed.slice(0, 8);
+            // Fall back to trending if no recommendations yet (insufficient watch history)
+            if (items.length === 0) {
+                const trending = await traktClient.getTrendingMixed(8);
+                return { items: trending.mixed, isPersonalized: false };
+            }
+            return { items, isPersonalized: true };
+        },
+        enabled,
+        staleTime: CACHE_DURATION.STANDARD,
+        gcTime: CACHE_DURATION.LONG,
     });
 }
 

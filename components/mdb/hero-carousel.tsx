@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, memo, useMemo, useRef, useCallback } from "react";
-import { type TraktMediaItem } from "@/lib/trakt";
+import { traktClient, type TraktMediaItem } from "@/lib/trakt";
 import { Button } from "@/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel";
 import { WatchButton } from "@/components/common/watch-button";
@@ -9,7 +9,8 @@ import Link from "next/link";
 import { ArrowRightIcon, Star, Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Autoplay from "embla-carousel-autoplay";
-import { useTraktTrendingMixed } from "@/hooks/use-trakt";
+import { useTraktRecommendations } from "@/hooks/use-trakt";
+import { useUserSettings } from "@/hooks/use-user-settings";
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import { HeroCarouselSkeleton } from "./hero-carousel-skeleton";
 
@@ -18,9 +19,10 @@ interface HeroSlideProps {
     index: number;
     total: number;
     isActive: boolean;
+    isPersonalized: boolean;
 }
 
-const HeroSlide = memo(function HeroSlide({ item, index, total, isActive }: HeroSlideProps) {
+const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPersonalized }: HeroSlideProps) {
     const media = item.movie || item.show;
     const type = item.movie ? "movie" : "show";
     if (!media) return null;
@@ -82,6 +84,10 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive }: Hero
                             {/* Type & Index */}
                             <div className="flex items-center gap-4">
                                 <span className="text-xs tracking-widest uppercase text-primary font-medium">
+                                    {isPersonalized ? "Recommended for you" : "Trending on Trakt"}
+                                </span>
+                                <div className="h-px w-8 bg-border/50" />
+                                <span className="text-xs tracking-wider text-muted-foreground">
                                     {type === "movie" ? "Film" : "Series"}
                                 </span>
                                 <div className="h-px w-8 bg-border/50" />
@@ -211,6 +217,12 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive }: Hero
                         {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
                     </span>
                 </div>
+                {/* Recommended label — mobile */}
+                <div className="absolute top-10 left-4">
+                    <span className="text-xs tracking-widest uppercase text-muted-foreground">
+                        {isPersonalized ? "Recommended for you" : "Trending on Trakt"}
+                    </span>
+                </div>
 
                 {/* Bottom content */}
                 <div className="absolute inset-x-0 bottom-0 p-4 pb-14">
@@ -306,7 +318,11 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
 
     const wheelGestures = useMemo(() => WheelGesturesPlugin(), []);
 
-    const { data: items, isLoading } = useTraktTrendingMixed(10);
+    const { isLoading: settingsLoading } = useUserSettings(); // sets traktClient token as side effect
+    // Use the global client state — set synchronously during useUserSettings render
+    const isTraktConnected = !!traktClient.getAccessToken();
+    const { data: items, isLoading: recoLoading } = useTraktRecommendations(isTraktConnected);
+    const isLoading = settingsLoading || (isTraktConnected && recoLoading);
 
     const scrollPrev = useCallback(() => api?.scrollPrev(), [api]);
     const scrollNext = useCallback(() => api?.scrollNext(), [api]);
@@ -337,14 +353,17 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
         return <HeroCarouselSkeleton />;
     }
 
-    const mixed = items?.mixed;
+    if (!isTraktConnected) return null;
+
+    const mixed = items?.items;
+    const isPersonalized = items?.isPersonalized ?? false;
 
     if (!mixed || mixed.length === 0) {
         return null;
     }
 
     return (
-        <div className="-mx-4 -mt-6 lg:-mx-6 relative group/hero" role="region" aria-roledescription="carousel" aria-label="Trending content">
+        <div className="-mx-4 -mt-6 lg:-mx-6 relative group/hero" role="region" aria-roledescription="carousel" aria-label="Recommended for you">
             <Carousel
                 ref={carouselRef}
                 tabIndex={0}
@@ -358,7 +377,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                 <CarouselContent className="-ml-0">
                     {mixed.map((item: TraktMediaItem, index: number) => (
                         <CarouselItem key={`hero-${index}`} className="pl-0">
-                            <HeroSlide item={item} index={index} total={mixed.length} isActive={index === current} />
+                            <HeroSlide item={item} index={index} total={mixed.length} isActive={index === current} isPersonalized={isPersonalized} />
                         </CarouselItem>
                     ))}
                 </CarouselContent>
