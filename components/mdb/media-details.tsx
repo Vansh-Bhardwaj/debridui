@@ -5,6 +5,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MovieDetails } from "./movie-details";
 import { ShowDetails } from "./show-details";
 import { memo } from "react";
+import { Button } from "@/components/ui/button";
+import { Play } from "lucide-react";
+import { WatchButton } from "@/components/common/watch-button";
 
 interface MediaDetailsProps {
     media?: TraktMedia;
@@ -70,6 +73,29 @@ const MediaSkeleton = memo(function MediaSkeleton() {
 
 export const MediaDetails = memo(function MediaDetails({ media, mediaId, type, isLoading, error }: MediaDetailsProps) {
     if (error) {
+        const is404 = error.message.includes("404");
+        const isImdbId = mediaId.startsWith("tt");
+
+        if (is404 && isImdbId) {
+            return (
+                <div className="flex items-center justify-center min-h-[50vh]">
+                    <div className="text-center space-y-4 max-w-sm">
+                        <div className="text-xs tracking-widest uppercase text-muted-foreground">Not in Database</div>
+                        <p className="text-xl font-light">Trakt doesn&apos;t have this title</p>
+                        <p className="text-sm text-muted-foreground">
+                            This content isn&apos;t indexed by Trakt, but you may still be able to stream it.
+                        </p>
+                        <WatchButton imdbId={mediaId} mediaType={type} title={mediaId}>
+                            <Button size="lg" className="gap-2">
+                                <Play className="size-4 fill-current" />
+                                Find Streams
+                            </Button>
+                        </WatchButton>
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="text-center space-y-3">
