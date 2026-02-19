@@ -227,7 +227,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
 
                         return (
                             <Link
-                                key={`${show.ids?.trakt}-${ep.season}-${ep.number}-${i}`}
+                                key={`${show.ids?.trakt}-${ep.season}-${ep.number}`}
                                 href={`/shows/${slug}?season=${ep.season}`}
                                 className="group/item flex items-center gap-3.5 px-3 py-2.5 rounded-sm hover:bg-muted/30 transition-colors duration-300 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none"
                                 style={{

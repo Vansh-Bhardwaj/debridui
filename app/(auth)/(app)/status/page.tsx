@@ -6,6 +6,7 @@ import {
     AlertTriangle,
     CheckCircle2,
     ChevronDown,
+    Link2,
     Monitor,
     RefreshCw,
     Smartphone,
@@ -20,12 +21,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { detectCodecSupport, isIOS, isSafari, type CodecSupport } from "@/lib/utils/codec-support";
 import { useVLCStore } from "@/lib/stores/vlc";
+import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { MediaPlayer } from "@/lib/types";
 import { isMobileOrTablet } from "@/lib/utils/media-player";
 import type { CheckStatus, HealthResponse } from "@/lib/health";
 import { ErrorState, LoadingState } from "@/components/common/async-state";
 import { fetchWithTimeout } from "@/lib/utils/error-handling";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 type StatusMeta = {
     label: string;
@@ -408,6 +411,131 @@ function formatTime(value: number): string {
     return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
+// ── Device Sync status card ────────────────────────────────────────────────
+
+const DeviceSyncCard = memo(function DeviceSyncCard() {
+    const connectionStatus = useDeviceSyncStore((s) => s.connectionStatus);
+    const _enabled = useDeviceSyncStore((s) => s.enabled);
+    const devices = useDeviceSyncStore((s) => s.devices);
+    const thisDevice = useDeviceSyncStore((s) => s.thisDevice);
+    const syncEnabled = useSettingsStore((s) => s.settings.deviceSync);
+    const syncConfigured = !!(process.env.NEXT_PUBLIC_DEVICE_SYNC_URL);
+
+    const overallStatus: CheckStatus = !syncConfigured
+        ? "error"
+        : !syncEnabled
+          ? "degraded"
+          : connectionStatus === "connected"
+            ? "ok"
+            : connectionStatus === "connecting"
+              ? "degraded"
+              : "error";
+
+    const statusLabel = !syncConfigured
+        ? "Not configured"
+        : !syncEnabled
+          ? "Disabled"
+          : connectionStatus === "connected"
+            ? "Connected"
+            : connectionStatus === "connecting"
+              ? "Connecting..."
+              : "Disconnected";
+
+    const otherDevices = devices.filter((d) => d.id !== thisDevice.id);
+
+    const syncMeta = STATUS_META[overallStatus];
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-3">
+                    <Link2 className="size-4 text-primary" />
+                    Device Sync
+                </CardTitle>
+                <CardDescription>
+                    {!syncConfigured
+                        ? "NEXT_PUBLIC_DEVICE_SYNC_URL not configured"
+                        : "Cross-device playback via Cloudflare Durable Objects"}
+                </CardDescription>
+                <CardAction>
+                    <Badge variant={syncMeta.variant}>
+                        <syncMeta.Icon className="size-3.5" />
+                        {statusLabel}
+                    </Badge>
+                </CardAction>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                <KeyValue label="Enabled" value={syncEnabled ? "Yes" : "No"} />
+                {syncConfigured && syncEnabled && (
+                    <>
+                        <KeyValue label="WebSocket" value={connectionStatus === "connected" ? "Connected" : connectionStatus === "connecting" ? "Connecting…" : "Disconnected"} />
+                        <KeyValue label="Devices online" value={otherDevices.length === 0 ? "None" : `${otherDevices.length} other ${otherDevices.length === 1 ? "device" : "devices"}`} />
+                        {otherDevices.length > 0 && (
+                            <KeyValue label="Devices" value={otherDevices.map((d) => d.name).join(", ")} />
+                        )}
+                    </>
+                )}
+                {!syncConfigured && (
+                    <p className="text-xs text-muted-foreground pt-1">
+                        Set <code className="font-mono text-xs">NEXT_PUBLIC_DEVICE_SYNC_URL</code> to enable cross-device playback control.
+                    </p>
+                )}
+            </CardContent>
+        </Card>
+    );
+});
+
+// ── Trakt status card ──────────────────────────────────────────────────────
+
+const TraktCard = memo(function TraktCard() {
+    const { data: serverSettings } = useUserSettings();
+    const isConnected = !!serverSettings?.trakt_access_token;
+    const expiresAt = serverSettings?.trakt_expires_at;
+    const [now] = useState(() => Date.now());
+
+    const { expiryLabel, overallStatus } = useMemo<{ expiryLabel: string; overallStatus: CheckStatus }>(() => {
+        if (!isConnected) return { expiryLabel: "—", overallStatus: "error" };
+        if (!expiresAt) return { expiryLabel: "—", overallStatus: "ok" };
+        const expiryMs = expiresAt * 1000;
+        const diffDays = Math.round((expiryMs - now) / 86400000);
+        const expired = expiryMs < now;
+        const label = expired
+            ? "Expired"
+            : diffDays === 0
+              ? "Expires today"
+              : diffDays === 1
+                ? "Expires tomorrow"
+                : `Expires in ${diffDays} days`;
+        return { expiryLabel: label, overallStatus: expired ? "degraded" : "ok" };
+    }, [isConnected, expiresAt, now]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-3">
+                    <svg className="size-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M10.296 2.023C5.689 2.023 2 5.775 2 10.313s3.688 8.29 8.296 8.29c2.168 0 4.247-.839 5.835-2.335l-1.74-1.674a5.73 5.73 0 01-4.095 1.687c-3.119 0-5.653-2.59-5.653-5.77s2.534-5.771 5.653-5.771a5.65 5.65 0 014.067 1.735l1.748-1.642A8.187 8.187 0 0010.296 2.023zM22 5.38l-3.394 3.394-1.453-1.453L22 2.023v3.357zm-5.247.99l-1.453 1.49 3.8 3.772-3.8 3.772 1.453 1.453 5.247-5.225L16.753 6.37z"/>
+                    </svg>
+                    Trakt
+                </CardTitle>
+                <CardDescription>Scrobbling, watchlist, and history sync</CardDescription>
+                <CardAction>
+                    <StatusBadge status={overallStatus} />
+                </CardAction>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                <KeyValue label="Connected" value={isConnected ? "Yes" : "No"} />
+                {isConnected && <KeyValue label="Token" value={expiryLabel} />}
+                {!isConnected && (
+                    <p className="text-xs text-muted-foreground pt-1">
+                        Connect Trakt in Settings → Integrations to enable scrobbling and watchlist sync.
+                    </p>
+                )}
+            </CardContent>
+        </Card>
+    );
+});
+
 export default function StatusPage() {
     const [data, setData] = useState<HealthResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -627,6 +755,8 @@ export default function StatusPage() {
                 </TabsContent>
 
                 <TabsContent value="integrations" className="space-y-4 pt-4">
+                    <TraktCard />
+                    <DeviceSyncCard />
                     <VLCBridgeCard />
                 </TabsContent>
             </Tabs>

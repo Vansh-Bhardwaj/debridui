@@ -89,7 +89,7 @@ export function ListPagination({
                 </PaginationItem>
 
                 {renderPageNumbers().map((page, index) => (
-                    <PaginationItem key={index}>
+                    <PaginationItem key={page === "ellipsis" ? `ellipsis-${index}` : page}>
                         {page === "ellipsis" ? (
                             <PaginationEllipsis />
                         ) : (

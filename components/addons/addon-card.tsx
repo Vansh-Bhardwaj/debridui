@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import Image from "next/image";
 import { Puzzle, Trash2, Share2, ArrowUp, ArrowDown, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -70,11 +71,11 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
             {/* Row 1: Icon + Name/Version */}
             <div className="flex gap-3 items-start">
                 {/* Column 1: Icon */}
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 overflow-hidden">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 overflow-hidden relative">
                     {isLoading ? (
                         <Skeleton className="h-full w-full" />
                     ) : manifest?.logo ? (
-                        <img src={manifest.logo} alt={addon.name} className="h-full w-full object-contain p-1" />
+                        <Image fill src={manifest.logo} alt={addon.name} sizes="40px" unoptimized className="object-contain p-1" />
                     ) : (
                         <Puzzle className="size-5 text-muted-foreground" />
                     )}

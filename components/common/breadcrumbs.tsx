@@ -123,8 +123,8 @@ export const Breadcrumbs = memo(function Breadcrumbs() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuPortal>
                                     <DropdownMenuContent align="start">
-                                        {hiddenItems.map((item, index) => (
-                                            <DropdownMenuItem key={index} asChild>
+                                        {hiddenItems.map((item) => (
+                                            <DropdownMenuItem key={item.href ?? item.label} asChild>
                                                 <Link href={item.href ?? "#"}>{item.label}</Link>
                                             </DropdownMenuItem>
                                         ))}
@@ -136,7 +136,7 @@ export const Breadcrumbs = memo(function Breadcrumbs() {
                     </>
                 )}
                 {tailItems.map((item, index, arr) => (
-                    <Fragment key={index}>
+                    <Fragment key={item.href ?? item.label}>
                         <BreadcrumbItem>
                             {item.href ? (
                                 <BreadcrumbLink asChild className="max-w-40 truncate md:max-w-none">

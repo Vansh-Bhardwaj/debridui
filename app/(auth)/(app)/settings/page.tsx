@@ -31,14 +31,43 @@ import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/li
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
 import { cn } from "@/lib/utils";
 import { useUserSettings, useSaveUserSettings, useDisconnectTrakt, hydrateSettingsFromServer } from "@/hooks/use-user-settings";
-import { useEffect, useCallback, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useCallback, useRef, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+
+function TraktOAuthFeedback() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    useEffect(() => {
+        const traktParam = searchParams.get("trakt");
+        if (!traktParam) return;
+        if (traktParam === "connected") {
+            toast.success("Trakt connected successfully");
+            queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+        } else if (traktParam === "error") {
+            const reason = searchParams.get("reason");
+            const messages: Record<string, string> = {
+                no_code: "No authorization code received from Trakt",
+                config: "Trakt client ID or secret not configured on server",
+                exchange: "Failed to exchange authorization code with Trakt",
+                state_mismatch: "Security validation failed — please try connecting again",
+            };
+            toast.error(messages[reason ?? ""] || "Failed to connect Trakt");
+        }
+        // Clean up query params from URL
+        router.replace("/settings", { scroll: false });
+    }, [searchParams, router]);
+    return null;
+}
+import Image from "next/image";
 
 function TraktLogo({ className }: { className?: string }) {
     return (
-        <img
+        <Image
             src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/trakt.svg"
             alt=""
+            width={20}
+            height={20}
+            unoptimized
             className={cn("dark:invert", className)}
         />
     );
@@ -46,9 +75,12 @@ function TraktLogo({ className }: { className?: string }) {
 
 function TmdbLogo({ className }: { className?: string }) {
     return (
-        <img
+        <Image
             src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/themoviedatabase.svg"
             alt=""
+            width={20}
+            height={20}
+            unoptimized
             className={cn("dark:invert", className)}
         />
     );
@@ -91,25 +123,7 @@ export default function SettingsPage() {
 
     const isTraktConnected = !!serverSettings?.trakt_access_token;
 
-    // Show toast when returning from Trakt OAuth flow
-    const searchParams = useSearchParams();
-    useEffect(() => {
-        const traktParam = searchParams.get("trakt");
-        if (traktParam === "connected") {
-            toast.success("Trakt connected successfully");
-            // Force refetch — cached data won't have the new token
-            queryClient.invalidateQueries({ queryKey: ["user-settings"] });
-        } else if (traktParam === "error") {
-            const reason = searchParams.get("reason");
-            const messages: Record<string, string> = {
-                no_code: "No authorization code received from Trakt",
-                config: "Trakt client ID or secret not configured on server",
-                exchange: "Failed to exchange authorization code with Trakt",
-                state_mismatch: "Security validation failed — please try connecting again",
-            };
-            toast.error(messages[reason ?? ""] || "Failed to connect Trakt");
-        }
-    }, [searchParams]);
+    // Show toast when returning from Trakt OAuth flow is handled by TraktOAuthFeedback
 
     const handleTraktConnect = useCallback(() => {
         const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
@@ -214,6 +228,7 @@ export default function SettingsPage() {
 
     return (
         <div className="mx-auto w-full max-w-4xl space-y-8 pb-16">
+            <Suspense><TraktOAuthFeedback /></Suspense>
             <PageHeader icon={Settings} title="Settings" description="Manage your application preferences" />
 
             {/* ─── Integrations (highest priority) ─── */}

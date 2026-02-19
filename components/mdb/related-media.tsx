@@ -28,7 +28,7 @@ export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: Relate
                 <div className="grid grid-rows-1 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
                     {data!.map((media, i) => (
                         <div
-                            key={media.ids?.trakt || i}
+                            key={media.ids?.trakt ?? media.ids?.imdb ?? media.ids?.slug ?? media.title ?? i}
                             className="animate-in fade-in-0 slide-in-from-bottom-2"
                             style={{
                                 animationDelay: `${Math.min(i * 30, 300)}ms`,

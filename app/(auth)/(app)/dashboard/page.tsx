@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
@@ -63,11 +64,13 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                                 rel="noopener noreferrer"
                                 aria-label="Discord"
                                 className="group size-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors duration-300">
-                                <img
+                                <Image
                                     src="https://simpleicons.org/icons/discord.svg"
                                     alt=""
+                                    width={16}
+                                    height={16}
+                                    unoptimized
                                     className="size-4 opacity-50 dark:invert group-hover:opacity-100 transition-opacity duration-300"
-                                    loading="lazy"
                                 />
                             </a>
                         )}
@@ -77,11 +80,13 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                             rel="noopener noreferrer"
                             aria-label="GitHub"
                             className="group size-8 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors duration-300">
-                            <img
+                            <Image
                                 src="https://simpleicons.org/icons/github.svg"
                                 alt=""
+                                width={16}
+                                height={16}
+                                unoptimized
                                 className="size-4 opacity-50 dark:invert group-hover:opacity-100 transition-opacity duration-300"
-                                loading="lazy"
                             />
                         </a>
                     </div>
@@ -127,6 +132,14 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
         </section>
     );
 });
+
+// Stable icon references for memoized ContentSection
+const ICON_PUZZLE = <Puzzle className="size-3.5" />;
+const ICON_TRENDING = <TrendingUp className="size-3.5" />;
+const ICON_SPARKLES = <Sparkles className="size-3.5" />;
+const ICON_TICKET = <Ticket className="size-3.5" />;
+const ICON_FILM = <Film className="size-3.5" />;
+const ICON_CALENDAR = <Calendar className="size-3.5" />;
 
 // Content section with modern divider
 interface ContentSectionProps {
@@ -231,7 +244,7 @@ const AddonCatalogs = memo(function AddonCatalogs() {
     if (!catalogs?.length) return null;
 
     return (
-        <ContentSection label="From Your Addons" icon={<Puzzle className="size-3.5" />}>
+        <ContentSection label="From Your Addons" icon={ICON_PUZZLE}>
             {catalogs.map((cat) => {
                 const key = catalogSlug(cat);
                 return (
@@ -315,6 +328,7 @@ const AnticipatedSection = memo(function AnticipatedSection({ visible }: { visib
 
 const DashboardPage = memo(function DashboardPage() {
     const [searchOpen, setSearchOpen] = useState(false);
+    const handleSearchClick = useCallback(() => setSearchOpen(true), []);
 
     // Above-the-fold: always fetch
     const trendingMovies = useTraktTrendingMovies(20);
@@ -328,7 +342,7 @@ const DashboardPage = memo(function DashboardPage() {
             </SectionErrorBoundary>
 
             {/* Welcome Section */}
-            <WelcomeSection onSearchClick={() => setSearchOpen(true)} />
+            <WelcomeSection onSearchClick={handleSearchClick} />
 
             <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
@@ -347,7 +361,7 @@ const DashboardPage = memo(function DashboardPage() {
                 </SectionErrorBoundary>
 
                 {/* Trending */}
-                <ContentSection label="Trending Now" icon={<TrendingUp className="size-3.5" />} delay={0}>
+                <ContentSection label="Trending Now" icon={ICON_TRENDING} delay={0}>
                     <MediaSection
                         title="Movies"
                         items={trendingMovies.data}
@@ -365,22 +379,22 @@ const DashboardPage = memo(function DashboardPage() {
                 </ContentSection>
 
                 {/* Popular */}
-                <LazyTraktSection label="Popular" icon={<Sparkles className="size-3.5" />} delay={100}>
+                <LazyTraktSection label="Popular" icon={ICON_SPARKLES} delay={100}>
                     {(visible) => <PopularSection visible={visible} />}
                 </LazyTraktSection>
 
                 {/* Box Office */}
-                <LazyTraktSection label="Box Office" icon={<Ticket className="size-3.5" />} delay={200}>
+                <LazyTraktSection label="Box Office" icon={ICON_TICKET} delay={200}>
                     {(visible) => <BoxOfficeSection visible={visible} />}
                 </LazyTraktSection>
 
                 {/* Most Watched */}
-                <LazyTraktSection label="Most Watched This Week" icon={<Film className="size-3.5" />} delay={300}>
+                <LazyTraktSection label="Most Watched This Week" icon={ICON_FILM} delay={300}>
                     {(visible) => <MostWatchedSection visible={visible} />}
                 </LazyTraktSection>
 
                 {/* Coming Soon */}
-                <LazyTraktSection label="Coming Soon" icon={<Calendar className="size-3.5" />} delay={400}>
+                <LazyTraktSection label="Coming Soon" icon={ICON_CALENDAR} delay={400}>
                     {(visible) => <AnticipatedSection visible={visible} />}
                 </LazyTraktSection>
 

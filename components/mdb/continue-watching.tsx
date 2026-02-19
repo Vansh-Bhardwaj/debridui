@@ -3,7 +3,7 @@
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { WatchButton } from "@/components/common/watch-button";
 import { Play, X, Star, SkipForward } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
@@ -132,6 +132,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                             src={posterUrl}
                             alt={title}
                             fill
+                            sizes="(max-width: 640px) 160px, 192px"
                             className="object-cover transition-transform duration-500 group-hover:scale-105"
                             unoptimized
                         />
@@ -200,19 +201,22 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 export function ContinueWatching() {
     const { progress, loading } = useContinueWatching();
     const queryClient = useQueryClient();
-    const [items, setItems] = useState<Array<ProgressKey & ProgressData>>([]);
+    const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
-    useEffect(() => {
-        setItems(progress);
-    }, [progress]);
+    // Compute items during render — filter out optimistically removed entries
+    const items = progress.filter((item) => {
+        const id = item.type === "show" && item.season !== undefined && item.episode !== undefined
+            ? `${item.imdbId}:s${item.season}e${item.episode}`
+            : item.imdbId;
+        return !removedIds.has(id);
+    });
 
     const handleRemove = useCallback((key: ProgressKey) => {
         // Optimistic removal from UI immediately
-        setItems((prev) => prev.filter((item) =>
-            !(item.imdbId === key.imdbId &&
-                item.season === key.season &&
-                item.episode === key.episode)
-        ));
+        const id = key.type === "show" && key.season !== undefined && key.episode !== undefined
+            ? `${key.imdbId}:s${key.season}e${key.episode}`
+            : key.imdbId;
+        setRemovedIds((prev) => new Set([...prev, id]));
 
         // Remove from localStorage
         const storageKey = key.type === "show" && key.season !== undefined && key.episode !== undefined

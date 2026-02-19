@@ -3,6 +3,7 @@
 import { type TraktCastMember, type TraktCrewMember } from "@/lib/trakt";
 import { Skeleton } from "@/components/ui/skeleton";
 import { User } from "lucide-react";
+import Image from "next/image";
 import { useTraktPeople } from "@/hooks/use-trakt";
 import { memo } from "react";
 import Link from "next/link";
@@ -49,7 +50,7 @@ export const PeopleSection = memo(function PeopleSection({ mediaId, type }: Peop
                     <h3 className="text-xs tracking-widest uppercase text-muted-foreground">Cast</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
                         {people.cast.slice(0, 18).map((member, index) => (
-                            <PersonCard key={index} person={member} type="cast" />
+                            <PersonCard key={member.person.ids?.trakt ?? member.person.ids?.slug ?? index} person={member} type="cast" />
                         ))}
                     </div>
                 </div>
@@ -78,11 +79,13 @@ function PersonCard({ person, type }: PersonCardProps) {
             <div className="relative mx-auto flex items-center justify-center">
                 <div className="size-28 xl:size-32 relative overflow-hidden bg-muted/30 rounded-full transition-all duration-300">
                     {imageUrl ? (
-                        <img
+                        <Image
+                            fill
                             src={imageUrl}
                             alt={person.person.name}
-                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
+                            sizes="128px"
+                            unoptimized
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-muted/30">

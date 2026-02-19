@@ -376,7 +376,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                 plugins={[autoplay, wheelGestures]}>
                 <CarouselContent className="-ml-0">
                     {mixed.map((item: TraktMediaItem, index: number) => (
-                        <CarouselItem key={`hero-${index}`} className="pl-0">
+                        <CarouselItem key={(item.movie ?? item.show)?.ids?.trakt ?? `hero-${index}`} className="pl-0">
                             <HeroSlide item={item} index={index} total={mixed.length} isActive={index === current} isPersonalized={isPersonalized} />
                         </CarouselItem>
                     ))}

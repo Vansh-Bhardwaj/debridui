@@ -1,0 +1,20 @@
+{
+    "ignore": {
+        "rules": [
+            "react/no-unknown-property",
+            "jsx-a11y/no-autofocus",
+            "knip/exports",
+            "knip/types",
+            "knip/duplicates"
+        ],
+        "files": [
+            "open-next.config.ts",
+            "proxy.worker.js",
+            "public/sw.js",
+            "tests/**",
+            "device-sync-worker/**",
+            "vlc-bridge/**",
+            ".wrangler/**"
+        ]
+    }
+}

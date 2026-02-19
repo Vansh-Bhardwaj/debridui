@@ -110,9 +110,9 @@ export function AddContent() {
             <CardContent className="space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
                     <div className="flex flex-col space-y-1 md:space-y-2">
-                        <label className="text-xs tracking-widest uppercase text-muted-foreground">
+                        <span className="text-xs tracking-widest uppercase text-muted-foreground">
                             Upload Torrent Files
-                        </label>
+                        </span>
                         <Dropzone
                             onDropAccepted={handleFileSelect}
                             disabled={isUploadingFiles}
@@ -128,9 +128,10 @@ export function AddContent() {
                     </div>
 
                     <div className="flex flex-col space-y-2">
-                        <label className="text-xs tracking-widest uppercase text-muted-foreground">Add Links</label>
+                        <label htmlFor="add-links-input" className="text-xs tracking-widest uppercase text-muted-foreground">Add Links</label>
                         <div className="relative flex-1">
                             <Textarea
+                                id="add-links-input"
                                 placeholder="Enter links (one per line)"
                                 value={links}
                                 onChange={(e) => setLinks(e.target.value)}

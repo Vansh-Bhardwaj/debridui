@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, AccountType } from "@/lib/types";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
@@ -14,41 +15,27 @@ interface TextPreviewProps {
 }
 
 export function TextPreview({ downloadUrl, onLoad, onError }: TextPreviewProps) {
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [content, setContent] = useState<string>("");
     const { currentUser } = useAuthGuaranteed();
+    const fetchUrl = currentUser.type === AccountType.ALLDEBRID ? getProxyUrl(downloadUrl) : downloadUrl;
+
+    const { data: content, isLoading, error } = useQuery({
+        queryKey: ["text-preview", fetchUrl],
+        queryFn: async () => {
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+            return response.text();
+        },
+    });
 
     useEffect(() => {
-        const fetchContent = async () => {
-            try {
-                setLoading(true);
-                setError(null);
+        if (content !== undefined) onLoad?.();
+    }, [content, onLoad]);
 
-                const useProxy = currentUser.type === AccountType.ALLDEBRID;
-                const fetchUrl = useProxy ? getProxyUrl(downloadUrl) : downloadUrl;
+    useEffect(() => {
+        if (error) onError?.(error instanceof Error ? error : new Error(String(error)));
+    }, [error, onError]);
 
-                const response = await fetch(fetchUrl);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch: ${response.statusText}`);
-                }
-
-                const text = await response.text();
-                setContent(text);
-                setLoading(false);
-                onLoad?.();
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : "Failed to load file";
-                setError(errorMessage);
-                setLoading(false);
-                onError?.(err instanceof Error ? err : new Error(errorMessage));
-            }
-        };
-
-        fetchContent();
-    }, [downloadUrl, currentUser.type, onLoad, onError]);
-
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="w-full h-full flex items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -61,7 +48,7 @@ export function TextPreview({ downloadUrl, onLoad, onError }: TextPreviewProps) 
             <div className="w-full h-full flex flex-col items-center justify-center bg-background text-foreground">
                 <AlertCircle className="h-12 w-12 mb-2 text-destructive" />
                 <p className="text-sm">Failed to load file</p>
-                <p className="text-xs text-muted-foreground mt-1">{error}</p>
+                <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
             </div>
         );
     }

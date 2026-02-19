@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { FileQuestion } from "lucide-react";
 
@@ -16,10 +17,10 @@ export default function NotFound() {
             </div>
             <div className="flex gap-3">
                 <Button asChild>
-                    <a href="/dashboard">Go to Dashboard</a>
+                    <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
                 <Button variant="outline" asChild>
-                    <a href="/files">Browse Files</a>
+                    <Link href="/files">Browse Files</Link>
                 </Button>
             </div>
         </div>

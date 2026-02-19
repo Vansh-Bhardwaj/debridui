@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/common/page-header";
 import { HelpCircle, ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight, Keyboard } from "lucide-react";
@@ -28,7 +29,7 @@ export default function HelpPage() {
                         <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-start">
                             <div className="space-y-4">
                                 <div className="flex items-center gap-3">
-                                    <img src="https://cdn.simpleicons.org/discord/5865F2" alt="" className="size-5" />
+                                    <Image src="https://cdn.simpleicons.org/discord/5865F2" alt="" width={20} height={20} unoptimized className="size-5" />
                                     <h2 className="text-xl font-light">Join our Discord</h2>
                                 </div>
                                 <p className="text-sm text-muted-foreground max-w-lg">
@@ -79,7 +80,7 @@ export default function HelpPage() {
                     <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-start">
                         <div className="space-y-4">
                             <div className="flex items-center gap-3">
-                                <img src="https://cdn.simpleicons.org/github" alt="" className="size-5 dark:invert" />
+                                <Image src="https://cdn.simpleicons.org/github" alt="" width={20} height={20} unoptimized className="size-5 dark:invert" />
                                 <h2 className="text-xl font-light">GitHub Repository</h2>
                             </div>
                             <p className="text-sm text-muted-foreground max-w-lg">
@@ -94,11 +95,7 @@ export default function HelpPage() {
                                     href="https://github.com/Vansh-Bhardwaj/debridui"
                                     target="_blank"
                                     rel="noopener noreferrer">
-                                    <img
-                                        src="https://cdn.simpleicons.org/github"
-                                        alt=""
-                                        className="size-4 dark:invert"
-                                    />
+                                    <Image src="https://cdn.simpleicons.org/github" alt="" width={16} height={16} unoptimized className="size-4 dark:invert" />
                                     View Repository
                                     <ExternalLink className="size-4 opacity-50" />
                                 </a>

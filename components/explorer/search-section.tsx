@@ -52,11 +52,6 @@ export const SearchSection = memo(function SearchSection({ onSearchResults }: Se
         return () => clearTimeout(timer);
     }, [searchQuery, queryParam, searchParams, router]);
 
-    // Update local state when URL param changes
-    useEffect(() => {
-        setSearchQuery(queryParam);
-    }, [queryParam]);
-
     // Notify parent of search results
     useEffect(() => {
         onSearchResults(queryParam ? (searchResults ?? null) : null, isSearching);

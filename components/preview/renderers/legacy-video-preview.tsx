@@ -757,7 +757,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         const handleActivity = () => resetControlsTimeout();
         container.addEventListener("mousemove", handleActivity);
-        container.addEventListener("touchstart", handleActivity);
+        container.addEventListener("touchstart", handleActivity, { passive: true });
         container.addEventListener("click", handleActivity);
 
         // Start timer

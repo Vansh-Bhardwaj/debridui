@@ -124,14 +124,16 @@ const PersonHeader = memo(function PersonHeader({
                 <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] gap-6 md:gap-8">
                     {/* Headshot Column */}
                     <div className="space-y-4">
-                        <div className="max-md:max-w-[45vw] aspect-2/3 overflow-hidden rounded-sm bg-muted/50">
+                        <div className="max-md:max-w-[45vw] aspect-2/3 overflow-hidden relative rounded-sm bg-muted/50">
                             {headshotUrl ? (
-                                <img
+                                <Image
                                     src={headshotUrl}
                                     alt={person.name}
-                                    className="w-full h-full object-cover"
+                                    fill
+                                    unoptimized
+                                    sizes="(max-width: 768px) 45vw, 240px"
+                                    className="object-cover"
                                     loading="eager"
-                                    decoding="async"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-muted/30">
@@ -217,9 +219,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://www.imdb.com/name/${person.ids.imdb}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/imdb.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     IMDb
@@ -230,9 +235,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://www.themoviedb.org/person/${person.ids.tmdb}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/themoviedatabase.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     TMDB
@@ -243,9 +251,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://trakt.tv/people/${person.ids.slug || person.ids.trakt}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/trakt.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     Trakt
@@ -256,9 +267,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://twitter.com/${person.social_ids.twitter}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/x.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     Twitter
@@ -269,9 +283,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://instagram.com/${person.social_ids.instagram}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/instagram.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     Instagram
@@ -282,9 +299,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://facebook.com/${person.social_ids.facebook}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/facebook.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     Facebook
@@ -295,9 +315,12 @@ const PersonHeader = memo(function PersonHeader({
                                     href={`https://en.wikipedia.org/wiki/${person.social_ids.wikipedia}`}
                                     target="_blank"
                                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/wikipedia.svg"
                                         alt=""
+                                        width={16}
+                                        height={16}
+                                        unoptimized
                                         className="size-4 opacity-60 dark:invert"
                                     />
                                     Wikipedia

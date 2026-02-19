@@ -137,11 +137,12 @@ export default function Home() {
                             {techStack.map((tech, i) => (
                                 <span key={tech.name} className="hidden sm:flex items-center gap-1.5">
                                     {i > 0 && <span className="text-border mr-4">·</span>}
-                                    <img
+                                    <Image
                                         src={`https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/${tech.icon}.svg`}
                                         alt={`${tech.name} logo`}
                                         width={12}
                                         height={12}
+                                        unoptimized
                                         className="size-3 opacity-50 dark:invert"
                                     />
                                     {tech.name}
@@ -178,11 +179,12 @@ export default function Home() {
                                     href="https://github.com/Vansh-Bhardwaj/debridui"
                                     target="_blank"
                                     rel="noopener noreferrer">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/github.svg"
                                         alt="GitHub logo"
                                         width={16}
                                         height={16}
+                                        unoptimized
                                         className="size-4 dark:invert mr-2 opacity-70"
                                     />
                                     Source
@@ -329,11 +331,12 @@ export default function Home() {
                             {DISCORD_URL && (
                                 <Button asChild className="h-11 px-5 bg-[#5865F2] hover:bg-[#4752C4] text-white">
                                     <Link href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
-                                        <img
+                                        <Image
                                             src="https://cdn.simpleicons.org/discord/white"
                                             alt="Discord logo"
                                             width={16}
                                             height={16}
+                                            unoptimized
                                             className="size-4 mr-2"
                                         />
                                         Discord
@@ -345,11 +348,12 @@ export default function Home() {
                                     href="https://github.com/Vansh-Bhardwaj/debridui"
                                     target="_blank"
                                     rel="noopener noreferrer">
-                                    <img
+                                    <Image
                                         src="https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/github.svg"
                                         alt="GitHub logo"
                                         width={16}
                                         height={16}
+                                        unoptimized
                                         className="size-4 dark:invert mr-2 opacity-70"
                                     />
                                     GitHub

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface GalleryItem {
@@ -33,10 +34,10 @@ export function Gallery({ items, className }: GalleryProps) {
         const threshold = 50;
 
         if (Math.abs(diff) > threshold) {
-            if (diff > 0 && active < items.length - 1) {
-                setActive(active + 1);
-            } else if (diff < 0 && active > 0) {
-                setActive(active - 1);
+            if (diff > 0) {
+                setActive((prev) => Math.min(prev + 1, items.length - 1));
+            } else {
+                setActive((prev) => Math.max(prev - 1, 0));
             }
         }
         touchStartX.current = null;
@@ -65,7 +66,7 @@ export function Gallery({ items, className }: GalleryProps) {
             {/* Mobile: Previous / Current / Next labels */}
             <div className="sm:hidden flex items-center justify-center gap-4 overflow-hidden">
                 <button
-                    onClick={() => active > 0 && setActive(active - 1)}
+                    onClick={() => setActive((prev) => Math.max(prev - 1, 0))}
                     disabled={active === 0}
                     className={cn(
                         "text-xs tracking-wider uppercase w-20 text-right truncate transition-all duration-300",
@@ -81,7 +82,7 @@ export function Gallery({ items, className }: GalleryProps) {
                     {items[active].label}
                 </span>
                 <button
-                    onClick={() => active < items.length - 1 && setActive(active + 1)}
+                    onClick={() => setActive((prev) => Math.min(prev + 1, items.length - 1))}
                     disabled={active === items.length - 1}
                     className={cn(
                         "text-xs tracking-wider uppercase w-20 text-left truncate transition-all duration-300",
@@ -103,15 +104,16 @@ export function Gallery({ items, className }: GalleryProps) {
                 {/* Desktop: 16:9 landscape */}
                 <div className="relative aspect-[16/9] hidden sm:block">
                     {items.map((item, index) => (
-                        <img
+                        <Image
                             key={item.id}
+                            fill
                             src={item.src.default}
                             alt={`DebridUI ${item.label}`}
-                            width={1920}
-                            height={1080}
+                            unoptimized
+                            sizes="(max-width: 768px) 100vw, 80vw"
                             className={cn(
-                                "w-full h-full object-cover transition-opacity duration-500",
-                                active === index ? "opacity-90" : "opacity-0 absolute inset-0"
+                                "object-cover transition-opacity duration-500",
+                                active === index ? "opacity-90" : "opacity-0"
                             )}
                         />
                     ))}
@@ -121,15 +123,16 @@ export function Gallery({ items, className }: GalleryProps) {
                 <div
                     className={cn("relative sm:hidden", items[active]?.src.mobile ? "aspect-[9/16]" : "aspect-[16/9]")}>
                     {items.map((item, index) => (
-                        <img
+                        <Image
                             key={item.id}
+                            fill
                             src={item.src.mobile || item.src.default}
                             alt={`DebridUI ${item.label}`}
-                            width={item.src.mobile ? 1080 : 1920}
-                            height={item.src.mobile ? 1920 : 1080}
+                            unoptimized
+                            sizes="100vw"
                             className={cn(
-                                "w-full h-full object-cover transition-opacity duration-500",
-                                active === index ? "opacity-90" : "opacity-0 absolute inset-0"
+                                "object-cover transition-opacity duration-500",
+                                active === index ? "opacity-90" : "opacity-0"
                             )}
                         />
                     ))}
@@ -139,9 +142,9 @@ export function Gallery({ items, className }: GalleryProps) {
 
                 {/* Progress Indicators - touch-optimized on mobile */}
                 <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-1.5 z-20">
-                    {items.map((_, index) => (
+                    {items.map((item, index) => (
                         <button
-                            key={index}
+                            key={item.id}
                             onClick={() => setActive(index)}
                             className={cn(
                                 "rounded-full transition-all duration-300",

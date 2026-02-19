@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type TraktSeason } from "@/lib/trakt";
 import { Star } from "lucide-react";
 import { cn, formatYear } from "@/lib/utils";
@@ -44,7 +45,10 @@ export const SeasonCard = memo(function SeasonCard({
     return (
         <div
             className={cn("group cursor-pointer w-28 sm:w-32 md:w-36 pt-1", className)}
+            role="button"
+            tabIndex={0}
             onClick={onClick}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick?.(); }}
             onMouseEnter={prefetchSeason}>
             <div
                 className={cn(
@@ -53,11 +57,13 @@ export const SeasonCard = memo(function SeasonCard({
                         ? "ring-2 ring-primary ring-offset-1 ring-offset-background"
                         : "hover:ring-1 hover:ring-border"
                 )}>
-                <img
+                <Image
+                    fill
                     src={posterUrl}
                     alt={seasonName}
-                    className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-hover"
-                    loading="lazy"
+                    sizes="(max-width: 640px) 112px, (max-width: 768px) 128px, 144px"
+                    unoptimized
+                    className="object-cover transition-transform duration-300 group-hover:scale-hover"
                 />
 
                 {/* Gradient overlay */}

@@ -7,6 +7,7 @@ import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cdnUrl } from "@/lib/utils/media";
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -107,9 +108,12 @@ const CollectionCard = memo(function CollectionCard({
                 animationFillMode: "backwards",
             }}>
             <div className="group relative overflow-hidden rounded-sm transition-transform duration-300 ease-out hover:scale-hover">
-                <img
+                <Image
                     src={posterUrl}
-                    alt={title}
+                    alt={title || ""}
+                    width={300}
+                    height={450}
+                    unoptimized
                     className="aspect-2/3 w-full object-cover"
                     loading="lazy"
                 />

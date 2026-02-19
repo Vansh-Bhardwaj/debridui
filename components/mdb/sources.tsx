@@ -392,9 +392,9 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     </div>
                 )}
 
-                {filtered?.map((source, index) => (
+                {filtered?.map((source) => (
                     <SourceRow
-                        key={`${source.addonId}-${source.url ?? "magnet"}-${index}`}
+                        key={`${source.addonId}-${source.url ?? "no-url"}`}
                         source={source}
                         mediaTitle={mediaTitle}
                         subtitles={subtitles}

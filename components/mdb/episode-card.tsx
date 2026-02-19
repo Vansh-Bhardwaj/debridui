@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type TraktEpisode } from "@/lib/trakt";
 import { Check, ChevronDown, Eye, EyeOff, Loader2, Play, Star } from "lucide-react";
 import { cn, formatLocalizedDate } from "@/lib/utils";
@@ -25,14 +26,16 @@ const ThumbnailContent = memo(function ThumbnailContent({
 }: ThumbnailContentProps) {
     return (
         <>
-            <img
+            <Image
+                fill
                 src={screenshotUrl}
-                alt={title}
+                alt={title || ""}
+                sizes="(max-width: 640px) 144px, (max-width: 768px) 224px, 240px"
+                unoptimized
                 className={cn(
-                    "absolute inset-0 w-full h-full object-cover",
+                    "object-cover",
                     interactive && "transition-transform duration-300 group-hover/thumb:scale-hover"
                 )}
-                loading="lazy"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             <span className="absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 text-xs font-medium tracking-wider text-white/90 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-sm">

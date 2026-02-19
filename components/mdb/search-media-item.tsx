@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { memo } from "react";
 import { Film, Tv, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,9 +37,9 @@ export const SearchMediaItem = memo(function SearchMediaItem({
             commandKeywords={[media.title, type, media.year?.toString() || ""]}
             className={className}>
             {/* Poster thumbnail or icon */}
-            <div className="shrink-0 w-10 h-14 sm:w-11 sm:h-16 bg-muted/50 rounded-sm overflow-hidden">
+            <div className="shrink-0 w-10 h-14 sm:w-11 sm:h-16 bg-muted/50 rounded-sm overflow-hidden relative">
                 {posterImage ? (
-                    <img src={posterImage} alt={media.title} className="w-full h-full object-cover" />
+                    <Image fill src={posterImage} alt={media.title} sizes="44px" unoptimized className="object-cover" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">
                         <Icon className="size-4 text-muted-foreground" />

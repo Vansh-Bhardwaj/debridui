@@ -1,4 +1,5 @@
 import { memo } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface MdbFooterProps {
@@ -14,7 +15,7 @@ export const MdbFooter = memo(function MdbFooter({ className }: MdbFooterProps) 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 hover:text-foreground transition-colors">
-                <img src="https://cdn.simpleicons.org/trakt" alt="Trakt" className="h-5 w-5" />
+                <Image src="https://cdn.simpleicons.org/trakt" alt="Trakt" width={20} height={20} unoptimized className="h-5 w-5" />
                 <span className="font-medium">Trakt</span>
             </a>
         </div>

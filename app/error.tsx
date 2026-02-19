@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertCircle } from "lucide-react";
 
@@ -27,7 +28,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
             <div className="flex gap-3">
                 <Button onClick={reset}>Try again</Button>
                 <Button variant="outline" asChild>
-                    <a href="/dashboard">Go to Dashboard</a>
+                    <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
             </div>
         </div>
