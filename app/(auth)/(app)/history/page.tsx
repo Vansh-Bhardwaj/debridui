@@ -8,7 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-
 import { Button } from "@/components/ui/button";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
-import { History, Trash2, X, Play, Film, Tv } from "lucide-react";
+import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
@@ -222,7 +222,30 @@ export default function HistoryPage() {
             )}
 
             {!isLoading && !error && entries.length > 0 && (
-                <div className="space-y-8">
+                <>
+                    {/* Stats row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                            { icon: History, label: "Sessions", value: entries.length.toString() },
+                            { icon: Clapperboard, label: "Titles", value: new Set(entries.map((e) => e.imdbId)).size.toString() },
+                            { icon: Clock, label: "Watch Time", value: formatDuration(entries.reduce((acc, e) => acc + e.progressSeconds, 0)) },
+                            { icon: Calendar, label: "This Week", value: entries.filter((e) => {
+                                const d = new Date(e.watchedAt);
+                                const now = new Date();
+                                return now.getTime() - d.getTime() < 7 * 24 * 60 * 60 * 1000;
+                            }).length.toString() },
+                        ].map(({ icon: Icon, label, value }) => (
+                            <div key={label} className="rounded-sm border border-border/50 bg-card/30 p-3 flex items-center gap-3">
+                                <Icon className="size-4 text-muted-foreground shrink-0" />
+                                <div>
+                                    <p className="text-xs tracking-widest uppercase text-muted-foreground">{label}</p>
+                                    <p className="text-sm font-medium">{value}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="space-y-8">
                     {dateKeys.map((dateKey) => (
                         <section key={dateKey} className="space-y-2">
                             <div className="flex items-center gap-3 py-1">
@@ -248,6 +271,7 @@ export default function HistoryPage() {
                         </div>
                     )}
                 </div>
+                </>
             )}
 
             <ConfirmDialog

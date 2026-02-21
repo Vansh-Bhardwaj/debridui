@@ -23,7 +23,7 @@ interface MediaSectionProps {
 
 const MediaSectionSkeleton = memo(function MediaSectionSkeleton() {
     return (
-        <div className="grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
+        <div className="grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] xl:auto-cols-[175px] 2xl:auto-cols-[190px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
             {Array.from({ length: 20 }, (_, i) => (
                 <div key={i} className="animate-pulse" style={{ animationDelay: `${i * 50}ms` }}>
                     <Skeleton className="aspect-2/3 rounded-sm" />
@@ -81,7 +81,7 @@ export const MediaSection = memo(function MediaSection({
                 {isLoading ? (
                     <MediaSectionSkeleton />
                 ) : (
-                    <div className={cn("grid grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max", gridRows)}>
+            <div className={cn("grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] xl:auto-cols-[175px] 2xl:auto-cols-[190px] gap-3 pt-2 pb-4 max-lg:px-4 w-max", gridRows)}>
                         {filteredItems.map((item, index) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";

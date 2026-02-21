@@ -35,7 +35,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, className 
                         src={posterUrl}
                         alt={media.title}
                         fill
-                        sizes="(max-width: 640px) 120px, (max-width: 768px) 150px, 180px"
+                        sizes="(max-width: 640px) 120px, (max-width: 768px) 150px, (max-width: 1280px) 180px, (max-width: 1536px) 190px, 200px"
                         className="object-cover transition-opacity duration-300"
                         loading="lazy"
                         unoptimized

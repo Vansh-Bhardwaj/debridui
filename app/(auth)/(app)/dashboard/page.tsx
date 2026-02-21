@@ -15,14 +15,16 @@ import {
     useTraktAnticipatedMovies,
     useTraktAnticipatedShows,
     useTraktBoxOfficeMovies,
+    useTraktRecommendations,
 } from "@/hooks/use-trakt";
+import { traktClient } from "@/lib/trakt";
 import {
     useAddonCatalogDefs,
     useAddonCatalog,
     catalogSlug,
     type AddonCatalogDef,
 } from "@/hooks/use-addons";
-import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle } from "lucide-react";
+import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle, Heart } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
@@ -140,6 +142,7 @@ const ICON_SPARKLES = <Sparkles className="size-3.5" />;
 const ICON_TICKET = <Ticket className="size-3.5" />;
 const ICON_FILM = <Film className="size-3.5" />;
 const ICON_CALENDAR = <Calendar className="size-3.5" />;
+const ICON_HEART = <Heart className="size-3.5" />;
 
 // Content section with modern divider
 interface ContentSectionProps {
@@ -288,8 +291,17 @@ function LazyTraktSection({
     );
 }
 
-const PopularSection = memo(function PopularSection({ visible }: { visible: boolean }) {
-    const popularMovies = useTraktPopularMovies(20, visible);
+/** "For You" — personalized Trakt recommendations, only shown when genuinely personalized */
+const ForYouSection = memo(function ForYouSection({ visible }: { visible: boolean }) {
+    const isTraktConnected = !!traktClient.getAccessToken();
+    const { data } = useTraktRecommendations(isTraktConnected && visible);
+    if (!data?.isPersonalized || !data.items.length) return null;
+    return (
+        <MediaSection title="Movies & Shows" items={data.items} rows={1} />
+    );
+});
+
+const PopularSection = memo(function PopularSection({ visible }: { visible: boolean }) {    const popularMovies = useTraktPopularMovies(20, visible);
     const popularShows = useTraktPopularShows(20, visible);
     return (
         <>
@@ -359,6 +371,11 @@ const DashboardPage = memo(function DashboardPage() {
                 <SectionErrorBoundary section="Addon Catalogs">
                     <AddonCatalogs />
                 </SectionErrorBoundary>
+
+                {/* For You — personalized recommendations (only shown when Trakt connected + has watch history) */}
+                <LazyTraktSection label="For You" icon={ICON_HEART} delay={0}>
+                    {(visible) => <ForYouSection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Trending */}
                 <ContentSection label="Trending Now" icon={ICON_TRENDING} delay={0}>
