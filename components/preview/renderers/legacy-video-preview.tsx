@@ -602,7 +602,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setIsLoading(false);
             // Trakt scrobble start
             const dur = video.duration || 0;
-            if (dur > 0) scrobble("start", (video.currentTime / dur) * 100);
+            if (Number.isFinite(dur) && dur > 0) scrobble("start", (video.currentTime / dur) * 100);
         };
         const onPause = () => {
             setIsPlaying(false);
@@ -610,7 +610,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             forceSync();
             // Trakt scrobble pause
             const dur = video.duration || 0;
-            if (dur > 0) scrobble("pause", (video.currentTime / dur) * 100);
+            if (Number.isFinite(dur) && dur > 0) scrobble("pause", (video.currentTime / dur) * 100);
         };
         const onTimeUpdate = () => {
             const time = video.currentTime || 0;
@@ -661,8 +661,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
 
             // Update progress in localStorage (throttled)
+            // Guard: skip when duration is invalid (NaN before metadata, Infinity for transcoded streams)
             const now = Date.now();
-            if (progressKey && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
+            if (progressKey && Number.isFinite(dur) && dur > 0 && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
                 lastProgressUpdateRef.current = now;
                 updateProgress(time, dur);
             }

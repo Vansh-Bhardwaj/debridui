@@ -345,9 +345,12 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                 const now = Date.now();
                 const merged = new Map<string, ProgressKey & ProgressData>();
 
+                // Server items are sorted by updatedAt DESC — keep the first (newest) per key
                 for (const item of serverProgress) {
                     const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
                     const storageKey = getStorageKey(key);
+                    // Skip duplicates (from NULL unique index bug) — first entry is newest
+                    if (merged.has(storageKey)) continue;
                     const serverUpdatedAt = new Date(item.updatedAt).getTime();
                     const percent = item.durationSeconds > 0
                         ? (item.progressSeconds / item.durationSeconds) * 100

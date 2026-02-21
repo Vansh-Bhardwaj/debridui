@@ -156,7 +156,10 @@ const RESOLUTION_NUMERIC_REGEX = /\b(2160p|1440p|1080p|720p|480p|360p)\b/i;
 const RESOLUTION_KEYWORD_REGEX = /\b(4k\s*ultra|4k|uhd|full\s?hd|fullhd|fhd|hd|sd)\b/i;
 
 export function extractResolution(stream: AddonStream): Resolution | undefined {
-    // Check name, title, description, and filename hint
+    // Check name, title, description, and filename hint — in priority order.
+    // Per-field: numeric wins over keyword within the same field; earlier fields
+    // win over later fields. This prevents a keyword like "4K" in stream.name
+    // from being overridden by a numeric "1080p" buried in stream.description.
     const fields = [
         stream.name,
         stream.title,
@@ -164,22 +167,17 @@ export function extractResolution(stream: AddonStream): Resolution | undefined {
         stream.behaviorHints?.filename,
     ];
 
-    // Pass 1: Explicit numeric resolutions (most reliable — e.g. "1080p", "720p")
     for (const field of fields) {
         if (!field) continue;
-        const match = field.match(RESOLUTION_NUMERIC_REGEX);
-        if (match) {
-            return RESOLUTION_MAP[match[1].toLowerCase()];
+        // Numeric resolution (most reliable within this field)
+        const numMatch = field.match(RESOLUTION_NUMERIC_REGEX);
+        if (numMatch) {
+            return RESOLUTION_MAP[numMatch[1].toLowerCase()];
         }
-    }
-
-    // Pass 2: Keyword resolutions (e.g. "Full HD", "4K", "HD")
-    // Only used when no explicit numeric resolution is found in ANY field
-    for (const field of fields) {
-        if (!field) continue;
-        const match = field.match(RESOLUTION_KEYWORD_REGEX);
-        if (match) {
-            return RESOLUTION_MAP[match[1].toLowerCase()];
+        // Keyword resolution (e.g. "4K", "Full HD", "UHD")
+        const kwMatch = field.match(RESOLUTION_KEYWORD_REGEX);
+        if (kwMatch) {
+            return RESOLUTION_MAP[kwMatch[1].toLowerCase()];
         }
     }
 
