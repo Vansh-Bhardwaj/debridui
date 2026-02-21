@@ -12,8 +12,10 @@ export function Analytics() {
     const src = srcMatch?.[1] ?? (scriptTag.startsWith("http") ? scriptTag.trim() : null);
 
     if (src) {
-        // Safe: load external script via Next.js <Script> component
-        return <Script src={src} strategy="afterInteractive" />;
+        // Proxy external analytics scripts through our own domain to avoid
+        // tracking prevention tools (e.g. Edge, uBlock) blocking them
+        const proxiedSrc = src.startsWith("http") ? "/api/analytics/script" : src;
+        return <Script src={proxiedSrc} strategy="afterInteractive" />;
     }
 
     // Inline script content: extract from <script>...</script> tags if present
