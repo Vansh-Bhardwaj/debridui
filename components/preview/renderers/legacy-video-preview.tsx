@@ -203,10 +203,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [canStartPlayback, setCanStartPlayback] = useState(false);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
-    const [subtitleSize, setSubtitleSize] = useState(24);
-    const [subtitlePosition, setSubtitlePosition] = useState(64);
+    const [subtitleSize, setSubtitleSize] = useState(
+        () => useSettingsStore.getState().settings.playback.subtitleSize
+    );
+    const [subtitlePosition, setSubtitlePosition] = useState(
+        () => useSettingsStore.getState().settings.playback.subtitlePosition
+    );
     const [subtitleDelay, setSubtitleDelay] = useState(0); // ms, negative = earlier, positive = later
-    const [playbackRate, setPlaybackRate] = useState(1);
+    const [playbackRate, setPlaybackRate] = useState(
+        () => useSettingsStore.getState().settings.playback.playbackSpeed
+    );
     const [isLoading, setIsLoading] = useState(true);
 
     // User's preferred subtitle language from settings
@@ -307,6 +313,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [volume, setVolume] = useState(1);
+    const [loop, setLoop] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number | -1>(-1); // Default to off, but will auto-enable
 
@@ -562,6 +569,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
         if (el) {
             setDuration(el.duration || 0);
+            // Restore saved volume from localStorage
+            const savedVol = localStorage.getItem("debridui-volume");
+            if (savedVol !== null) {
+                const v = Math.min(1, Math.max(0, parseFloat(savedVol)));
+                el.volume = v;
+            }
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
@@ -709,6 +722,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onVolumeChange = () => {
             setVolume(video.volume);
             setIsMuted(video.muted || video.volume === 0);
+            // Persist non-muted volume so it survives reload
+            if (!video.muted && video.volume > 0) {
+                localStorage.setItem("debridui-volume", String(video.volume));
+            }
         };
         const onEnded = () => {
             // Trakt scrobble stop (progress >= 80% → Trakt marks as watched)
@@ -1048,7 +1065,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Keyboard shortcuts - YouTube-style controls:
     // Space/K: play/pause | Arrow Left/Right: ±5s | J/L: ±10s | ,/.: ±0.5s frame-step (paused)
     // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles | [/]: speed
-    // G/H: subtitle delay -/+500ms | S: screenshot | N: next episode
+    // G/H: subtitle delay -/+500ms | N: next episode
+    // R: loop toggle | P: picture-in-picture | Home: start | End: near-end | 0-9: seek %
     useEffect(() => {
         const handler = (event: KeyboardEvent) => {
             const active = document.activeElement;
@@ -1131,6 +1149,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) - 0.5);
+                        showOsd("−0.5s");
                     }
                     break;
                 case ".":
@@ -1138,6 +1157,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) + 0.5);
+                        showOsd("+0.5s");
                     }
                     break;
                 case "[":
@@ -1182,6 +1202,42 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onNextRef.current();
                     }
                     break;
+                case "r":
+                case "R":
+                    event.preventDefault();
+                    setLoop((prev) => {
+                        const next = !prev;
+                        showOsd(next ? "Loop On" : "Loop Off");
+                        return next;
+                    });
+                    break;
+                case "p":
+                case "P":
+                    if (document.pictureInPictureEnabled) {
+                        event.preventDefault();
+                        if (document.pictureInPictureElement) {
+                            document.exitPictureInPicture();
+                            showOsd("Exit Picture in Picture");
+                        } else {
+                            videoRef.current?.requestPictureInPicture().catch(() => {});
+                            showOsd("Picture in Picture");
+                        }
+                    }
+                    break;
+                case "Home":
+                    event.preventDefault();
+                    seekTo(0);
+                    showOsd("Start");
+                    break;
+                case "End": {
+                    const dur = videoRef.current?.duration;
+                    if (dur && dur > 0) {
+                        event.preventDefault();
+                        seekTo(Math.max(0, dur - 5));
+                        showOsd("End");
+                    }
+                    break;
+                }
                 case "f":
                 case "F":
                     event.preventDefault();
@@ -1225,28 +1281,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         return next;
                     });
                     break;
-                case "s":
-                case "S": {
-                    const video = videoRef.current;
-                    if (!video) break;
+            }
+            // 0–9: seek to 0%–90% of duration (YouTube-style)
+            if (/^[0-9]$/.test(event.key)) {
+                const dur = videoRef.current?.duration;
+                if (dur && dur > 0) {
                     event.preventDefault();
-                    const canvas = document.createElement("canvas");
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    const ctx = canvas.getContext("2d");
-                    if (!ctx) break;
-                    ctx.drawImage(video, 0, 0);
-                    canvas.toBlob((blob) => {
-                        if (!blob) return;
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `screenshot_${Math.floor(video.currentTime)}s.png`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                    }, "image/png");
-                    showOsd("Screenshot saved");
-                    break;
+                    const pct = parseInt(event.key) / 10;
+                    seekTo(pct * dur);
+                    showOsd(`${parseInt(event.key) * 10}%`);
                 }
             }
         };
@@ -1274,7 +1317,30 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, [toggleFullscreen]);
 
-    // If we have subtitles, "warm up" the default subtitle by hitting our proxy first.
+    // Persist player preferences to settings store so they survive reload
+    useEffect(() => {
+        useSettingsStore.getState().set("playback", {
+            ...useSettingsStore.getState().settings.playback,
+            subtitleSize,
+        });
+    }, [subtitleSize]);
+    useEffect(() => {
+        useSettingsStore.getState().set("playback", {
+            ...useSettingsStore.getState().settings.playback,
+            subtitlePosition,
+        });
+    }, [subtitlePosition]);
+    useEffect(() => {
+        useSettingsStore.getState().set("playback", {
+            ...useSettingsStore.getState().settings.playback,
+            playbackSpeed: playbackRate,
+        });
+    }, [playbackRate]);
+    // Apply loop flag to the video element
+    useEffect(() => {
+        if (videoRef.current) videoRef.current.loop = loop;
+    }, [loop]);
+
     // This allows the proxy to convert SRT->VTT before the browser starts video playback, similar to Stremio web.
     useEffect(() => {
         const first = subtitles?.[0];
