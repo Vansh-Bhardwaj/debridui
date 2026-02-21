@@ -242,6 +242,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }, 1000);
     }, []);
 
+    const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastTapRef = useRef<{ time: number; x: number } | null>(null);
+    const [bufferedPercent, setBufferedPercent] = useState(0);
+
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -726,6 +730,26 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
 
+    // Track buffered range for seekbar visual feedback
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const update = () => {
+            if (!video.duration) return;
+            let end = 0;
+            for (let i = 0; i < video.buffered.length; i++) {
+                end = Math.max(end, video.buffered.end(i));
+            }
+            setBufferedPercent((end / video.duration) * 100);
+        };
+        video.addEventListener("progress", update);
+        video.addEventListener("durationchange", update);
+        return () => {
+            video.removeEventListener("progress", update);
+            video.removeEventListener("durationchange", update);
+        };
+    }, []);
+
     // When the tab/window returns from background, browsers stop decoding video
     // frames (audio continues). Force a micro-seek to restart the video decoder.
     // Uses both visibilitychange (tab switch) and focus (window occlusion).
@@ -873,6 +897,48 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             void document.exitFullscreen();
         }
     }, [fakeFullscreen]);
+
+    // Click to play/pause (250ms debounce to distinguish from double-click)
+    const handleContainerClick = useCallback((e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        if (clickTimerRef.current) {
+            clearTimeout(clickTimerRef.current);
+            clickTimerRef.current = null;
+            return;
+        }
+        clickTimerRef.current = setTimeout(() => {
+            clickTimerRef.current = null;
+            togglePlay();
+        }, 250);
+    }, [togglePlay]);
+
+    // Double-click to toggle fullscreen
+    const handleContainerDoubleClick = useCallback((e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        void toggleFullscreen();
+    }, [toggleFullscreen]);
+
+    // Mobile double-tap to seek \u00b110s (left half = back, right half = forward)
+    const handleMobileTap = useCallback((e: React.TouchEvent) => {
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        const now = Date.now();
+        const containerWidth = containerRef.current?.clientWidth ?? 1;
+        const last = lastTapRef.current;
+        if (last && now - last.time < 300 && Math.abs(touch.clientX - last.x) < 60) {
+            if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+            const delta = touch.clientX < containerWidth / 2 ? -10 : 10;
+            seekTo((videoRef.current?.currentTime ?? 0) + delta);
+            const dir: 1 | -1 = delta > 0 ? 1 : -1;
+            if (seekAccRef.current?.direction === dir) { seekAccRef.current.total += Math.abs(delta); }
+            else { seekAccRef.current = { direction: dir, total: Math.abs(delta) }; }
+            showOsd(delta < 0 ? `\u00ab ${seekAccRef.current.total}s` : `\u00bb ${seekAccRef.current.total}s`);
+            lastTapRef.current = null;
+        } else {
+            lastTapRef.current = { time: now, x: touch.clientX };
+        }
+    }, [seekTo, showOsd]);
 
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
 
@@ -1267,11 +1333,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 "relative w-full h-full flex flex-col bg-black debridui-legacy-player group",
                 fakeFullscreen && "fixed inset-0 z-[9999]"
             )}
-            onClick={(e) => {
-                if (e.target === containerRef.current || (e.target as HTMLElement).tagName === "VIDEO") {
-                    togglePlay();
-                }
-            }}>
+            onClick={handleContainerClick}
+            onDoubleClick={handleContainerDoubleClick}
+            onTouchEnd={handleMobileTap}>
             <LegacyPlayerSubtitleStyle />
             {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-white">
@@ -1354,8 +1418,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             osdVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-2"
                         )}
                     >
-                        <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90">
+                        <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90 min-w-[90px]">
                             {osdText}
+                            {/^Volume \d+%$/.test(osdText) && (
+                                <div className="mt-1.5 h-0.5 w-full rounded-full bg-white/20">
+                                    <div
+                                        className="h-0.5 rounded-full bg-white transition-[width] duration-75"
+                                        style={{ width: `${osdText.match(/(\d+)/)?.[1] ?? 0}%` }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1416,7 +1488,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Custom control bar */}
                     <div
                         className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
-                            <div className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
+                            <div data-player-controls className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
                                 {/* Seek bar */}
                                 <div className="group/seekbar relative flex items-center gap-3">
                                     {/* IntroDB segment markers on seekbar */}
@@ -1447,7 +1519,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         value={Number.isFinite(currentTime) ? currentTime : 0}
                                         onChange={handleSeekChange}
                                         style={{
-                                            background: `linear-gradient(to right, var(--primary) ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%, rgba(255, 255, 255, 0.3) ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%)`
+                                            background: (() => {
+                                                const p = duration > 0 ? (currentTime / duration) * 100 : 0;
+                                                const b = Math.max(bufferedPercent, p);
+                                                return `linear-gradient(to right, var(--primary) ${p}%, rgba(255,255,255,0.2) ${p}%, rgba(255,255,255,0.2) ${b}%, rgba(255,255,255,0.1) ${b}%)`;
+                                            })()
                                         }}
                                         className="h-1 w-full cursor-pointer appearance-none rounded-full accent-primary transition-all group-hover/seekbar:h-1.5"
                                     />
@@ -1792,7 +1868,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {ios && iosTapToPlay && (
                         <button
                             type="button"
-                            onClick={handleIosTapToPlay}
+                            onClick={(e) => { e.stopPropagation(); handleIosTapToPlay(); }}
                             className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white z-50">
                             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-md">
                                 <Play className="h-10 w-10 fill-current ml-1" />
