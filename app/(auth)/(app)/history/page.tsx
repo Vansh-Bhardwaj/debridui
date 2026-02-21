@@ -148,15 +148,16 @@ export default function HistoryPage() {
     const [clearOpen, setClearOpen] = useState(false);
     const [clearing, setClearing] = useState(false);
 
-    const { data, isLoading, error } = useQuery<{ history: HistoryEntry[] }>({
+    const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
         queryKey: ["watch-history", limit],
         queryFn: () =>
             fetch(`/api/history?limit=${limit}&offset=0`)
-                .then((r) => r.json() as Promise<{ history: HistoryEntry[] }>),
+                .then((r) => r.json() as Promise<{ history: HistoryEntry[]; total: number }>),
         staleTime: 30_000,
     });
 
     const entries = data?.history ?? [];
+    const total = data?.total ?? 0;
     const groups = groupByDate(entries);
     const dateKeys = Object.keys(groups);
 
@@ -164,9 +165,9 @@ export default function HistoryPage() {
         try {
             const res = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
-            queryClient.setQueryData<{ history: HistoryEntry[] }>(
+            queryClient.setQueryData<{ history: HistoryEntry[]; total: number }>(
                 ["watch-history", limit],
-                (old) => old ? { history: old.history.filter((e) => e.id !== id) } : old
+                (old) => old ? { ...old, history: old.history.filter((e) => e.id !== id) } : old
             );
         } catch {
             toast.error("Failed to remove entry");
@@ -226,10 +227,10 @@ export default function HistoryPage() {
                     {/* Stats row */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[
-                            { icon: History, label: "Sessions", value: entries.length.toString() },
-                            { icon: Clapperboard, label: "Titles", value: new Set(entries.map((e) => e.imdbId)).size.toString() },
-                            { icon: Clock, label: "Watch Time", value: formatDuration(entries.reduce((acc, e) => acc + e.progressSeconds, 0)) },
-                            { icon: Calendar, label: "This Week", value: entries.filter((e) => {
+                            { icon: History, label: "Sessions", value: total > entries.length ? `${entries.length} of ${total}` : entries.length.toString() },
+                            { icon: Clapperboard, label: "Titles", value: new Set(entries.map((e: HistoryEntry) => e.imdbId)).size.toString() },
+                            { icon: Clock, label: "Watch Time", value: formatDuration(entries.reduce((acc: number, e: HistoryEntry) => acc + e.progressSeconds, 0)) },
+                            { icon: Calendar, label: "This Week", value: entries.filter((e: HistoryEntry) => {
                                 const d = new Date(e.watchedAt);
                                 const now = new Date();
                                 return now.getTime() - d.getTime() < 7 * 24 * 60 * 60 * 1000;
@@ -263,11 +264,14 @@ export default function HistoryPage() {
                         </section>
                     ))}
 
-                    {entries.length >= limit && (
-                        <div className="flex justify-center pt-4">
+                    {entries.length < total && (
+                        <div className="flex flex-col items-center gap-1 pt-4">
                             <Button variant="outline" size="sm" onClick={handleLoadMore}>
                                 Load more
                             </Button>
+                            <span className="text-xs text-muted-foreground">
+                                Showing {entries.length} of {total}
+                            </span>
                         </div>
                     )}
                 </div>

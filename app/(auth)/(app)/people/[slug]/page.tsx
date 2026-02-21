@@ -39,7 +39,7 @@ const PersonHeader = memo(function PersonHeader({
                 </div>
                 {/* Content */}
                 <div className="relative pt-[12vh] sm:pt-[20vh] md:pt-[30vh] pb-8">
-                    <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] gap-6 md:gap-8">
+                    <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] xl:grid-cols-[280px_1fr] 2xl:grid-cols-[320px_1fr] gap-6 md:gap-8">
                         {/* Headshot skeleton */}
                         <div className="space-y-4">
                             <Skeleton className="max-md:max-w-[45vw] aspect-2/3 rounded-sm" />
@@ -121,7 +121,7 @@ const PersonHeader = memo(function PersonHeader({
 
             {/* Content */}
             <div className={fanartUrl || headshotUrl ? "relative pt-[12vh] sm:pt-[20vh] md:pt-[30vh] pb-8" : "pb-8"}>
-                <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] gap-6 md:gap-8">
+                <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] xl:grid-cols-[280px_1fr] 2xl:grid-cols-[320px_1fr] gap-6 md:gap-8">
                     {/* Headshot Column */}
                     <div className="space-y-4">
                         <div className="max-md:max-w-[45vw] aspect-2/3 overflow-hidden relative rounded-sm bg-muted/50">
@@ -131,7 +131,7 @@ const PersonHeader = memo(function PersonHeader({
                                     alt={person.name}
                                     fill
                                     unoptimized
-                                    sizes="(max-width: 768px) 45vw, 240px"
+                                    sizes="(max-width: 768px) 45vw, (max-width: 1280px) 240px, (max-width: 1536px) 280px, 320px"
                                     className="object-cover"
                                     loading="eager"
                                 />
@@ -150,7 +150,7 @@ const PersonHeader = memo(function PersonHeader({
                             <div className="text-xs tracking-widest uppercase text-muted-foreground">
                                 {person.known_for_department || "Person"}
                             </div>
-                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-light leading-tight">{person.name}</h1>
+                            <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-light leading-tight">{person.name}</h1>
                         </div>
 
                         {/* Metadata Line */}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, count } from "drizzle-orm";
 
 // GET /api/history?limit=20&offset=0 — paginated watch history, newest first
 export async function GET(request: NextRequest) {
@@ -16,15 +16,21 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(0, parseInt(searchParams.get("offset") ?? "0"));
 
     try {
-        const history = await db
-            .select()
-            .from(watchHistory)
-            .where(eq(watchHistory.userId, session.user.id))
-            .orderBy(desc(watchHistory.watchedAt))
-            .limit(limit)
-            .offset(offset);
+        const [history, [{ total }]] = await Promise.all([
+            db
+                .select()
+                .from(watchHistory)
+                .where(eq(watchHistory.userId, session.user.id))
+                .orderBy(desc(watchHistory.watchedAt))
+                .limit(limit)
+                .offset(offset),
+            db
+                .select({ total: count() })
+                .from(watchHistory)
+                .where(eq(watchHistory.userId, session.user.id)),
+        ]);
 
-        return NextResponse.json({ history }, {
+        return NextResponse.json({ history, total }, {
             headers: { "Cache-Control": "private, no-store" },
         });
     } catch (error) {

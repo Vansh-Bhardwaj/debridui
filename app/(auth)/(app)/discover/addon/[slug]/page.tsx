@@ -71,6 +71,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                         <h1 className="text-2xl font-light tracking-tight">{catalog.name}</h1>
                         <p className="text-xs text-muted-foreground mt-0.5">
                             {catalog.addonName} &middot; {catalog.type === "movie" ? "Movies" : "TV Shows"}
+                            {items?.length ? <> &middot; {items.length} items</> : null}
                         </p>
                     </div>
                 </div>
@@ -80,7 +81,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
             {error ? (
                 <ErrorState title="Failed to load catalog content" description="Please refresh and try again." className="py-14" />
             ) : itemsLoading ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3">
                     {Array.from({ length: 21 }, (_, i) => (
                         <div key={i} className="aspect-2/3 bg-muted/30 rounded-sm animate-pulse" />
                     ))}
@@ -92,7 +93,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                     className="py-14"
                 />
             ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3">
                     {items?.map((item, index) => {
                         const media = item.movie || item.show;
                         const type = item.movie ? "movie" : "show";
