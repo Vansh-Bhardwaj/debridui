@@ -79,8 +79,8 @@ async function syncToServer(key: ProgressKey, data: ProgressData): Promise<void>
     }
 }
 
-// Sync interval in milliseconds (60 seconds)
-const SYNC_INTERVAL = 60_000;
+// Sync interval in milliseconds (15 seconds)
+const SYNC_INTERVAL = 15_000;
 
 // Minimum progress change to trigger sync (5 seconds)
 const MIN_PROGRESS_CHANGE = 5;
@@ -136,7 +136,7 @@ export function useProgress(key: ProgressKey | null) {
         }
     }, [key]);
 
-    // Sync to server periodically
+    // Sync to server periodically + on tab hide
     useEffect(() => {
         if (!key || !isLoggedIn) return;
 
@@ -147,12 +147,18 @@ export function useProgress(key: ProgressKey | null) {
             }
         };
 
+        const onVisibilityChange = () => {
+            if (document.hidden) doSync();
+        };
+
         syncIntervalRef.current = setInterval(doSync, SYNC_INTERVAL);
+        document.addEventListener("visibilitychange", onVisibilityChange);
 
         return () => {
             if (syncIntervalRef.current) {
                 clearInterval(syncIntervalRef.current);
             }
+            document.removeEventListener("visibilitychange", onVisibilityChange);
             // Final sync on unmount
             if (lastProgressRef.current && isLoggedIn) {
                 syncToServer(key, lastProgressRef.current);
@@ -275,8 +281,8 @@ export function useContinueWatching() {
     const { data = [], isLoading } = useQuery({
         queryKey: ["continue-watching", isLoggedIn],
         queryFn: () => fetchContinueWatching(isLoggedIn),
-        staleTime: 5 * 60 * 1000, // 5 minutes — continue watching changes often
-        gcTime: 10 * 60 * 1000,
+        staleTime: 60 * 1000, // 1 minute — fresh data on page focus
+        gcTime: 5 * 60 * 1000,
         refetchOnWindowFocus: true,
     });
 

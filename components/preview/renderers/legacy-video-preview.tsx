@@ -228,11 +228,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // In-player OSD (on-screen display) for keyboard feedback
     const [osdText, setOsdText] = useState("");
+    const [osdVisible, setOsdVisible] = useState(false);
     const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const showOsd = useCallback((text: string) => {
         setOsdText(text);
+        setOsdVisible(true);
         if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
-        osdTimeoutRef.current = setTimeout(() => setOsdText(""), 800);
+        osdTimeoutRef.current = setTimeout(() => setOsdVisible(false), 1000);
     }, []);
 
     // Control bar auto-hide
@@ -1329,16 +1331,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
 
                     {/* In-player OSD for keyboard shortcut feedback */}
-                    {osdText && (
-                        <div
-                            key={osdText}
-                            className="absolute top-12 right-5 z-40 pointer-events-none animate-in fade-in slide-in-from-right-2 duration-200"
-                        >
-                            <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90">
-                                {osdText}
-                            </div>
+                    <div
+                        className={cn(
+                            "absolute top-12 right-5 z-40 pointer-events-none transition-all duration-200",
+                            osdVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-2"
+                        )}
+                    >
+                        <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90">
+                            {osdText}
                         </div>
-                    )}
+                    </div>
 
                     <VideoCodecWarning
                         show={shouldShowWarning && showCodecWarning}
