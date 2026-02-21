@@ -41,6 +41,7 @@ const ROUTE_LABELS: Record<string, string> = {
     links: "Links",
     status: "Status",
     watchlist: "Watchlist",
+    history: "History",
 };
 
 const formatSegment = (segment: string): string => {

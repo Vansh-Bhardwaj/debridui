@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw, ListVideo } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw, ListVideo, Shield, History, SearchIcon } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
@@ -27,6 +27,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { formatDistanceToNow, format } from "date-fns";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionDivider } from "@/components/common/section-divider";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/lib/utils/media-player";
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,8 @@ export default function SettingsPage() {
     const { mutate: disconnectTrakt, isPending: isDisconnecting } = useDisconnectTrakt();
     const tmdbSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [tmdbSaveState, setTmdbSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+    const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+    const [clearingHistory, setClearingHistory] = useState(false);
 
     const isTraktConnected = !!serverSettings?.trakt_access_token;
 
@@ -226,7 +229,31 @@ export default function SettingsPage() {
 
     const isCustom = streaming.profileId === "custom";
 
+    const handleClearWatchHistory = useCallback(async () => {
+        setClearingHistory(true);
+        try {
+            const res = await fetch("/api/history", { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed");
+            toast.success("Watch history cleared");
+            setClearHistoryOpen(false);
+        } catch {
+            toast.error("Failed to clear watch history");
+        } finally {
+            setClearingHistory(false);
+        }
+    }, []);
+
+    const handleClearSearchHistory = useCallback(() => {
+        try {
+            localStorage.removeItem("debridui-recent-searches");
+            toast.success("Search history cleared");
+        } catch {
+            toast.error("Failed to clear search history");
+        }
+    }, []);
+
     return (
+        <>
         <div className="mx-auto w-full max-w-4xl space-y-8 pb-16">
             <Suspense><TraktOAuthFeedback /></Suspense>
             <PageHeader icon={Settings} title="Settings" description="Manage your application preferences" />
@@ -886,6 +913,63 @@ export default function SettingsPage() {
                 </div>
             </section>
 
+            {/* ─── Privacy & Data ─── */}
+            <section className="space-y-4">
+                <SectionDivider label="Privacy & Data" />
+
+                <div className="space-y-2">
+                    {/* Clear Watch History */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <History className="size-4 text-muted-foreground shrink-0" />
+                                <p className="text-sm">Watch History</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground pl-6">
+                                Remove all server-side watch history entries
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => setClearHistoryOpen(true)}
+                        >
+                            <Trash2 className="size-3.5" />
+                            Clear History
+                        </Button>
+                    </div>
+
+                    {/* Clear Search History */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <SearchIcon className="size-4 text-muted-foreground shrink-0" />
+                                <p className="text-sm">Search History</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground pl-6">
+                                Remove recent search suggestions stored in your browser
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={handleClearSearchHistory}
+                        >
+                            <Trash2 className="size-3.5" />
+                            Clear Searches
+                        </Button>
+                    </div>
+
+                    {/* Data export note */}
+                    <div className="flex items-start gap-2 px-3 py-2 rounded-sm text-xs text-muted-foreground">
+                        <Shield className="size-3.5 shrink-0 mt-0.5" />
+                        <p>Your watch progress and history are only stored in your account and are never shared.</p>
+                    </div>
+                </div>
+            </section>
+
             {/* ─── About ─── */}
             <section className="space-y-4">
                 <SectionDivider label="About" />
@@ -900,5 +984,17 @@ export default function SettingsPage() {
                 </div>
             </section>
         </div>
+
+        <ConfirmDialog
+            open={clearHistoryOpen}
+            onOpenChange={setClearHistoryOpen}
+            title="Clear watch history?"
+            description="This will permanently delete all your watch history from the server. This cannot be undone."
+            confirmText="Clear History"
+            variant="destructive"
+            onConfirm={handleClearWatchHistory}
+            isConfirming={clearingHistory}
+        />
+    </>
     );
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 // GET /api/history?limit=20&offset=0 — paginated watch history, newest first
 export async function GET(request: NextRequest) {
@@ -84,5 +84,29 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("[history] POST error:", error);
         return NextResponse.json({ error: "Failed to save history" }, { status: 500 });
+    }
+}
+
+// DELETE /api/history — delete a single entry (?id=uuid) or all entries (no params)
+export async function DELETE(request: NextRequest) {
+    const { data: session } = await auth.getSession();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const id = new URL(request.url).searchParams.get("id");
+
+    try {
+        if (id) {
+            await db.delete(watchHistory).where(
+                and(eq(watchHistory.id, id), eq(watchHistory.userId, session.user.id))
+            );
+        } else {
+            await db.delete(watchHistory).where(eq(watchHistory.userId, session.user.id));
+        }
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("[history] DELETE error:", error);
+        return NextResponse.json({ error: "Failed to delete history" }, { status: 500 });
     }
 }
