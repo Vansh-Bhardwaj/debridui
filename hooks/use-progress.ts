@@ -335,14 +335,6 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
             if (res.ok) {
                 const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }> };
 
-                const serverKeys = new Set(
-                    serverProgress.map((item) =>
-                        getStorageKey({ imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode })
-                    )
-                );
-
-                const SERVER_SYNC_GRACE = 2 * 60 * 1000;
-                const now = Date.now();
                 const merged = new Map<string, ProgressKey & ProgressData>();
 
                 // Server items are sorted by updatedAt DESC — keep the first (newest) per key
@@ -365,17 +357,11 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     }
                 }
 
+                // Local items: include if not on server, or if more recent than server entry
                 for (const item of localItems) {
                     const storageKey = getStorageKey(item);
                     const existing = merged.get(storageKey);
-
-                    if (!serverKeys.has(storageKey)) {
-                        if (now - item.updatedAt < SERVER_SYNC_GRACE) {
-                            merged.set(storageKey, item);
-                        } else {
-                            try { localStorage.removeItem(storageKey); } catch { }
-                        }
-                    } else if (existing && item.updatedAt > existing.updatedAt) {
+                    if (!existing || item.updatedAt > existing.updatedAt) {
                         merged.set(storageKey, item);
                     }
                 }
