@@ -105,7 +105,7 @@ function getTraktSecret(): string | undefined {
  * Refreshes the Trakt access token using the stored refresh token.
  * Returns the new access token on success, or null if refresh fails.
  */
-export async function refreshTraktToken(): Promise<string | null> {
+export async function refreshTraktToken(): Promise<{ accessToken: string; expiresAt: number } | null> {
     const { data: session } = await auth.getSession();
     if (!session) return null;
 
@@ -149,7 +149,7 @@ export async function refreshTraktToken(): Promise<string | null> {
                 },
             });
 
-        return tokens.access_token;
+        return { accessToken: tokens.access_token, expiresAt };
     } catch (error) {
         console.error("[trakt] Token refresh failed:", error);
         return null;

@@ -341,8 +341,6 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     )
                 );
 
-                const SERVER_SYNC_GRACE = 2 * 60 * 1000;
-                const now = Date.now();
                 const merged = new Map<string, ProgressKey & ProgressData>();
 
                 // Server items are sorted by updatedAt DESC — keep the first (newest) per key
@@ -370,11 +368,10 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     const existing = merged.get(storageKey);
 
                     if (!serverKeys.has(storageKey)) {
-                        if (now - item.updatedAt < SERVER_SYNC_GRACE) {
-                            merged.set(storageKey, item);
-                        } else {
-                            try { localStorage.removeItem(storageKey); } catch { }
-                        }
+                        // Keep local fallback when server is missing this key.
+                        // Server-side data can be temporarily empty/stale due sync lag,
+                        // migration timing, or rate limits.
+                        merged.set(storageKey, item);
                     } else if (existing && item.updatedAt > existing.updatedAt) {
                         merged.set(storageKey, item);
                     }
