@@ -196,6 +196,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const hasPreloaded = useRef(false);
     const [error, setError] = useState(false);
     const [showCodecWarning, setShowCodecWarning] = useState(true);
+    const [showHelp, setShowHelp] = useState(false);
     const ios = isIOS();
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
     const [showLoadingHint, setShowLoadingHint] = useState(false);
@@ -1091,6 +1092,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
             switch (event.key) {
                 case "Escape":
+                    if (showHelp) {
+                        event.preventDefault();
+                        setShowHelp(false);
+                        break;
+                    }
                     if (autoNextCountdown !== null) {
                         event.preventDefault();
                         if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
@@ -1238,6 +1244,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     }
                     break;
                 }
+                case "?":
+                    event.preventDefault();
+                    setShowHelp((v) => !v);
+                    break;
                 case "f":
                 case "F":
                     event.preventDefault();
@@ -1296,7 +1306,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, isFullscreen, showHelp, autoNextCountdown, cancelAutoNext]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -1590,6 +1600,48 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             )}
                         </div>
                     </div>
+
+                    {/* Keyboard shortcuts help overlay (?key) */}
+                    {showHelp && (
+                        <div
+                            className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
+                            onClick={() => setShowHelp(false)}>
+                            <div
+                                className="rounded-sm border border-white/10 bg-black/90 p-6 mx-4 max-w-lg w-full"
+                                onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <span className="text-[10px] tracking-widest uppercase text-white/40">Keyboard Shortcuts</span>
+                                    <button onClick={() => setShowHelp(false)} className="text-white/30 hover:text-white text-xs transition-colors">×</button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                                    {([
+                                        ["Space / K", "Play / Pause"],
+                                        ["\u2190 \u2192", "Seek \u00b15s"],
+                                        ["J / L", "Seek \u00b110s"],
+                                        ["\u2191 \u2193", "Volume \u00b110%"],
+                                        ["M", "Mute / Unmute"],
+                                        ["F", "Fullscreen"],
+                                        ["R", "Loop Toggle"],
+                                        ["P", "Picture in Picture"],
+                                        ["C", "Cycle Subtitles"],
+                                        ["G / H", "Sub Delay \u2212/+500ms"],
+                                        ["[ / ]", "Speed \u22120.25x / +0.25x"],
+                                        ["0 \u2013 9", "Seek to 0% \u2013 90%"],
+                                        ["Home", "Jump to Start"],
+                                        ["End", "Jump to Near-End"],
+                                        ["N", "Next Episode"],
+                                        [", / .", "Frame Step \u00b10.5s (paused)"],
+                                        ["?", "Show / Hide Help"],
+                                    ] as [string, string][]).map(([key, desc]) => (
+                                        <div key={key} className="flex items-center gap-3">
+                                            <kbd className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/80">{key}</kbd>
+                                            <span className="text-xs text-white/50">{desc}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <VideoCodecWarning
                         show={shouldShowWarning && showCodecWarning}
