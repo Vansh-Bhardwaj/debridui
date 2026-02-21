@@ -98,13 +98,28 @@ function PairPageContent() {
         const selfId = detectDevice().id;
         switch (msg.type) {
             case "devices": {
-                setDevices(msg.devices.filter((d) => d.id !== selfId));
+                // Deduplicate by name+deviceType, keeping the most recently seen entry.
+                // Handles phantom entries from iOS Safari (ITP clears localStorage,
+                // generating new deviceIds while old hibernated sockets linger).
+                const seen = new Map<string, DeviceInfo>();
+                for (const d of msg.devices) {
+                    if (d.id === selfId) continue;
+                    const key = `${d.name}::${d.deviceType}`;
+                    const existing = seen.get(key);
+                    if (!existing || d.lastSeen > existing.lastSeen) {
+                        seen.set(key, d);
+                    }
+                }
+                setDevices(Array.from(seen.values()));
                 break;
             }
             case "device-joined":
                 if (msg.device.id !== selfId) {
                     setDevices((prev) => [
-                        ...prev.filter((d) => d.id !== msg.device.id),
+                        ...prev.filter((d) =>
+                            d.id !== msg.device.id &&
+                            !(d.name === msg.device.name && d.deviceType === msg.device.deviceType)
+                        ),
                         msg.device,
                     ]);
                 }
@@ -507,7 +522,7 @@ function RemoteController({
                         variant="ghost"
                         size="icon"
                         className="size-10 text-sm tabular-nums font-medium"
-                        onClick={() => onCommand("seek", { position: Math.max(0, displayTime - 10) })}
+                        onClick={() => onCommand("seek", { position: Math.max(0, interpolatedTime - 10) })}
                         title="Rewind 10s"
                         aria-label="Rewind 10 seconds"
                     >
@@ -551,7 +566,7 @@ function RemoteController({
                         variant="ghost"
                         size="icon"
                         className="size-10 text-sm tabular-nums font-medium"
-                        onClick={() => onCommand("seek", { position: Math.min(duration, displayTime + 10) })}
+                        onClick={() => onCommand("seek", { position: Math.min(duration, interpolatedTime + 10) })}
                         title="Forward 10s"
                         aria-label="Forward 10 seconds"
                     >
@@ -1190,19 +1205,19 @@ function SearchSection({
         setResults([]);
 
         const requestId = crypto.randomUUID();
-        const browseHandler: EventListener = (e) => {
-            const detail = (e as CustomEvent).detail;
-            if (detail?.requestId === requestId) {
-                clearTimeout(timeout);
-                setResults(detail.files);
-                setSearching(false);
-                window.removeEventListener("pair-browse-result", browseHandler as EventListener);
-            }
+        const timeout = setTimeout(() => setSearching(false), 15000);
+
+        // Listen for the browse response
+        const handler = (e: MessageEvent) => {
+            try {
+                const msg = JSON.parse(e.data) as ServerMessage;
+                if (msg.type === "browse-response" && msg.response.requestId === requestId) {
+                    clearTimeout(timeout);
+                    setResults(msg.response.files);
+                    setSearching(false);
+                }
+            } catch { /* ignore */ }
         };
-        const timeout = setTimeout(() => {
-            setSearching(false);
-            window.removeEventListener("pair-browse-result", browseHandler as EventListener);
-        }, 15000);
 
         // We can't easily hook into the client's message handler, so use the browse protocol
         // by sending a browse request. Results come back via the normal message flow.
@@ -1217,7 +1232,24 @@ function SearchSection({
         // Send the request and wait for the pair page's handleMessage to get the response.
         // Since we can't easily do that, let's store the request and check in handleMessage.
         // For now, use a global event approach:
-        window.addEventListener("pair-browse-result", browseHandler as EventListener);
+        const browseHandler = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail?.requestId === requestId) {
+                clearTimeout(timeout);
+                setResults(detail.files);
+                setSearching(false);
+                window.removeEventListener("pair-browse-result", browseHandler);
+            }
+        };
+        window.addEventListener("pair-browse-result", browseHandler);
+
+        // Clean up the message handler reference
+        void handler;
+
+        return () => {
+            clearTimeout(timeout);
+            window.removeEventListener("pair-browse-result", browseHandler);
+        };
     }, [query, client, targetId]);
 
     return (

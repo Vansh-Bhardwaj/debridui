@@ -23,12 +23,11 @@ function ensureRefreshHandler() {
     if (refreshHandlerSet) return;
     refreshHandlerSet = true;
     traktClient.setRefreshHandler(async () => {
-        const refreshed = await refreshTraktToken();
-        if (refreshed) {
-            traktClient.setAccessToken(refreshed.accessToken, refreshed.expiresAt);
-            return refreshed.accessToken;
+        const newToken = await refreshTraktToken();
+        if (newToken) {
+            traktClient.setAccessToken(newToken);
         }
-        return null;
+        return newToken;
     });
 }
 

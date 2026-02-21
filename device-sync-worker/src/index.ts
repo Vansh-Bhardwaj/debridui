@@ -288,14 +288,18 @@ export class DeviceSync extends DurableObject<Env> {
             lastSeen: Date.now(),
         };
 
-        // Close stale sockets for the same deviceId reconnecting.
-        // Do not dedupe by name/deviceType because multiple real devices can
-        // share the same display name (e.g. "Chrome on Windows").
+        // Close stale sockets from the same physical device (same name + deviceType)
+        // or same deviceId reconnecting. This handles iOS Safari which doesn't fire
+        // beforeunload/WebSocket close when the page is killed, and ITP clearing
+        // localStorage causing new deviceIds on each visit.
         for (const existing of this.ctx.getWebSockets()) {
             if (existing === ws) continue;
             const att = existing.deserializeAttachment() as { deviceId?: string; device?: DeviceInfo; registered?: boolean } | null;
             if (!att?.registered || !att.device) continue;
-            if (att.deviceId === attachment.deviceId) {
+            if (
+                att.deviceId === attachment.deviceId ||
+                (att.device.name === device.name && att.device.deviceType === device.deviceType)
+            ) {
                 try {
                     existing.close(1000, "Replaced by new connection");
                 } catch { /* already closed */ }

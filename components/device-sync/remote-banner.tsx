@@ -267,7 +267,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.max(0, displayTime - 10) })}
+                                    onClick={() => cmd("seek", { position: Math.max(0, interpolatedTime - 10) })}
                                     title="Rewind 10s"
                                     aria-label="Rewind 10 seconds"
                                 >
@@ -311,7 +311,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.min(duration, displayTime + 10) })}
+                                    onClick={() => cmd("seek", { position: Math.min(duration, interpolatedTime + 10) })}
                                     title="Forward 10s"
                                     aria-label="Forward 10 seconds"
                                 >
