@@ -8,6 +8,7 @@ import { Breadcrumbs } from "@/components/common/breadcrumbs";
 import { SearchButton } from "@/components/common/search-button";
 import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
+import { SourcePickerSheet } from "@/components/mdb/source-picker";
 import { VLCMiniPlayer } from "@/components/vlc/vlc-mini-player";
 import { DevicePicker } from "@/components/device-sync/device-picker";
 import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
@@ -76,6 +77,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </SidebarInset>
                 </SidebarProvider>
                 <PreviewDialog />
+                <SourcePickerSheet />
                 <PreviewRegistryLoader />
                 {/* Bottom floating panels — stacked vertically to avoid overlap */}
                 <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none flex flex-col items-stretch pb-[env(safe-area-inset-bottom)]">

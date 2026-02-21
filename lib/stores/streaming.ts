@@ -44,6 +44,13 @@ interface StreamingState {
     allFetchedSources: AddonSource[];
     episodeContext: EpisodeContext | null;
 
+    // Source picker
+    sourcePickerOpen: boolean;
+    pendingPlayContext: { displayTitle: string; subtitles: AddonSubtitle[]; progressKey: ProgressKey | null } | null;
+    openSourcePicker: () => void;
+    closeSourcePicker: () => void;
+    playAlternativeSource: (source: AddonSource) => void;
+
     // Preloading
     preloadedData: PreloadedData | null;
     preloadNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
@@ -216,6 +223,8 @@ interface ShowSourceToastParams {
     autoPlay: boolean;
     allowUncached: boolean;
     onPlay: () => void;
+    otherSourcesCount?: number;
+    onPickSource?: () => void;
 }
 
 /**
@@ -262,7 +271,7 @@ async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: str
     return { url };
 }
 
-function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay }: ShowSourceToastParams) {
+function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay, otherSourcesCount, onPickSource }: ShowSourceToastParams) {
     if (autoPlay && (isCached || allowUncached)) {
         dismissToast();
         onPlay();
@@ -273,12 +282,17 @@ function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onP
     const cacheStatus = isCached ? "Cached" : "Not cached";
     const description = `${meta} · ${cacheStatus}`.replace(/^ · /, "");
 
+    const cancelObj = otherSourcesCount && otherSourcesCount > 0 && onPickSource
+        ? { label: `${otherSourcesCount} more`, onClick: onPickSource }
+        : undefined;
+
     if (isCached || allowUncached) {
         toast.success(title, {
             id: toastId ?? undefined,
             position: TOAST_POSITION,
             description,
             action: { label: "Play", onClick: onPlay },
+            cancel: cancelObj,
             duration: Infinity,
         });
     } else {
@@ -287,6 +301,7 @@ function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onP
             position: TOAST_POSITION,
             description,
             action: { label: "Play Anyway", onClick: onPlay },
+            cancel: cancelObj,
             duration: Infinity,
         });
     }
@@ -298,6 +313,21 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     allFetchedSources: [],
     episodeContext: null,
     preloadedData: null,
+
+    // Source picker
+    sourcePickerOpen: false,
+    pendingPlayContext: null,
+    openSourcePicker: () => set({ sourcePickerOpen: true }),
+    closeSourcePicker: () => set({ sourcePickerOpen: false }),
+    playAlternativeSource: (source) => {
+        const { pendingPlayContext, playSource } = get();
+        if (!pendingPlayContext) return;
+        set({ sourcePickerOpen: false, selectedSource: source });
+        playSource(source, pendingPlayContext.displayTitle, {
+            subtitles: pendingPlayContext.subtitles.length > 0 ? pendingPlayContext.subtitles : undefined,
+            progressKey: pendingPlayContext.progressKey ?? undefined,
+        });
+    },
 
     setEpisodeContext: (context) => {
         if (context) {
@@ -530,7 +560,12 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const source = result.source!;
             const progressKey = getProgressKey();
 
-            set({ activeRequest: null, selectedSource: source });
+            // Store context for source picker (alternative source selection)
+            set({
+                activeRequest: null,
+                selectedSource: source,
+                pendingPlayContext: { displayTitle, subtitles: englishSubtitles, progressKey },
+            });
 
             showSourceToast({
                 source,
@@ -543,6 +578,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         progressKey: progressKey ?? undefined,
                         subtitles: englishSubtitles.length > 0 ? englishSubtitles : undefined,
                     }),
+                otherSourcesCount: result.allSorted.length - 1,
+                onPickSource: () => set({ sourcePickerOpen: true }),
             });
             timer.end({ status: "ok", selectedCached: result.isCached });
         } catch (error) {
