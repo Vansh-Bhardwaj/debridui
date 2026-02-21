@@ -1048,6 +1048,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Keyboard shortcuts - YouTube-style controls:
     // Space/K: play/pause | Arrow Left/Right: ±5s | J/L: ±10s | ,/.: ±0.5s frame-step (paused)
     // Arrow Up/Down: volume | M: mute | F: fullscreen | C: cycle subtitles | [/]: speed
+    // G/H: subtitle delay -/+500ms | S: screenshot | N: next episode
     useEffect(() => {
         const handler = (event: KeyboardEvent) => {
             const active = document.activeElement;
@@ -1224,6 +1225,29 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         return next;
                     });
                     break;
+                case "s":
+                case "S": {
+                    const video = videoRef.current;
+                    if (!video) break;
+                    event.preventDefault();
+                    const canvas = document.createElement("canvas");
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) break;
+                    ctx.drawImage(video, 0, 0);
+                    canvas.toBlob((blob) => {
+                        if (!blob) return;
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `screenshot_${Math.floor(video.currentTime)}s.png`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }, "image/png");
+                    showOsd("Screenshot saved");
+                    break;
+                }
             }
         };
 
@@ -1755,7 +1779,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             return (
                                                                 <DropdownMenuItem
                                                                     key={i}
-                                                                    onClick={() => setSelectedAudioIndex(i)}
+                                                                    onClick={() => { setSelectedAudioIndex(i); showOsd(`Audio: ${label}`); }}
                                                                     className={
                                                                         selectedAudioIndex === i
                                                                             ? "bg-primary text-primary-foreground"
@@ -1844,7 +1868,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
                                                             <button
                                                                 key={rate}
-                                                                onClick={() => setPlaybackRate(rate)}
+                                                                onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`); }}
                                                                 className={`rounded px-1 py-1.5 text-[10px] font-medium transition-colors ${playbackRate === rate ? "bg-primary text-primary-foreground" : "hover:bg-white/10"}`}
                                                             >
                                                                 {rate === 1 ? "Normal" : `${rate}x`}
@@ -1954,8 +1978,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                     if (!video) return;
                                                                     if (document.pictureInPictureElement) {
                                                                         document.exitPictureInPicture();
+                                                                        showOsd("Exit Picture in Picture");
                                                                     } else {
                                                                         video.requestPictureInPicture().catch(() => {});
+                                                                        showOsd("Picture in Picture");
                                                                     }
                                                                 }}
                                                                 className="gap-2 focus:bg-white/10 focus:text-white mx-1">
