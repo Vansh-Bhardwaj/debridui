@@ -230,11 +230,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [osdText, setOsdText] = useState("");
     const [osdVisible, setOsdVisible] = useState(false);
     const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Accumulates total seek distance while a seek key is held
+    const seekAccRef = useRef<{ direction: 1 | -1; total: number } | null>(null);
     const showOsd = useCallback((text: string) => {
         setOsdText(text);
         setOsdVisible(true);
         if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
-        osdTimeoutRef.current = setTimeout(() => setOsdVisible(false), 1000);
+        osdTimeoutRef.current = setTimeout(() => {
+            setOsdVisible(false);
+            seekAccRef.current = null;
+        }, 1000);
     }, []);
 
     // Control bar auto-hide
@@ -978,28 +983,40 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     togglePlay();
                     showOsd(videoRef.current?.paused ? "▶ Play" : "⏸ Pause");
                     break;
-                case "ArrowLeft":
+                case "ArrowLeft": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 5);
-                    showOsd("« 5s");
+                    if (seekAccRef.current?.direction === -1) { seekAccRef.current.total += 5; }
+                    else { seekAccRef.current = { direction: -1, total: 5 }; }
+                    showOsd(`« ${seekAccRef.current.total}s`);
                     break;
-                case "ArrowRight":
+                }
+                case "ArrowRight": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 5);
-                    showOsd("» 5s");
+                    if (seekAccRef.current?.direction === 1) { seekAccRef.current.total += 5; }
+                    else { seekAccRef.current = { direction: 1, total: 5 }; }
+                    showOsd(`» ${seekAccRef.current.total}s`);
                     break;
+                }
                 case "j":
-                case "J":
+                case "J": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 10);
-                    showOsd("« 10s");
+                    if (seekAccRef.current?.direction === -1) { seekAccRef.current.total += 10; }
+                    else { seekAccRef.current = { direction: -1, total: 10 }; }
+                    showOsd(`« ${seekAccRef.current.total}s`);
                     break;
+                }
                 case "l":
-                case "L":
+                case "L": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 10);
-                    showOsd("» 10s");
+                    if (seekAccRef.current?.direction === 1) { seekAccRef.current.total += 10; }
+                    else { seekAccRef.current = { direction: 1, total: 10 }; }
+                    showOsd(`» ${seekAccRef.current.total}s`);
                     break;
+                }
                 case ",":
                 case "<":
                     if (videoRef.current?.paused) {
