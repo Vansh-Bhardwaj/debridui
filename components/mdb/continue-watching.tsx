@@ -112,6 +112,9 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
         e.preventDefault();
         e.stopPropagation();
         if (!nextEpisode || !media) return;
+        // Mark the current episode as done so it no longer appears in continue watching
+        // while the new episode is loading. The user explicitly chose to skip forward.
+        onRemove(item);
         const enabledAddons = addons
             .filter((a: Addon) => a.enabled)
             .sort((a: Addon, b: Addon) => a.order - b.order)
@@ -120,7 +123,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             { imdbId: item.imdbId, type: item.type, title: media.title || "Unknown", tvParams: nextEpisode },
             enabledAddons,
         );
-    }, [nextEpisode, play, addons, item.imdbId, item.type, media]);
+    }, [nextEpisode, play, addons, item, media, onRemove]);
 
     if (loading) {
         return (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
 
@@ -97,6 +97,7 @@ const MIN_PROGRESS_CHANGE = 5;
 export function useProgress(key: ProgressKey | null) {
     const { data: session } = authClient.useSession();
     const isLoggedIn = !!session?.user;
+    const queryClient = useQueryClient();
 
     const [initialProgress, setInitialProgress] = useState<number | null>(() => {
         if (!key) return null;
@@ -134,7 +135,12 @@ export function useProgress(key: ProgressKey | null) {
         } else {
             queueMicrotask(() => setInitialProgress(null));
         }
-    }, [key]);
+
+        // Invalidate the continue-watching cache so the dashboard reflects the
+        // newly started item (and any just-completed one) without waiting for staleTime.
+        // Only when a real key is present (null key means no item is being tracked).
+        if (key) queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+    }, [key, queryClient]);
 
     // Sync to server periodically + on tab hide
     useEffect(() => {
@@ -259,7 +265,10 @@ export function useProgress(key: ProgressKey | null) {
 
             fetchWithTimeout(`/api/progress?${params}`, { method: "DELETE" }, 8000).catch(() => { });
         }
-    }, [key, isLoggedIn]);
+
+        // Invalidate cache so the dashboard removes this item immediately
+        queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+    }, [key, isLoggedIn, queryClient]);
 
     return {
         initialProgress,
@@ -281,7 +290,7 @@ export function useContinueWatching() {
     const { data = [], isLoading } = useQuery({
         queryKey: ["continue-watching", isLoggedIn],
         queryFn: () => fetchContinueWatching(isLoggedIn),
-        staleTime: 60 * 1000, // 1 minute — fresh data on page focus
+        staleTime: 30 * 1000, // 30 seconds — keeps data reasonably fresh without hammering the server
         gcTime: 5 * 60 * 1000,
         refetchOnWindowFocus: true,
     });
