@@ -324,6 +324,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const lastProgressUpdateRef = useRef<number>(0);
     const hasSeenkedToInitialRef = useRef(false);
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
+    // Minimum fraction of total duration the user must have actually played before
+    // a seek-to-end (position > 95%) is counted as completion. Prevents marking an
+    // episode done when the user merely scrubs to the last few seconds to preview it.
+    const COMPLETION_MIN_WATCH_FRACTION = 0.3;
+
+    // Track actual wall-clock watch time (excludes time spent seeking/paused).
+    // Used to prevent a simple seek-to-end from triggering "episode completed".
+    const watchStartRef = useRef<number | null>(null);
+    const watchedTimeRef = useRef<number>(0);
 
     // Reset skipped-segment tracking whenever the episode changes
     const prevProgressKeyRef = useRef(progressKey);
@@ -336,6 +345,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 skipGraceTimerRef.current = null;
             }
             setActiveSkipSegment(null);
+            // Reset actual watch-time counters for the new episode
+            watchedTimeRef.current = 0;
+            watchStartRef.current = null;
         }
     }, [progressKey]);
 
@@ -647,6 +659,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         const onPause = () => {
             setIsPlaying(false);
+            // Accumulate elapsed watch time when the video pauses (includes seeking)
+            if (watchStartRef.current !== null) {
+                watchedTimeRef.current += (Date.now() - watchStartRef.current) / 1000;
+                watchStartRef.current = null;
+            }
             // Sync progress to DB on pause
             forceSync();
             // Trakt scrobble pause
@@ -709,15 +726,21 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 updateProgress(time, dur);
             }
 
-            // Mark completed at 95%
+            // Mark completed at 95% — only if the user has genuinely watched
+            // at least 30% of the total duration (guards against a simple seek-to-end).
+            // onEnded always marks complete regardless of this threshold.
             if (progressKey && dur > 0 && time / dur > 0.95) {
-                markCompleted();
+                if (watchedTimeRef.current >= dur * COMPLETION_MIN_WATCH_FRACTION) {
+                    markCompleted();
+                }
             }
         };
         const onWaiting = () => setIsLoading(true);
         const onPlaying = () => {
             setIsLoading(false);
             setIsPlaying(true);
+            // Start (or resume) the actual watch-time timer
+            watchStartRef.current = Date.now();
         };
         const onDurationChange = () => setDuration(video.duration || 0);
         const onVolumeChange = () => {
@@ -729,6 +752,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         };
         const onEnded = () => {
+            // Flush any remaining watch time accumulated since the last pause
+            if (watchStartRef.current !== null) {
+                watchedTimeRef.current += (Date.now() - watchStartRef.current) / 1000;
+                watchStartRef.current = null;
+            }
             // Trakt scrobble stop (progress >= 80% → Trakt marks as watched)
             scrobble("stop", 100);
             // Mark as completed when video ends (> 95% watched)
