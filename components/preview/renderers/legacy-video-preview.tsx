@@ -232,6 +232,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Accumulates total seek distance while a seek key is held
     const seekAccRef = useRef<{ direction: 1 | -1; total: number } | null>(null);
+    // Auto-next episode countdown
+    const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+    const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const onNextRef = useRef(onNext);
+    onNextRef.current = onNext;
+    // Seekbar hover tooltip
+    const [seekHoverPct, setSeekHoverPct] = useState<number | null>(null);
     const showOsd = useCallback((text: string) => {
         setOsdText(text);
         setOsdVisible(true);
@@ -245,6 +252,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastTapRef = useRef<{ time: number; x: number } | null>(null);
     const [bufferedPercent, setBufferedPercent] = useState(0);
+
+    const cancelAutoNext = useCallback(() => {
+        if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+        }
+        setAutoNextCountdown(null);
+    }, []);
 
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
@@ -701,8 +716,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (progressKey) {
                 markCompleted();
             }
-            // Auto-next if available
-            if (onNext) onNext();
+            // Auto-next if available — with 5-second countdown
+            if (onNext) {
+                const cb = onNext;
+                setAutoNextCountdown(5);
+                let remaining = 5;
+                countdownTimerRef.current = setInterval(() => {
+                    remaining--;
+                    if (remaining <= 0) {
+                        clearInterval(countdownTimerRef.current!);
+                        countdownTimerRef.current = null;
+                        setAutoNextCountdown(null);
+                        cb();
+                    } else {
+                        setAutoNextCountdown(remaining);
+                    }
+                }, 1000);
+            }
         };
 
         video.addEventListener("play", onPlay);
@@ -726,6 +756,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (skipGraceTimerRef.current) {
                 clearTimeout(skipGraceTimerRef.current);
                 skipGraceTimerRef.current = null;
+            }
+            if (countdownTimerRef.current) {
+                clearInterval(countdownTimerRef.current);
+                countdownTimerRef.current = null;
+                setAutoNextCountdown(null);
             }
         };
     }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
@@ -1036,6 +1071,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
             switch (event.key) {
                 case "Escape":
+                    if (autoNextCountdown !== null) {
+                        event.preventDefault();
+                        if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
+                        setAutoNextCountdown(null);
+                        break;
+                    }
                     if (fakeFullscreen) {
                         event.preventDefault();
                         setFakeFullscreen(false);
@@ -1131,6 +1172,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     toggleMute();
                     showOsd(videoRef.current?.muted ? "🔇 Muted" : "🔊 Unmuted");
                     break;
+                case "n":
+                case "N":
+                    if (onNextRef.current) {
+                        event.preventDefault();
+                        cancelAutoNext();
+                        onNextRef.current();
+                    }
+                    break;
                 case "f":
                 case "F":
                     event.preventDefault();
@@ -1160,7 +1209,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, autoNextCountdown, cancelAutoNext]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -1455,6 +1504,25 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
+                    {/* Auto-next episode countdown */}
+                    {autoNextCountdown !== null && onNext && (
+                        <div className="absolute bottom-24 right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <button
+                                type="button"
+                                onClick={() => { cancelAutoNext(); onNext(); }}
+                                className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/80 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-primary hover:border-primary active:scale-95">
+                                <SkipForward className="size-4" />
+                                Next Episode ({autoNextCountdown})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={cancelAutoNext}
+                                className="self-end px-3 py-1 rounded-sm text-xs text-white/60 hover:text-white/90 transition-colors">
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+
                     {/* IntroDB: Skip Intro / Skip Recap / Skip Credits button */}
                     {activeSkipSegment && !autoSkipIntro && (
                         <div className="absolute bottom-24 right-4 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -1491,6 +1559,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             <div data-player-controls className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
                                 {/* Seek bar */}
                                 <div className="group/seekbar relative flex items-center gap-3">
+                                    {/* Seekbar hover tooltip */}
+                                    {seekHoverPct !== null && duration > 0 && (
+                                        <div
+                                            className="absolute bottom-full mb-3 -translate-x-1/2 pointer-events-none z-50"
+                                            style={{ left: `${seekHoverPct * 100}%` }}
+                                        >
+                                            <div className="rounded-sm bg-black/90 px-2 py-0.5 text-xs font-medium text-white whitespace-nowrap">
+                                                {formatTime(seekHoverPct * duration)}
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* IntroDB segment markers on seekbar */}
                                     {introSegments && duration > 0 && (
                                         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -1518,6 +1597,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         step={0.1}
                                         value={Number.isFinite(currentTime) ? currentTime : 0}
                                         onChange={handleSeekChange}
+                                        onMouseMove={(e) => {
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            setSeekHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+                                        }}
+                                        onMouseLeave={() => setSeekHoverPct(null)}
                                         style={{
                                             background: (() => {
                                                 const p = duration > 0 ? (currentTime / duration) * 100 : 0;
