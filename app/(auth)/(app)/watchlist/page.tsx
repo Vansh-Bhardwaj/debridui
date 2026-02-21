@@ -11,10 +11,12 @@ import {
     useTraktCalendarShows,
     useTraktCalendarMovies,
     useTraktRecentEpisodes,
+    useTraktFavoritesMovies,
+    useTraktFavoritesShows,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
-import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell, Monitor, Clapperboard, Clock } from "lucide-react";
-import { type TraktCalendarItem, type TraktWatchlistItem, type TraktMedia } from "@/lib/trakt";
+import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell, Monitor, Clapperboard, Clock, Heart } from "lucide-react";
+import { type TraktCalendarItem, type TraktWatchlistItem, type TraktMedia, type TraktFavoriteItem } from "@/lib/trakt";
 import Link from "next/link";
 import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
@@ -284,6 +286,8 @@ const WatchlistPage = memo(function WatchlistPage() {
     const calendarShows = useTraktCalendarShows();
     const calendarMovies = useTraktCalendarMovies();
     const recentEpisodes = useTraktRecentEpisodes(7);
+    const favoritesMovies = useTraktFavoritesMovies();
+    const favoritesShows = useTraktFavoritesShows();
 
     // Count recently aired episodes (past 7 days, only those already aired)
     const recentCount = useMemo(() => {
@@ -317,6 +321,20 @@ const WatchlistPage = memo(function WatchlistPage() {
         [watchlistShows.data, filterWatchlist]
     );
 
+    // Convert favorite items → TraktMediaItem-compatible for MediaSection
+    const favMovieItems = useMemo(
+        () => (favoritesMovies.data as TraktFavoriteItem[] | undefined)
+            ?.filter((i) => i.movie)
+            .map((i) => ({ movie: i.movie, show: undefined })),
+        [favoritesMovies.data]
+    );
+    const favShowItems = useMemo(
+        () => (favoritesShows.data as TraktFavoriteItem[] | undefined)
+            ?.filter((i) => i.show)
+            .map((i) => ({ show: i.show, movie: undefined })),
+        [favoritesShows.data]
+    );
+
     // Count per filter for badges
     const filterCounts = useMemo(() => {
         const movies = watchlistMovies.data ?? [];
@@ -342,7 +360,7 @@ const WatchlistPage = memo(function WatchlistPage() {
     if (!isTraktConnected) {
         return (
             <div className="space-y-6">
-                <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
+                <PageHeader icon={Bookmark} title="Watchlist & Favorites" description="Your Trakt watchlist, favorites, and upcoming calendar." />
                 <div className="flex flex-col items-center justify-center py-16 space-y-4 text-center">
                     <Bookmark className="size-12 text-muted-foreground/40" strokeWidth={1} />
                     <p className="text-sm text-muted-foreground max-w-sm">
@@ -361,7 +379,7 @@ const WatchlistPage = memo(function WatchlistPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
+            <PageHeader icon={Bookmark} title="Watchlist & Favorites" description="Your Trakt watchlist, favorites, and upcoming calendar." />
 
             {recentCount > 0 && recentEpisodes.data && (
                 <RecentlyAiredSection items={recentEpisodes.data} count={recentCount} />
@@ -372,6 +390,10 @@ const WatchlistPage = memo(function WatchlistPage() {
                     <TabsTrigger value="watchlist" className="gap-1.5">
                         <Bookmark className="size-3.5" />
                         Watchlist
+                    </TabsTrigger>
+                    <TabsTrigger value="favorites" className="gap-1.5">
+                        <Heart className="size-3.5" />
+                        Favorites
                     </TabsTrigger>
                     <TabsTrigger value="calendar" className="gap-1.5">
                         <CalendarDays className="size-3.5" />
@@ -437,6 +459,31 @@ const WatchlistPage = memo(function WatchlistPage() {
                         <p className="text-sm text-muted-foreground py-8 text-center">
                             No items match the selected filter
                         </p>
+                    )}
+                </TabsContent>
+
+                <TabsContent value="favorites" className="space-y-8 pt-6">
+                    <SectionErrorBoundary section="Favorite Movies">
+                        <MediaSection
+                            title="Movies"
+                            items={favMovieItems}
+                            isLoading={favoritesMovies.isLoading}
+                            error={favoritesMovies.error}
+                            rows={2}
+                        />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary section="Favorite Shows">
+                        <MediaSection
+                            title="TV Shows"
+                            items={favShowItems}
+                            isLoading={favoritesShows.isLoading}
+                            error={favoritesShows.error}
+                            rows={2}
+                        />
+                    </SectionErrorBoundary>
+                    {!favoritesMovies.isLoading && !favoritesShows.isLoading
+                        && !favMovieItems?.length && !favShowItems?.length && (
+                        <EmptyState title="No favorites yet" description="Heart a movie or show to add it to your favorites." className="py-12" />
                     )}
                 </TabsContent>
 
