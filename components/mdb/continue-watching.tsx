@@ -20,6 +20,23 @@ interface ContinueWatchingItemProps {
     onRemove: (key: ProgressKey) => void;
 }
 
+function formatRelativeTime(timestamp: number): string {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60_000);
+    if (minutes < 2) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return `${Math.floor(days / 7)}w ago`;
+}
+
+interface ContinueWatchingItemProps {
+    item: ProgressKey & ProgressData;
+    onRemove: (key: ProgressKey) => void;
+}
+
 /** Fetch season data from Trakt to determine the correct next episode,
  *  handling season transitions and hiding when no more episodes exist. */
 function useNextEpisode(
@@ -57,6 +74,16 @@ function useNextEpisode(
 
 const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
     const { data: media, isLoading: loading } = useTraktMedia(item.imdbId, item.type);
+
+    // For shows: fetch episode data for episode title (24h cache, minimal extra cost)
+    const { data: episodes } = useQuery({
+        queryKey: ["trakt", "episodes", item.imdbId, item.season],
+        queryFn: () => traktClient.getShowEpisodes(item.imdbId, item.season!),
+        staleTime: 24 * 60 * 60 * 1000,
+        gcTime: 24 * 60 * 60 * 1000,
+        enabled: item.type === "show" && !!item.season && !!item.episode,
+    });
+    const episodeTitle = episodes?.find((e) => e.number === item.episode)?.title;
 
     const progressPercent = item.durationSeconds > 0
         ? Math.min(Math.round((item.progressSeconds / item.durationSeconds) * 100), 100)
@@ -106,8 +133,10 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 
     const title = media?.title || "Unknown";
     const displayTitle = item.type === "show" && item.season && item.episode
-        ? `${title} S${item.season}E${item.episode}`
+        ? `S${item.season}E${item.episode}${episodeTitle ? ` · ${episodeTitle}` : ""}`
         : title;
+
+    const relativeTime = formatRelativeTime(item.updatedAt);
 
     const posterUrl = getPosterUrl(media?.images) || `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(title)}`;
 
@@ -163,14 +192,20 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             {/* Title + rating — links to media page */}
             <Link href={mediaHref} className="block mt-2">
                 <p className="text-xs font-medium truncate hover:text-primary transition-colors pr-6">
+                    {title}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate mt-0.5">
                     {displayTitle}
                 </p>
-                {media?.rating && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                        <Star className="size-2.5 fill-primary text-primary" />
-                        <span className="text-[10px] text-muted-foreground">{media.rating.toFixed(1)}</span>
-                    </div>
-                )}
+                <div className="flex items-center gap-2 mt-0.5">
+                    {media?.rating && (
+                        <div className="flex items-center gap-1">
+                            <Star className="size-2.5 fill-primary text-primary" />
+                            <span className="text-[10px] text-muted-foreground">{media.rating.toFixed(1)}</span>
+                        </div>
+                    )}
+                    <span className="text-[10px] text-muted-foreground/60">{relativeTime}</span>
+                </div>
             </Link>
 
             {/* Remove button */}
