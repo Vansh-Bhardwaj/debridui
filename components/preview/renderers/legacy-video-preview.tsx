@@ -1752,7 +1752,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* Auto-next episode countdown */}
                     {autoNextCountdown !== null && onNext && (
-                        <div className="absolute bottom-24 right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div onClick={(e) => e.stopPropagation()} className="absolute bottom-24 right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <button
                                 type="button"
                                 onClick={() => { cancelAutoNext(); onNext(); }}
@@ -1771,7 +1771,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* IntroDB: Skip Intro / Skip Recap / Skip Credits button */}
                     {activeSkipSegment && !autoSkipIntro && (
-                        <div className="absolute bottom-24 right-4 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div onClick={(e) => e.stopPropagation()} className="absolute bottom-24 right-4 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -1954,6 +1954,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                     <DropdownMenuContent
                                                         align="end"
+                                                        onClick={(e) => e.stopPropagation()}
                                                         className="min-w-[180px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
                                                         <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
                                                             Audio Tracks
@@ -2013,6 +2014,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                     <DropdownMenuContent
                                                         align="end"
+                                                        onClick={(e) => e.stopPropagation()}
                                                         className="min-w-[160px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
                                                         <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
                                                             Subtitles
@@ -2060,6 +2062,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
                                                     align="end"
+                                                    onClick={(e) => e.stopPropagation()}
                                                     className="min-w-[200px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-2">
                                                     {/* Playback speed */}
                                                     <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
@@ -2243,7 +2246,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
                     {showLoadingHint && (
-                        <div className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
+                        <div onClick={(e) => e.stopPropagation()} className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">
                                 {hasCodecIssue 

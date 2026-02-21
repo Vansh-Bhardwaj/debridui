@@ -51,6 +51,7 @@ export const VideoCodecWarning = memo(function VideoCodecWarning({
 
     return (
         <div
+            onClick={(e) => e.stopPropagation()}
             className={cn(
                 "absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm sm:max-w-md transition-all duration-300 ease-in-out px-4",
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
