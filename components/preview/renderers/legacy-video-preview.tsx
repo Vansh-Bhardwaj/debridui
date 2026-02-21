@@ -205,6 +205,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
     const [subtitleSize, setSubtitleSize] = useState(24);
     const [subtitlePosition, setSubtitlePosition] = useState(64);
+    const [subtitleDelay, setSubtitleDelay] = useState(0); // ms, negative = earlier, positive = later
     const [playbackRate, setPlaybackRate] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -1088,7 +1089,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "K":
                     event.preventDefault();
                     togglePlay();
-                    showOsd(videoRef.current?.paused ? "▶ Play" : "⏸ Pause");
+                    showOsd(videoRef.current?.paused ? "Play" : "Pause");
                     break;
                 case "ArrowLeft": {
                     event.preventDefault();
@@ -1170,7 +1171,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "M":
                     event.preventDefault();
                     toggleMute();
-                    showOsd(videoRef.current?.muted ? "🔇 Muted" : "🔊 Unmuted");
+                    showOsd(videoRef.current?.muted ? "Muted" : "Unmuted");
                     break;
                 case "n":
                 case "N":
@@ -1183,6 +1184,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "f":
                 case "F":
                     event.preventDefault();
+                    showOsd(isFullscreen || fakeFullscreen ? "Exit Fullscreen" : "Fullscreen");
                     toggleFullscreen();
                     break;
                 case "c":
@@ -1204,12 +1206,30 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         return -1;
                     });
                     break;
+                case "g":
+                case "G":
+                    event.preventDefault();
+                    setSubtitleDelay((prev) => {
+                        const next = prev - 500;
+                        showOsd(`Sub Delay ${next >= 0 ? "+" : ""}${next}ms`);
+                        return next;
+                    });
+                    break;
+                case "h":
+                case "H":
+                    event.preventDefault();
+                    setSubtitleDelay((prev) => {
+                        const next = prev + 500;
+                        showOsd(`Sub Delay ${next >= 0 ? "+" : ""}${next}ms`);
+                        return next;
+                    });
+                    break;
             }
         };
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, autoNextCountdown, cancelAutoNext]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -1364,10 +1384,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setActiveCueText("");
             return;
         }
-        // Find the cue that matches currentTime
-        const activeCue = cues.find((c) => currentTime >= c.start && currentTime < c.end);
+        // Find the cue that matches currentTime, adjusted by subtitle delay
+        const adjustedTime = currentTime - subtitleDelay / 1000;
+        const activeCue = cues.find((c) => adjustedTime >= c.start && adjustedTime < c.end);
         setActiveCueText(activeCue?.text ?? "");
-    }, [activeSubtitleIndex, parsedCues, currentTime]);
+    }, [activeSubtitleIndex, parsedCues, currentTime, subtitleDelay]);
 
     // iOS: ensure playsinline (and webkit prefix for older Safari)
     useEffect(() => {
@@ -1873,6 +1894,33 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             size="icon"
                                                             className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
                                                             onClick={() => setSubtitlePosition((s) => Math.min(400, s + 4))}>
+                                                            <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+
+                                                    {/* Subtitle delay */}
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                        Subtitle Delay
+                                                    </DropdownMenuLabel>
+                                                    <div className="flex items-center justify-between px-2 pb-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
+                                                            onClick={() => setSubtitleDelay((s) => s - 500)}>
+                                                            <Minus className="h-4 w-4" />
+                                                        </Button>
+                                                        <button
+                                                            className="text-xs font-mono hover:text-primary transition-colors"
+                                                            title="Click to reset"
+                                                            onClick={() => setSubtitleDelay(0)}>
+                                                            {subtitleDelay > 0 ? "+" : ""}{subtitleDelay}ms
+                                                        </button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
+                                                            onClick={() => setSubtitleDelay((s) => s + 500)}>
                                                             <Plus className="h-4 w-4" />
                                                         </Button>
                                                     </div>
