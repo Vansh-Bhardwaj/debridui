@@ -1008,6 +1008,73 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [seekTo, showOsd]);
 
+    // Swipe gesture state: horizontal = seek, vertical = volume
+    const touchSwipeRef = useRef<{
+        startX: number; startY: number;
+        startVolume: number; startPosition: number;
+        axis: "horizontal" | "vertical" | null; swiping: boolean;
+    } | null>(null);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        const el = videoRef.current;
+        if (!el) return;
+        const t = e.touches[0];
+        touchSwipeRef.current = {
+            startX: t.clientX, startY: t.clientY,
+            startVolume: el.volume, startPosition: el.currentTime,
+            axis: null, swiping: false,
+        };
+    }, []);
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        const state = touchSwipeRef.current;
+        if (!state) return;
+        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        const t = e.touches[0];
+        const dx = t.clientX - state.startX;
+        const dy = t.clientY - state.startY;
+        if (!state.axis) {
+            if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+                state.axis = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+                state.swiping = true;
+            }
+            return;
+        }
+        const el = videoRef.current;
+        if (!el) return;
+        if (state.axis === "horizontal") {
+            const w = containerRef.current?.clientWidth ?? 300;
+            const delta = (dx / w) * 90;
+            const secs = Math.abs(Math.round(delta));
+            showOsd(delta > 0 ? `» ${secs}s` : `« ${secs}s`);
+        } else {
+            const h = containerRef.current?.clientHeight ?? 200;
+            const newVol = Math.max(0, Math.min(1, state.startVolume - (dy / h)));
+            el.volume = newVol;
+            el.muted = newVol === 0;
+            setVolume(newVol);
+            setIsMuted(newVol === 0);
+            showOsd(newVol === 0 ? "Muted" : `Volume ${Math.round(newVol * 100)}%`);
+        }
+    }, [showOsd, setVolume, setIsMuted]);
+
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        const state = touchSwipeRef.current;
+        touchSwipeRef.current = null;
+        if (!state?.swiping) { handleMobileTap(e); return; }
+        if (state.axis === "horizontal") {
+            const t = e.changedTouches[0];
+            const dx = t.clientX - state.startX;
+            const w = containerRef.current?.clientWidth ?? 300;
+            const newTime = Math.max(0, Math.min(
+                videoRef.current?.duration ?? 0,
+                state.startPosition + (dx / w) * 90
+            ));
+            seekTo(newTime);
+        }
+    }, [handleMobileTap, seekTo]);
+
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
 
     // When subtitle selection changes, toggle textTracks modes (also disables embedded tracks).
@@ -1519,7 +1586,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             )}
             onClick={handleContainerClick}
             onDoubleClick={handleContainerDoubleClick}
-            onTouchEnd={handleMobileTap}>
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}>
             <LegacyPlayerSubtitleStyle />
             {error ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-white">

@@ -546,6 +546,61 @@ export default function SettingsPage() {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {/* Subtitle Position */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Captions className="size-4 text-muted-foreground shrink-0" />
+                                <Label className="text-sm">Subtitle Position</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Vertical position of subtitles from the bottom
+                            </p>
+                        </div>
+                        <Select
+                            value={String(playback.subtitlePosition)}
+                            onValueChange={(v) => updatePlayback({ subtitlePosition: parseInt(v) })}>
+                            <SelectTrigger className="w-28">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="16">Very Low</SelectItem>
+                                <SelectItem value="32">Low</SelectItem>
+                                <SelectItem value="56">Default</SelectItem>
+                                <SelectItem value="80">High</SelectItem>
+                                <SelectItem value="120">Very High</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Next Episode Prompt */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <SkipForward className="size-4 text-muted-foreground shrink-0" />
+                                <Label className="text-sm">Next Episode Prompt</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Show the next episode overlay this many seconds before the episode ends
+                            </p>
+                        </div>
+                        <Select
+                            value={String(playback.nextEpisodePromptSeconds)}
+                            onValueChange={(v) => updatePlayback({ nextEpisodePromptSeconds: parseInt(v) })}>
+                            <SelectTrigger className="w-20">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10s</SelectItem>
+                                <SelectItem value="20">20s</SelectItem>
+                                <SelectItem value="30">30s</SelectItem>
+                                <SelectItem value="45">45s</SelectItem>
+                                <SelectItem value="60">60s</SelectItem>
+                                <SelectItem value="90">90s</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
             </section>
 
