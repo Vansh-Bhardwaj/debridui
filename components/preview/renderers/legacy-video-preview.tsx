@@ -719,6 +719,29 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
 
+    // When the tab/window returns from background, browsers stop decoding video
+    // frames (audio continues). Force a micro-seek to restart the video decoder.
+    // Uses both visibilitychange (tab switch) and focus (window occlusion).
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const nudgeDecoder = () => {
+            if (!video.paused && video.readyState >= 2) {
+                video.currentTime = video.currentTime;
+            }
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") nudgeDecoder();
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        window.addEventListener("focus", nudgeDecoder);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            window.removeEventListener("focus", nudgeDecoder);
+        };
+    }, []);
+
 
     // Keep fullscreen state in sync (native + CSS fake fullscreen)
     const [fakeFullscreen, setFakeFullscreen] = useState(false);

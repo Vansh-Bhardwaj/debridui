@@ -82,10 +82,34 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const [seekValue, setSeekValue] = useState(0);
     const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Progress interpolation: smoothly increment between 5s server updates
+    const interpolatedRef = useRef({ progress: 0, receivedAt: 0 });
+    const [interpolatedTime, setInterpolatedTime] = useState(0);
+
     // Priority: show active target, otherwise first playing device
     const targetDevice = activeTarget
         ? devices.find((d) => d.id === activeTarget)
         : devices.find((d) => d.isPlaying && d.nowPlaying);
+
+    const nowPlaying = targetDevice?.nowPlaying ?? null;
+    const serverProgress = nowPlaying?.progress ?? 0;
+    const serverDuration = nowPlaying?.duration ?? 0;
+    const serverIsPlaying = !!(nowPlaying && !nowPlaying.paused);
+
+    // Snap ref to new server value when it changes
+    useEffect(() => {
+        interpolatedRef.current = { progress: serverProgress, receivedAt: Date.now() };
+    }, [serverProgress]);
+
+    // Locally increment progress when playing
+    useEffect(() => {
+        if (!serverIsPlaying || serverDuration <= 0) return;
+        const id = setInterval(() => {
+            const elapsed = (Date.now() - interpolatedRef.current.receivedAt) / 1000;
+            setInterpolatedTime(Math.min(interpolatedRef.current.progress + elapsed, serverDuration));
+        }, 250);
+        return () => clearInterval(id);
+    }, [serverIsPlaying, serverDuration]);
 
     const cmd = useCallback(
         (action: RemoteAction, payload?: Record<string, unknown>) => {
@@ -105,8 +129,6 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
         },
         [cmd],
     );
-
-    const nowPlaying = targetDevice?.nowPlaying ?? null;
 
     // Controller-side source play for remote targets that don't report their own sources
     const handleLocalSourcePlay = useCallback((index: number) => {
@@ -134,11 +156,10 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
     if (!enabled || !targetDevice) return null;
 
-    const isPlaying = nowPlaying && !nowPlaying.paused;
-    const currentTime = nowPlaying?.progress ?? 0;
-    const duration = nowPlaying?.duration ?? 0;
-    // Seek display: while dragging or shortly after release, show seekValue
-    const displayTime = seekActive ? seekValue : currentTime;
+    const isPlaying = serverIsPlaying;
+    const duration = serverDuration;
+    // Seek display: while dragging use seekValue, playing uses interpolation, paused uses server value
+    const displayTime = seekActive ? seekValue : (serverIsPlaying ? interpolatedTime : serverProgress);
     const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
     const volume = nowPlaying?.volume ?? 100;
     const isMuted = volume === 0;
@@ -246,7 +267,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.max(0, currentTime - 10) })}
+                                    onClick={() => cmd("seek", { position: Math.max(0, interpolatedTime - 10) })}
                                     title="Rewind 10s"
                                     aria-label="Rewind 10 seconds"
                                 >
@@ -290,7 +311,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.min(duration, currentTime + 10) })}
+                                    onClick={() => cmd("seek", { position: Math.min(duration, interpolatedTime + 10) })}
                                     title="Forward 10s"
                                     aria-label="Forward 10 seconds"
                                 >
