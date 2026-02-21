@@ -144,7 +144,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
 
     return (
-        <div className="flex-shrink-0 w-40 sm:w-48 group relative">
+        <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative">
             <WatchButton
                 imdbId={item.imdbId}
                 mediaType={item.type}
@@ -161,7 +161,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                             src={posterUrl}
                             alt={title}
                             fill
-                            sizes="(max-width: 640px) 160px, 192px"
+                            sizes="(max-width: 640px) 160px, (max-width: 1280px) 192px, (max-width: 1536px) 208px, 224px"
                             className="object-cover transition-transform duration-500 group-hover:scale-105"
                             unoptimized
                         />
@@ -289,7 +289,7 @@ export function ContinueWatching() {
                 <h2 className="text-lg font-light mb-4">Continue Watching</h2>
                 <div className="flex gap-4 overflow-x-auto pb-2">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex-shrink-0 w-40 sm:w-48">
+                        <div key={i} className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56">
                             <Skeleton className="aspect-2/3 rounded-sm" />
                             <Skeleton className="h-4 mt-2 w-3/4" />
                         </div>

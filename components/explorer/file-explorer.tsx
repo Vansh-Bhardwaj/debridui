@@ -121,7 +121,7 @@ export const FileExplorer = memo(function FileExplorer() {
 
     return (
         <>
-            <div className="md:mx-auto md:w-full md:max-w-4xl pb-24">
+            <div className="md:mx-auto md:w-full md:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl pb-24">
                 <div className="flex flex-col gap-4">
                     <h1 className="text-2xl sm:text-3xl font-light flex items-center gap-3">
                         <FolderOpen className="size-6 text-primary" strokeWidth={1.5} />

@@ -97,12 +97,12 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                 {/* Headline with staggered animation */}
                 <div className="space-y-2">
                     <h1
-                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
+                        className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-light tracking-tight animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
                         style={{ animationDuration: "600ms" }}>
                         Discover
                     </h1>
                     <h1
-                        className="text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
+                        className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-light tracking-tight text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
                         style={{ animationDuration: "600ms", animationDelay: "100ms", animationFillMode: "backwards" }}>
                         & Stream
                     </h1>

@@ -136,7 +136,7 @@ const CalendarSection = memo(function CalendarSection({
             {sortedDates.map((date) => (
                 <div key={date} className="space-y-3">
                     <h3 className="text-xs tracking-widest uppercase text-muted-foreground">{formatDate(date)}</h3>
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(175px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
                         {grouped[date].map((item, i) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";
