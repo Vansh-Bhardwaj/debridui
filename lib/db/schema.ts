@@ -72,12 +72,36 @@ export const userProgress = pgTable(
     ]
 );
 
+// Watch history table - append-only log of completed/significant play sessions
+export const watchHistory = pgTable(
+    "watch_history",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "cascade" }),
+        imdbId: text("imdb_id").notNull(),
+        type: text("type", { enum: ["movie", "show"] }).notNull(),
+        season: integer("season"),
+        episode: integer("episode"),
+        fileName: text("file_name"),
+        progressSeconds: integer("progress_seconds").notNull().default(0),
+        durationSeconds: integer("duration_seconds").notNull().default(0),
+        watchedAt: timestamp("watched_at").notNull().defaultNow(),
+    },
+    (table) => [
+        index("watch_history_userId_idx").on(table.userId),
+        index("watch_history_watchedAt_idx").on(table.watchedAt),
+    ]
+);
+
 // Relations
 export const userRelations = relations(user, ({ many, one }) => ({
     userAccounts: many(userAccounts),
     addons: many(addons),
     userSettings: one(userSettings),
     userProgress: many(userProgress),
+    watchHistory: many(watchHistory),
 }));
 
 export const userAccountsRelations = relations(userAccounts, ({ one }) => ({
@@ -117,3 +141,5 @@ export type UserSetting = typeof userSettings.$inferSelect;
 export type NewUserSetting = typeof userSettings.$inferInsert;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;
+export type WatchHistory = typeof watchHistory.$inferSelect;
+export type NewWatchHistory = typeof watchHistory.$inferInsert;

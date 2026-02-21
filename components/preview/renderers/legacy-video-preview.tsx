@@ -734,6 +734,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Mark as completed when video ends (> 95% watched)
             if (progressKey) {
                 markCompleted();
+                // Log to watch history (fire-and-forget, server ignores < 30s / 5%)
+                fetch("/api/history", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        imdbId: progressKey.imdbId,
+                        type: progressKey.type,
+                        season: progressKey.season,
+                        episode: progressKey.episode,
+                        fileName: file.name,
+                        progressSeconds: Math.round(video.currentTime || video.duration || 0),
+                        durationSeconds: Math.round(video.duration || 0),
+                    }),
+                }).catch(() => {});
             }
             // Auto-next if available — with 5-second countdown
             if (onNext) {
@@ -782,7 +796,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
+    }, [duration, progressKey, file, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
