@@ -118,7 +118,9 @@ export function DeviceSyncReporter() {
             if (now - lastReportRef.current < 2000) return; // Debounce
             lastReportRef.current = now;
             const state = buildNowPlaying(video);
-            reportNowPlaying(state);
+            // Only send non-null state from event handlers; null clears the remote display.
+            // Explicit null is sent by onEnded and the preview-close effect instead.
+            if (state) reportNowPlaying(state);
         };
 
         const onPlay = (e: Event) => report(e.target as HTMLVideoElement);

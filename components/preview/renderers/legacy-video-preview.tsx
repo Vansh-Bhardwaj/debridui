@@ -401,6 +401,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [loop, setLoop] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number | -1>(-1); // Default to off, but will auto-enable
+    // Tracks whether the user has explicitly chosen a subtitle track (including "Off").
+    // When set, auto-enable effects are skipped so user intent is preserved.
+    const userSetSubtitleRef = useRef(false);
 
     // Progress tracking for continue watching
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
@@ -456,6 +459,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setParsedCues([]);
             setActiveCueText("");
             setActiveSubtitleIndex(-1);
+            userSetSubtitleRef.current = false;
         }
     }, [progressKey]);
 
@@ -569,8 +573,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             applyResumePosition(startFromSeconds ?? initialProgress);
         }
 
-        // Auto-enable subtitle track matching user's preferred language
-        if (subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
+        // Auto-enable subtitle track matching user's preferred language (only if user hasn't set a preference)
+        if (!userSetSubtitleRef.current && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
             const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
             const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
@@ -593,7 +597,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Watch for subtitles arriving later (e.g. from async fetch)
     useEffect(() => {
-        if (subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
+        if (!userSetSubtitleRef.current && subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
             const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
             const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
 
@@ -1612,6 +1616,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const subHandler = (e: Event) => {
             const trackId = (e as CustomEvent).detail?.trackId as number | undefined;
             if (trackId !== undefined) {
+                userSetSubtitleRef.current = true;
                 setActiveSubtitleIndex(trackId);
             }
         };
@@ -1658,6 +1663,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             return;
         }
 
+        // Once playback has started, don't re-block it for subtitle changes.
+        // The parsedCues effect handles loading new tracks independently.
+        if (canStartPlayback) return;
+
         let done = false;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -1685,7 +1694,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             clearTimeout(timeoutId);
             controller.abort();
         };
-    }, [subtitles]);
+    }, [subtitles, canStartPlayback]);
 
     // Load addon subtitles and parse cues for manual overlay rendering.
     useEffect(() => {
@@ -2290,7 +2299,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             Subtitles
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuItem
-                                                            onClick={() => setActiveSubtitleIndex(-1)}
+                                                            onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(-1); }}
                                                             className={
                                                                 activeSubtitleIndex === -1
                                                                     ? "bg-primary text-primary-foreground"
@@ -2301,7 +2310,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         {subtitles.map((sub, i) => (
                                                             <DropdownMenuItem
                                                                 key={`${sub.lang}-${sub.url}-${i}`}
-                                                                onClick={() => setActiveSubtitleIndex(i)}
+                                                                onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); }}
                                                                 className={
                                                                     activeSubtitleIndex === i
                                                                         ? "bg-primary text-primary-foreground"
