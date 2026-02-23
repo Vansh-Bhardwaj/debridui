@@ -327,6 +327,20 @@ function handleTransfer(playback: TransferPayload, fromName: string) {
         duration: 3000,
     });
 
+    // Immediately report a "loading" now-playing state so the controller
+    // clears its "Loading on device..." pending state right away,
+    // even before the video element loads (which can be delayed by subtitle preloading).
+    useDeviceSyncStore.getState().reportNowPlaying({
+        title: playback.title,
+        imdbId: playback.imdbId,
+        type: playback.mediaType,
+        season: playback.season,
+        episode: playback.episode,
+        progress: 0,
+        duration: 0,
+        paused: true,
+    });
+
     const progressKey = playback.imdbId
         ? {
               imdbId: playback.imdbId,
