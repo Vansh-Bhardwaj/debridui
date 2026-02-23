@@ -209,6 +209,9 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
     // Construct magnet if we have a hash
     const magnet = hash ? constructMagnet(hash, title) : undefined;
 
+    // Carry inline subtitles from the stream (Stremio protocol)
+    const inlineSubtitles = stream.subtitles?.filter((s) => s?.url && s?.lang);
+
     return {
         title: name,
         description: combinedDescription,
@@ -221,6 +224,7 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
         isCached,
         addonId,
         addonName,
+        ...(inlineSubtitles?.length ? { inlineSubtitles } : {}),
     };
 }
 

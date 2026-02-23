@@ -83,6 +83,7 @@ export interface AddonStream {
     url?: string;
     infoHash?: string;
     fileIdx?: number;
+    subtitles?: AddonSubtitle[];
     behaviorHints?: {
         bingeGroup?: string;
         videoHash?: string;
@@ -121,6 +122,8 @@ export interface AddonSource {
     isCached?: boolean;
     addonId: string;
     addonName: string;
+    /** Inline subtitles provided by the stream (Stremio protocol). */
+    inlineSubtitles?: AddonSubtitle[];
 }
 
 export interface Addon {

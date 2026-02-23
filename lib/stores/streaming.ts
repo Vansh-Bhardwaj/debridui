@@ -538,7 +538,16 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             if (requestId !== currentRequestId) return;
 
             const allSources = sourcesResults.flat();
-            const subtitles = combineSubtitles(subtitleResults);
+
+            // Collect inline subtitles from stream-capable addons (e.g. AIO Stream)
+            const inlineSubResults: SubtitleQueryResult[] = [];
+            for (const source of allSources) {
+                if (source.inlineSubtitles?.length) {
+                    inlineSubResults.push({ addonName: source.addonName, subtitles: source.inlineSubtitles });
+                }
+            }
+
+            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults]);
             timer.step("fetched-stream-data", {
                 totalSources: allSources.length,
                 subtitles: subtitles.length,
@@ -680,7 +689,16 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             if (preloadRequestId !== currentPreloadId) return;
 
             const allSources = sourcesResults.flat();
-            const subtitles = combineSubtitles(subtitleResults);
+
+            // Collect inline subtitles from stream-capable addons
+            const inlineSubResults: SubtitleQueryResult[] = [];
+            for (const source of allSources) {
+                if (source.inlineSubtitles?.length) {
+                    inlineSubResults.push({ addonName: source.addonName, subtitles: source.inlineSubtitles });
+                }
+            }
+
+            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults]);
 
             const streamingSettings = await getEffectiveStreamingSettings();
             const result = selectBestSource(allSources, streamingSettings);
