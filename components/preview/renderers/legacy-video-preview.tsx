@@ -323,6 +323,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const { scrobble } = useTraktScrobble(progressKey ?? null);
     const lastProgressUpdateRef = useRef<number>(0);
     const hasSeenkedToInitialRef = useRef(false);
+    const hasMarkedCompletedRef = useRef(false);
+    const historySessionIdRef = useRef<string>("sess_init");
+    const lastHistoryEmitRef = useRef<{ at: number; progress: number } | null>(null);
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
     // Minimum fraction of total duration the user must have actually played before
     // a seek-to-end (position > 95%) is counted as completion. Prevents marking an
@@ -334,12 +337,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const watchStartRef = useRef<number | null>(null);
     const watchedTimeRef = useRef<number>(0);
 
+    useEffect(() => {
+        if (historySessionIdRef.current !== "sess_init") return;
+        historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+    }, []);
+
     // Reset skipped-segment tracking whenever the episode changes
     const prevProgressKeyRef = useRef(progressKey);
     useEffect(() => {
         if (prevProgressKeyRef.current !== progressKey) {
             prevProgressKeyRef.current = progressKey;
             skippedSegmentsRef.current = new Set();
+            hasMarkedCompletedRef.current = false;
+            historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+            lastHistoryEmitRef.current = null;
             if (skipGraceTimerRef.current) {
                 clearTimeout(skipGraceTimerRef.current);
                 skipGraceTimerRef.current = null;
@@ -350,6 +361,49 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             watchStartRef.current = null;
         }
     }, [progressKey]);
+
+    const emitHistory = useCallback((eventType: "pause" | "stop" | "complete" | "session_end", force = false) => {
+        if (!progressKey) return;
+        const video = videoRef.current;
+        if (!video) return;
+
+        const progressSeconds = Math.round(video.currentTime || 0);
+        const durationSeconds = Math.round(video.duration || 0);
+        if (!Number.isFinite(progressSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+            return;
+        }
+
+        const minProgress = Math.min(10, durationSeconds * 0.02);
+        if (progressSeconds < minProgress) return;
+
+        const now = Date.now();
+        const previous = lastHistoryEmitRef.current;
+        const progressedEnough = !previous || progressSeconds - previous.progress >= 15;
+        const oldEnough = !previous || now - previous.at >= 45_000;
+
+        if (!force && !progressedEnough && !oldEnough) {
+            return;
+        }
+
+        lastHistoryEmitRef.current = { at: now, progress: progressSeconds };
+
+        fetch("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                imdbId: progressKey.imdbId,
+                type: progressKey.type,
+                season: progressKey.season,
+                episode: progressKey.episode,
+                fileName: file.name,
+                progressSeconds,
+                durationSeconds,
+                eventType,
+                sessionId: historySessionIdRef.current,
+            }),
+            keepalive: eventType === "session_end" || eventType === "stop" || eventType === "complete",
+        }).catch(() => { });
+    }, [progressKey, file.name]);
 
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
@@ -666,6 +720,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
             // Sync progress to DB on pause
             forceSync();
+            emitHistory("pause");
             // Trakt scrobble pause
             const dur = video.duration || 0;
             if (Number.isFinite(dur) && dur > 0) scrobble("pause", (video.currentTime / dur) * 100);
@@ -729,9 +784,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Mark completed at 95% — only if the user has genuinely watched
             // at least 30% of the total duration (guards against a simple seek-to-end).
             // onEnded always marks complete regardless of this threshold.
-            if (progressKey && dur > 0 && time / dur > 0.95) {
+            if (progressKey && dur > 0 && time / dur > 0.95 && !hasMarkedCompletedRef.current) {
                 if (watchedTimeRef.current >= dur * COMPLETION_MIN_WATCH_FRACTION) {
+                    hasMarkedCompletedRef.current = true;
                     markCompleted();
+                    emitHistory("complete", true);
                 }
             }
         };
@@ -761,21 +818,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             scrobble("stop", 100);
             // Mark as completed when video ends (> 95% watched)
             if (progressKey) {
-                markCompleted();
-                // Log to watch history (fire-and-forget, server ignores < 30s / 5%)
-                fetch("/api/history", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        imdbId: progressKey.imdbId,
-                        type: progressKey.type,
-                        season: progressKey.season,
-                        episode: progressKey.episode,
-                        fileName: file.name,
-                        progressSeconds: Math.round(video.currentTime || video.duration || 0),
-                        durationSeconds: Math.round(video.duration || 0),
-                    }),
-                }).catch(() => {});
+                if (!hasMarkedCompletedRef.current) {
+                    hasMarkedCompletedRef.current = true;
+                    markCompleted();
+                }
+                emitHistory("complete", true);
             }
             // Auto-next if available — with 5-second countdown
             if (onNext) {
@@ -805,6 +852,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         video.addEventListener("volumechange", onVolumeChange);
         video.addEventListener("ended", onEnded);
 
+        const onVisibilityChange = () => {
+            if (document.hidden) {
+                emitHistory("session_end", true);
+            }
+        };
+        const onPageHide = () => emitHistory("session_end", true);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        window.addEventListener("pagehide", onPageHide);
+
         return () => {
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
@@ -814,6 +870,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("durationchange", onDurationChange);
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            window.removeEventListener("pagehide", onPageHide);
+            emitHistory("stop", true);
             if (skipGraceTimerRef.current) {
                 clearTimeout(skipGraceTimerRef.current);
                 skipGraceTimerRef.current = null;
@@ -824,7 +883,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [duration, progressKey, file, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments]);
+    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments, emitHistory]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {

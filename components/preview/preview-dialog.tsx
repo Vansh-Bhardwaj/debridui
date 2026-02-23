@@ -55,8 +55,18 @@ export function PreviewDialog() {
     const effectiveProgressKey = useMemo<ProgressKey | undefined>(() => {
         if (progressKey) return progressKey;
         if (!isSingleMode && episodeContext && currentFile) {
-            const m = /[Ss](\d{1,4})[Ee](\d{1,4})/.exec(currentFile.name);
-            if (m && parseInt(m[1]) === episodeContext.season && parseInt(m[2]) === episodeContext.episode) {
+            const patterns = [
+                /[Ss](\d{1,4})[Ee](\d{1,4})/,
+                /(\d{1,4})x(\d{1,4})/,
+                /season\s*(\d{1,4})\D+episode\s*(\d{1,4})/i,
+            ];
+            let match: RegExpExecArray | null = null;
+            for (const pattern of patterns) {
+                match = pattern.exec(currentFile.name);
+                if (match) break;
+            }
+
+            if (match && parseInt(match[1]) === episodeContext.season && parseInt(match[2]) === episodeContext.episode) {
                 return {
                     imdbId: episodeContext.imdbId,
                     type: 'show',
@@ -64,6 +74,13 @@ export function PreviewDialog() {
                     episode: episodeContext.episode,
                 };
             }
+
+            return {
+                imdbId: episodeContext.imdbId,
+                type: 'show',
+                season: episodeContext.season,
+                episode: episodeContext.episode,
+            };
         }
         return progressKey ?? undefined;
     }, [progressKey, isSingleMode, episodeContext, currentFile]);

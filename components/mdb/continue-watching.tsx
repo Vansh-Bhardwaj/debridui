@@ -265,9 +265,10 @@ export function ContinueWatching() {
         } catch { }
 
         // Remove from server, then invalidate cache so other components reflect the deletion
-        const params = new URLSearchParams({ imdbId: key.imdbId });
+        const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
         if (key.season != null && !isNaN(key.season)) params.set("season", String(key.season));
         if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
+        params.set("mode", "hide");
         fetch(`/api/progress?${params}`, { method: "DELETE" })
             .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching"] }))
             .catch(() => { });

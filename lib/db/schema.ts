@@ -95,6 +95,55 @@ export const watchHistory = pgTable(
     ]
 );
 
+// Hidden continue watching entries - separates shelf visibility from cursor deletion
+export const hiddenContinueWatching = pgTable(
+    "hidden_continue_watching",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "cascade" }),
+        imdbId: text("imdb_id").notNull(),
+        type: text("type", { enum: ["movie", "show"] }).notNull(),
+        season: integer("season"),
+        episode: integer("episode"),
+        hiddenAt: timestamp("hidden_at").notNull().defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("unique_hidden_continue").on(table.userId, table.imdbId, table.type, table.season, table.episode),
+        index("hidden_continue_user_id_idx").on(table.userId),
+    ]
+);
+
+// Append-only playback event log for idempotent progress/history derivation
+export const watchEvents = pgTable(
+    "watch_events",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => user.id, { onDelete: "cascade" }),
+        imdbId: text("imdb_id").notNull(),
+        type: text("type", { enum: ["movie", "show"] }).notNull(),
+        season: integer("season"),
+        episode: integer("episode"),
+        sessionId: text("session_id"),
+        eventType: text("event_type").notNull(),
+        idempotencyKey: text("idempotency_key").notNull(),
+        progressSeconds: integer("progress_seconds").notNull().default(0),
+        durationSeconds: integer("duration_seconds").notNull().default(0),
+        progressPercent: integer("progress_percent").notNull().default(0),
+        player: text("player"),
+        reason: text("reason"),
+        createdAt: timestamp("created_at").notNull().defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("watch_events_idempotency_idx").on(table.idempotencyKey),
+        index("watch_events_user_id_idx").on(table.userId),
+        index("watch_events_created_at_idx").on(table.createdAt),
+    ]
+);
+
 // Relations
 export const userRelations = relations(user, ({ many, one }) => ({
     userAccounts: many(userAccounts),
@@ -102,6 +151,8 @@ export const userRelations = relations(user, ({ many, one }) => ({
     userSettings: one(userSettings),
     userProgress: many(userProgress),
     watchHistory: many(watchHistory),
+    hiddenContinueWatching: many(hiddenContinueWatching),
+    watchEvents: many(watchEvents),
 }));
 
 export const userAccountsRelations = relations(userAccounts, ({ one }) => ({
@@ -132,6 +183,20 @@ export const userProgressRelations = relations(userProgress, ({ one }) => ({
     }),
 }));
 
+export const hiddenContinueWatchingRelations = relations(hiddenContinueWatching, ({ one }) => ({
+    user: one(user, {
+        fields: [hiddenContinueWatching.userId],
+        references: [user.id],
+    }),
+}));
+
+export const watchEventsRelations = relations(watchEvents, ({ one }) => ({
+    user: one(user, {
+        fields: [watchEvents.userId],
+        references: [user.id],
+    }),
+}));
+
 // Type exports for TypeScript
 export type UserAccount = typeof userAccounts.$inferSelect;
 export type NewUserAccount = typeof userAccounts.$inferInsert;
@@ -143,3 +208,7 @@ export type UserProgress = typeof userProgress.$inferSelect;
 export type NewUserProgress = typeof userProgress.$inferInsert;
 export type WatchHistory = typeof watchHistory.$inferSelect;
 export type NewWatchHistory = typeof watchHistory.$inferInsert;
+export type HiddenContinueWatching = typeof hiddenContinueWatching.$inferSelect;
+export type NewHiddenContinueWatching = typeof hiddenContinueWatching.$inferInsert;
+export type WatchEvent = typeof watchEvents.$inferSelect;
+export type NewWatchEvent = typeof watchEvents.$inferInsert;

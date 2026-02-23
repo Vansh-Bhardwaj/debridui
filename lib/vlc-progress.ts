@@ -13,14 +13,19 @@ import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-let activeSession: { key: ProgressKey; url: string } | null = null;
+let activeSession: { key: ProgressKey; url: string; sessionId: string; seq: number } | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSyncTime = 0;
+let lastSyncedPosition = 0;
 let lastVlcState: string | null = null;
+let lastHistoryEmitTime = 0;
+let lastHistoryProgress = 0;
 
 const POLL_INTERVAL = 3000; // 3s for responsive progress bar
 const SERVER_SYNC_INTERVAL = 60_000; // 60s for DB writes
 const MIN_PROGRESS_CHANGE = 5; // seconds
+const HISTORY_MIN_INTERVAL = 45_000;
+const HISTORY_MIN_PROGRESS_ADVANCE = 15;
 
 // ── localStorage helpers (same format as use-progress) ─────────────────────
 
@@ -42,8 +47,17 @@ function writeLocal(key: ProgressKey, progressSeconds: number, durationSeconds: 
     }
 }
 
-async function syncToServer(key: ProgressKey, progressSeconds: number, durationSeconds: number) {
+async function syncToServer(
+    key: ProgressKey,
+    progressSeconds: number,
+    durationSeconds: number,
+    meta?: { eventType?: "play_progress" | "play_pause" | "play_stop" | "play_complete" | "session_end"; reason?: string }
+) {
     try {
+        const session = activeSession;
+        const seq = session ? ++session.seq : Date.now();
+        const idempotencyKey = `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}:${session?.sessionId ?? "vlc"}:${meta?.eventType ?? "play_progress"}:${seq}`;
+
         const res = await fetchWithTimeout("/api/progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -54,11 +68,55 @@ async function syncToServer(key: ProgressKey, progressSeconds: number, durationS
                 episode: key.episode,
                 progressSeconds,
                 durationSeconds,
+                eventType: meta?.eventType ?? "play_progress",
+                sessionId: session?.sessionId,
+                idempotencyKey,
+                player: "vlc",
+                reason: meta?.reason,
             }),
         }, 10000);
         handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired while syncing VLC progress." });
     } catch {
         // network error — ignore, will retry
+    }
+}
+
+async function syncHistoryToServer(
+    key: ProgressKey,
+    progressSeconds: number,
+    durationSeconds: number,
+    eventType: "pause" | "stop" | "complete" | "session_end",
+    force = false
+) {
+    const minProgress = Math.min(10, durationSeconds * 0.02);
+    if (progressSeconds < minProgress) return;
+
+    const now = Date.now();
+    if (!force) {
+        const progressedEnough = progressSeconds - lastHistoryProgress >= HISTORY_MIN_PROGRESS_ADVANCE;
+        const oldEnough = now - lastHistoryEmitTime >= HISTORY_MIN_INTERVAL;
+        if (!progressedEnough && !oldEnough) return;
+    }
+
+    lastHistoryEmitTime = now;
+    lastHistoryProgress = progressSeconds;
+
+    try {
+        await fetchWithTimeout("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                imdbId: key.imdbId,
+                type: key.type,
+                season: key.season,
+                episode: key.episode,
+                progressSeconds: Math.round(progressSeconds),
+                durationSeconds: Math.round(durationSeconds),
+                eventType,
+            }),
+        }, 10_000);
+    } catch {
+        // non-critical, progress sync should continue regardless
     }
 }
 
@@ -121,15 +179,35 @@ async function poll() {
             state === "paused" ||
             state === "stopped";
 
-        if (shouldSync && Math.abs(time - (lastSyncTime ? time : 0)) >= MIN_PROGRESS_CHANGE) {
-            syncToServer(activeSession.key, time, length);
+        if (shouldSync && Math.abs(time - lastSyncedPosition) >= MIN_PROGRESS_CHANGE) {
+            syncToServer(activeSession.key, time, length, { eventType: state === "paused" ? "play_pause" : "play_progress" });
             lastSyncTime = Date.now();
+            lastSyncedPosition = time;
+        }
+
+        if (state === "paused") {
+            syncHistoryToServer(activeSession.key, time, length, "pause");
         }
 
         // Playback ended — final sync and clean up
-        if (state === "stopped" && time === 0 && length > 0) {
-            sendScrobble(activeSession.key, "stop", 100);
-            syncToServer(activeSession.key, length, length);
+        if (state === "stopped") {
+            const endedNaturally = time === 0 && length > 0;
+            const finalPosition = endedNaturally ? length : Math.max(0, time);
+
+            if (endedNaturally) {
+                sendScrobble(activeSession.key, "stop", 100);
+                syncHistoryToServer(activeSession.key, finalPosition, length, "complete", true);
+            } else {
+                sendScrobble(activeSession.key, "stop", progressPercent);
+                syncHistoryToServer(activeSession.key, finalPosition, length, "stop", true);
+            }
+
+            syncToServer(activeSession.key, finalPosition, length, {
+                eventType: endedNaturally ? "play_complete" : "play_stop",
+                reason: endedNaturally ? "natural_end" : "stopped",
+            });
+            lastSyncTime = Date.now();
+            lastSyncedPosition = finalPosition;
             stopVLCProgressSync();
         }
     } catch {
@@ -142,9 +220,17 @@ async function poll() {
 /** Start tracking progress for a VLC playback session. */
 export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
     stopVLCProgressSync();
-    activeSession = { key: progressKey, url };
+    activeSession = {
+        key: progressKey,
+        url,
+        sessionId: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `vlc_${Date.now()}`,
+        seq: 0,
+    };
     lastSyncTime = 0;
+    lastSyncedPosition = 0;
     lastVlcState = null;
+    lastHistoryEmitTime = 0;
+    lastHistoryProgress = 0;
     pollTimer = setInterval(poll, POLL_INTERVAL);
     // Immediate first poll
     poll();
@@ -164,12 +250,16 @@ export function stopVLCProgressSync() {
             if (res.success && res.data) {
                 const pct = res.data.length > 0 ? (res.data.time / res.data.length) * 100 : 0;
                 sendScrobble(key, "stop", pct);
-                syncToServer(key, res.data.time, res.data.length);
+                syncToServer(key, res.data.time, res.data.length, { eventType: "session_end", reason: "stop_sync" });
+                syncHistoryToServer(key, res.data.time, res.data.length, "session_end", true);
             }
         }).catch(() => {});
     }
     activeSession = null;
     lastVlcState = null;
+    lastSyncedPosition = 0;
+    lastHistoryEmitTime = 0;
+    lastHistoryProgress = 0;
 }
 
 /** Whether a VLC progress sync session is active. */

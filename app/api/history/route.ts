@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
-import { eq, desc, and, count } from "drizzle-orm";
+import { eq, desc, and, count, isNull } from "drizzle-orm";
+
+const HISTORY_MERGE_WINDOW_MS = 15 * 60 * 1000;
 
 // GET /api/history?limit=20&offset=0 — paginated watch history, newest first
 export async function GET(request: NextRequest) {
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/history — log a completed/significant play session
-// Only called when >= 5% watched or >= 30 seconds watched (enforced client + server)
+// Called for pause/stop/complete session milestones.
 export async function POST(request: NextRequest) {
     const { data: session } = await auth.getSession();
     if (!session?.user?.id) {
@@ -56,6 +58,8 @@ export async function POST(request: NextRequest) {
             fileName?: string;
             progressSeconds?: number;
             durationSeconds?: number;
+            eventType?: "pause" | "stop" | "complete" | "session_end";
+            sessionId?: string;
         };
         const { imdbId, type, season, episode, fileName, progressSeconds, durationSeconds } = body;
 
@@ -66,12 +70,56 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Invalid type" }, { status: 400 });
         }
 
-        // Server-side: require at least 30s watched OR 5% of duration
-        const minProgress = durationSeconds > 0
-            ? Math.min(30, durationSeconds * 0.05)
-            : 30;
-        if (progressSeconds < minProgress) {
+        if (!Number.isFinite(progressSeconds) || !Number.isFinite(durationSeconds) || progressSeconds < 0 || durationSeconds <= 0) {
+            return NextResponse.json({ error: "Invalid progress values" }, { status: 400 });
+        }
+
+        const safeProgress = Math.max(0, Math.round(progressSeconds));
+        const safeDuration = Math.max(0, Math.round(durationSeconds));
+
+        // Capture short starts too (useful for "start now, resume later").
+        const minProgress = Math.min(10, safeDuration * 0.02);
+        if (safeProgress < minProgress) {
             return NextResponse.json({ success: true, skipped: true });
+        }
+
+        const conditions = [
+            eq(watchHistory.userId, session.user.id),
+            eq(watchHistory.imdbId, imdbId),
+            eq(watchHistory.type, type),
+        ];
+
+        if (season == null) {
+            conditions.push(isNull(watchHistory.season));
+        } else {
+            conditions.push(eq(watchHistory.season, season));
+        }
+
+        if (episode == null) {
+            conditions.push(isNull(watchHistory.episode));
+        } else {
+            conditions.push(eq(watchHistory.episode, episode));
+        }
+
+        const [latest] = await db
+            .select()
+            .from(watchHistory)
+            .where(and(...conditions))
+            .orderBy(desc(watchHistory.watchedAt))
+            .limit(1);
+
+        if (latest && Date.now() - new Date(latest.watchedAt).getTime() <= HISTORY_MERGE_WINDOW_MS) {
+            await db
+                .update(watchHistory)
+                .set({
+                    progressSeconds: Math.max(latest.progressSeconds, safeProgress),
+                    durationSeconds: Math.max(latest.durationSeconds, safeDuration),
+                    fileName: latest.fileName ?? fileName ?? null,
+                    watchedAt: new Date(),
+                })
+                .where(and(eq(watchHistory.id, latest.id), eq(watchHistory.userId, session.user.id)));
+
+            return NextResponse.json({ success: true, merged: true });
         }
 
         await db.insert(watchHistory).values({
@@ -81,8 +129,8 @@ export async function POST(request: NextRequest) {
             season: season ?? null,
             episode: episode ?? null,
             fileName: fileName ?? null,
-            progressSeconds: Math.round(progressSeconds),
-            durationSeconds: Math.round(durationSeconds),
+            progressSeconds: safeProgress,
+            durationSeconds: safeDuration,
             watchedAt: new Date(),
         });
 
