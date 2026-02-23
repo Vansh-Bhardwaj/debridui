@@ -271,6 +271,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
+    const [useCompactControls, setUseCompactControls] = useState(false);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const hasCodecIssue = isNonMP4Video(file.name);
@@ -322,11 +323,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
     const { scrobble } = useTraktScrobble(progressKey ?? null);
     const lastProgressUpdateRef = useRef<number>(0);
+    const lastUiTimeUpdateRef = useRef<number>(0);
+    const lastSeekSyncAtRef = useRef<number>(0);
+    const pendingSeekSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastErrorToastAtRef = useRef<number>(0);
     const hasSeenkedToInitialRef = useRef(false);
+    const hasShownResumeToastRef = useRef(false);
     const hasMarkedCompletedRef = useRef(false);
     const historySessionIdRef = useRef<string>("sess_init");
     const lastHistoryEmitRef = useRef<{ at: number; progress: number } | null>(null);
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
+    const UI_TIME_UPDATE_INTERVAL = 250; // Limit time-label/seekbar rerenders to ~4fps
+    const SEEK_SYNC_MIN_INTERVAL = 1200;
     // Minimum fraction of total duration the user must have actually played before
     // a seek-to-end (position > 95%) is counted as completion. Prevents marking an
     // episode done when the user merely scrubs to the last few seconds to preview it.
@@ -349,6 +357,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             prevProgressKeyRef.current = progressKey;
             skippedSegmentsRef.current = new Set();
             hasMarkedCompletedRef.current = false;
+            hasShownResumeToastRef.current = false;
             historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
             lastHistoryEmitRef.current = null;
             if (skipGraceTimerRef.current) {
@@ -361,6 +370,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             watchStartRef.current = null;
         }
     }, [progressKey]);
+
+    const applyResumePosition = useCallback((seekTo: number | null | undefined): boolean => {
+        const video = videoRef.current;
+        if (!video || !seekTo || seekTo <= 0 || !Number.isFinite(video.duration)) return false;
+        if (seekTo >= video.duration - 5) return false;
+
+        video.currentTime = seekTo;
+        if (!hasShownResumeToastRef.current) {
+            hasShownResumeToastRef.current = true;
+            const mins = Math.floor(seekTo / 60);
+            const secs = Math.floor(seekTo % 60);
+            showOsd(`Resumed ${mins}:${secs.toString().padStart(2, "0")}`);
+        }
+        return true;
+    }, [showOsd]);
+
+    const showLoadErrorToast = useCallback((message: string) => {
+        const now = Date.now();
+        if (now - lastErrorToastAtRef.current < 3000) return;
+        lastErrorToastAtRef.current = now;
+        toast.error("Failed to load video", {
+            description: message,
+            duration: 5000,
+        });
+    }, []);
 
     const emitHistory = useCallback((eventType: "pause" | "stop" | "complete" | "session_end", force = false) => {
         if (!progressKey) return;
@@ -433,16 +467,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const video = videoRef.current;
         if (video && !hasSeenkedToInitialRef.current) {
             hasSeenkedToInitialRef.current = true;
-            const seekTo = startFromSeconds ?? initialProgress;
-            if (seekTo && seekTo > 0 && Number.isFinite(video.duration)) {
-                // Only seek if within valid range (not at the end)
-                if (seekTo < video.duration - 5) {
-                    video.currentTime = seekTo;
-                    const mins = Math.floor(seekTo / 60);
-                    const secs = Math.floor(seekTo % 60);
-                    toast.info(`Resumed at ${mins}:${secs.toString().padStart(2, "0")}`, { duration: 2000 });
-                }
-            }
+            applyResumePosition(startFromSeconds ?? initialProgress);
         }
 
         // Auto-enable subtitle track matching user's preferred language
@@ -456,7 +481,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         onLoad?.();
-    }, [onLoad, startFromSeconds, initialProgress, subtitles, activeSubtitleIndex, preferredSubLang]);
+    }, [onLoad, startFromSeconds, initialProgress, subtitles, activeSubtitleIndex, preferredSubLang, applyResumePosition]);
 
     // Cross-device resume: if server progress arrives after the video has already loaded
     // and the user hasn't watched much yet (< 5s), apply the position now.
@@ -464,13 +489,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (initialProgress === null || !hasSeenkedToInitialRef.current) return;
         const video = videoRef.current;
         if (!video || video.currentTime >= 5) return;
-        if (initialProgress > 5 && initialProgress < video.duration - 5) {
-            video.currentTime = initialProgress;
-            const mins = Math.floor(initialProgress / 60);
-            const secs = Math.floor(initialProgress % 60);
-            toast.info(`Resumed at ${mins}:${secs.toString().padStart(2, "0")}`, { duration: 2000 });
-        }
-    }, [initialProgress]);
+        if (initialProgress > 5) applyResumePosition(initialProgress);
+    }, [initialProgress, applyResumePosition]);
 
     // Watch for subtitles arriving later (e.g. from async fetch)
     useEffect(() => {
@@ -500,10 +520,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Force use of a transcoded stream
             const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM || streamingLinks.dash;
             if (transcodedUrl && transcodedUrl !== effectiveUrl) {
-                toast.info("Trying transcoded stream...", {
-                    description: "The original format wasn't supported. Switching to a compatible format.",
-                    duration: 3000,
-                });
+                showOsd("Switching to compatible stream");
                 // Reset the video element with the transcoded URL
                 const video = videoRef.current;
                 if (video) {
@@ -526,7 +543,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 .then(data => {
                     const resolvedUrl = data?.url;
                     if (resolvedUrl && resolvedUrl !== downloadUrl && (data?.status ?? 999) < 400) {
-                        toast.info("Retrying with resolved stream...", { duration: 2000 });
+                        showOsd("Retrying stream URL");
                         const video = videoRef.current;
                         if (video) {
                             video.src = resolvedUrl;
@@ -538,19 +555,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     // Resolution didn't produce a different URL — show error
                     setError(true);
                     setIsLoading(false);
-                    toast.error("Failed to load video", {
-                        description: "The video could not be loaded. Try an external player like VLC.",
-                        duration: 5000,
-                    });
+                    showLoadErrorToast("The video could not be loaded. Try an external player like VLC.");
                     onError?.(new Error("Failed to load video"));
                 })
                 .catch(() => {
                     setError(true);
                     setIsLoading(false);
-                    toast.error("Failed to load video", {
-                        description: "The video could not be loaded. Try an external player like VLC.",
-                        duration: 5000,
-                    });
+                    showLoadErrorToast("The video could not be loaded. Try an external player like VLC.");
                     onError?.(new Error("Failed to load video"));
                 });
             return;
@@ -558,14 +569,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         setError(true);
         const errorMessage = "Failed to load video";
-        toast.error(errorMessage, {
-            description: hasCodecIssue 
+        showLoadErrorToast(
+            hasCodecIssue
                 ? "This video format isn't supported by your browser. Try opening in an external player like VLC."
-                : "The video could not be loaded. This might be due to an unsupported format or a network issue.",
-            duration: 5000,
-        });
+                : "The video could not be loaded. This might be due to an unsupported format or a network issue."
+        );
         onError?.(new Error(errorMessage));
-    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl]);
+    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl, showOsd, showLoadErrorToast]);
 
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
@@ -636,6 +646,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
         if (el) {
             setDuration(el.duration || 0);
+            if (hasSeenkedToInitialRef.current) {
+                applyResumePosition(startFromSeconds ?? initialProgress);
+            }
             // Restore saved volume from localStorage
             const savedVol = localStorage.getItem("debridui-volume");
             if (savedVol !== null) {
@@ -645,7 +658,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
-    }, [originalLanguageCode, preferredAudioLang]);
+    }, [originalLanguageCode, preferredAudioLang, startFromSeconds, initialProgress, applyResumePosition]);
 
 
 
@@ -699,6 +712,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [selectedAudioIndex, audioTrackCount]);
 
+    useEffect(() => {
+        const el = videoRef.current as (HTMLVideoElement & {
+            audioTracks?: { length: number; addEventListener?: (type: string, listener: () => void) => void; removeEventListener?: (type: string, listener: () => void) => void };
+        }) | null;
+        if (!el?.audioTracks || !el.audioTracks.addEventListener || !el.audioTracks.removeEventListener) return;
+
+        const syncCount = () => setAudioTrackCount(el.audioTracks?.length ?? 0);
+        el.audioTracks.addEventListener("addtrack", syncCount);
+        el.audioTracks.addEventListener("removetrack", syncCount);
+        el.audioTracks.addEventListener("change", syncCount);
+
+        return () => {
+            el.audioTracks?.removeEventListener?.("addtrack", syncCount);
+            el.audioTracks?.removeEventListener?.("removetrack", syncCount);
+            el.audioTracks?.removeEventListener?.("change", syncCount);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (activeSubtitleIndex < 0 || !subtitles?.length) return;
+        if (activeSubtitleIndex >= subtitles.length) {
+            setActiveSubtitleIndex(subtitles.length - 1);
+        }
+    }, [activeSubtitleIndex, subtitles]);
+
     // Sync basic media state for custom controls.
     useEffect(() => {
         const video = videoRef.current;
@@ -719,7 +757,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 watchStartRef.current = null;
             }
             // Sync progress to DB on pause
-            forceSync();
+            forceSync("play_pause", "pause");
             emitHistory("pause");
             // Trakt scrobble pause
             const dur = video.duration || 0;
@@ -728,8 +766,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onTimeUpdate = () => {
             const time = video.currentTime || 0;
             const dur = video.duration || 0;
-            setCurrentTime(time);
-            if (!duration && Number.isFinite(dur)) setDuration(dur);
+            const now = Date.now();
+            if (now - lastUiTimeUpdateRef.current >= UI_TIME_UPDATE_INTERVAL) {
+                lastUiTimeUpdateRef.current = now;
+                setCurrentTime(time);
+            }
+            if (Number.isFinite(dur) && dur > 0) {
+                setDuration((prev) => (prev > 0 ? prev : dur));
+            }
 
             // Preload next episode at outro start (if available) or 90%
             const outroSec = introSegments?.outro?.start_sec;
@@ -775,7 +819,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
             // Update progress in localStorage (throttled)
             // Guard: skip when duration is invalid (NaN before metadata, Infinity for transcoded streams)
-            const now = Date.now();
             if (progressKey && Number.isFinite(dur) && dur > 0 && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
                 lastProgressUpdateRef.current = now;
                 updateProgress(time, dur);
@@ -800,6 +843,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             watchStartRef.current = Date.now();
         };
         const onDurationChange = () => setDuration(video.duration || 0);
+        const onSeeked = () => {
+            // Coalesce rapid scrub seeks into fewer writes while keeping the final position durable.
+            const now = Date.now();
+            const elapsed = now - lastSeekSyncAtRef.current;
+            if (elapsed >= SEEK_SYNC_MIN_INTERVAL) {
+                lastSeekSyncAtRef.current = now;
+                forceSync("play_progress", "seeked");
+                return;
+            }
+
+            if (pendingSeekSyncTimerRef.current) clearTimeout(pendingSeekSyncTimerRef.current);
+            pendingSeekSyncTimerRef.current = setTimeout(() => {
+                lastSeekSyncAtRef.current = Date.now();
+                forceSync("play_progress", "seeked_coalesced");
+                pendingSeekSyncTimerRef.current = null;
+            }, SEEK_SYNC_MIN_INTERVAL - elapsed);
+        };
         const onVolumeChange = () => {
             setVolume(video.volume);
             setIsMuted(video.muted || video.volume === 0);
@@ -822,6 +882,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     hasMarkedCompletedRef.current = true;
                     markCompleted();
                 }
+                forceSync("play_complete", "ended");
                 emitHistory("complete", true);
             }
             // Auto-next if available — with 5-second countdown
@@ -849,15 +910,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onPlaying);
         video.addEventListener("durationchange", onDurationChange);
+        video.addEventListener("seeked", onSeeked);
         video.addEventListener("volumechange", onVolumeChange);
         video.addEventListener("ended", onEnded);
 
         const onVisibilityChange = () => {
             if (document.hidden) {
+                forceSync("session_end", "visibility_hidden");
                 emitHistory("session_end", true);
             }
         };
-        const onPageHide = () => emitHistory("session_end", true);
+        const onPageHide = () => {
+            forceSync("session_end", "pagehide");
+            emitHistory("session_end", true);
+        };
         document.addEventListener("visibilitychange", onVisibilityChange);
         window.addEventListener("pagehide", onPageHide);
 
@@ -868,11 +934,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("waiting", onWaiting);
             video.removeEventListener("playing", onPlaying);
             video.removeEventListener("durationchange", onDurationChange);
+            video.removeEventListener("seeked", onSeeked);
             video.removeEventListener("volumechange", onVolumeChange);
             video.removeEventListener("ended", onEnded);
             document.removeEventListener("visibilitychange", onVisibilityChange);
             window.removeEventListener("pagehide", onPageHide);
+            forceSync("play_stop", "unmount");
             emitHistory("stop", true);
+            if (pendingSeekSyncTimerRef.current) {
+                clearTimeout(pendingSeekSyncTimerRef.current);
+                pendingSeekSyncTimerRef.current = null;
+            }
             if (skipGraceTimerRef.current) {
                 clearTimeout(skipGraceTimerRef.current);
                 skipGraceTimerRef.current = null;
@@ -883,7 +955,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [duration, progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments, emitHistory]);
+    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments, emitHistory]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
@@ -1664,6 +1736,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (el) el.setAttribute("webkit-playsinline", "true");
     }, []);
 
+    // Use always-visible compact controls on touch/coarse pointers and narrow layouts.
+    useEffect(() => {
+        const updateCompactMode = () => {
+            const narrow = window.matchMedia("(max-width: 960px)").matches;
+            const coarse = window.matchMedia("(pointer: coarse)").matches;
+            setUseCompactControls(narrow || coarse);
+        };
+
+        updateCompactMode();
+        window.addEventListener("resize", updateCompactMode);
+        return () => window.removeEventListener("resize", updateCompactMode);
+    }, []);
+
     return (
         <div
             ref={containerRef}
@@ -1733,7 +1818,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Big Center Play/Pause Overlay */}
                     {!isLoading && (
                         <div
-                            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 z-25 pointer-events-none ${(!isPlaying || showControls) ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}
+                            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 z-25 pointer-events-none ${!isPlaying ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}
                         >
                             <button
                                 onClick={(e) => {
@@ -1840,7 +1925,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* Auto-next episode countdown */}
                     {autoNextCountdown !== null && onNext && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-24 right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-20 left-3 right-3 sm:bottom-24 sm:left-auto sm:right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <button
                                 type="button"
                                 onClick={() => { cancelAutoNext(); onNext(); }}
@@ -1859,7 +1944,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* IntroDB: Skip Intro / Skip Recap / Skip Credits button */}
                     {activeSkipSegment && !autoSkipIntro && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-24 right-4 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-20 right-3 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300 sm:bottom-24 sm:right-4">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -1948,8 +2033,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 </div>
 
                                 {/* Controls row */}
-                                <div className="mt-4 flex items-center gap-2 text-xs text-white">
-                                    <div className="flex items-center gap-1">
+                                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white sm:flex-nowrap">
+                                    <div className="flex min-w-0 items-center gap-1">
                                         <Button
                                             variant="ghost"
                                             size="icon"
@@ -2019,7 +2104,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             style={{
                                                 background: `linear-gradient(to right, var(--primary) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.3) ${(isMuted ? 0 : volume) * 100}%)`
                                             }}
-                                            className="h-1 w-0 cursor-pointer appearance-none rounded-full overflow-hidden accent-primary transition-all duration-300 group-hover/volume:w-20 group-hover/volume:overflow-visible"
+                                            className={cn(
+                                                "h-1 cursor-pointer appearance-none rounded-full overflow-hidden accent-primary transition-all duration-300",
+                                                useCompactControls ? "w-16 overflow-visible" : "w-0 group-hover/volume:w-20 group-hover/volume:overflow-visible"
+                                            )}
                                         />
                                     </div>
 
@@ -2035,7 +2123,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-9 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-md border border-white/10">
+                                                        className="h-8 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-sm border border-white/20">
                                                         Audio
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -2045,8 +2133,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         align="end"
                                                         onClick={(e) => e.stopPropagation()}
                                                         onDoubleClick={(e) => e.stopPropagation()}
-                                                        className="min-w-[180px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
-                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                                                        className="min-w-[180px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-1">
+                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-3 py-2">
                                                             Audio Tracks
                                                         </DropdownMenuLabel>
                                                         {Array.from({ length: audioTrackCount }, (_, i) => {
@@ -2097,7 +2185,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-9 px-3 text-xs font-bold text-white hover:bg-white/20 rounded-md border border-white/10">
+                                                        className="h-8 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-sm border border-white/20">
                                                         CC
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -2107,8 +2195,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         align="end"
                                                         onClick={(e) => e.stopPropagation()}
                                                         onDoubleClick={(e) => e.stopPropagation()}
-                                                        className="min-w-[160px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
-                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
+                                                        className="min-w-[160px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-1">
+                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-3 py-2">
                                                             Subtitles
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuItem
@@ -2147,7 +2235,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-9 w-9 text-white hover:bg-white/20">
+                                                    className="h-8 w-8 text-white hover:bg-white/20 rounded-sm border border-transparent hover:border-white/20">
                                                     <Settings className="h-5 w-5" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -2157,9 +2245,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     align="end"
                                                     onClick={(e) => e.stopPropagation()}
                                                     onDoubleClick={(e) => e.stopPropagation()}
-                                                    className="min-w-[200px] z-50 bg-black/90 text-white border-white/10 backdrop-blur-md p-2">
+                                                    className="min-w-[210px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-2">
                                                     {/* Playback speed */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
                                                         Playback Speed
                                                     </DropdownMenuLabel>
                                                     <div className="grid grid-cols-3 gap-1 px-1 pb-2">
@@ -2167,7 +2255,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             <button
                                                                 key={rate}
                                                                 onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`); }}
-                                                                className={`rounded px-1 py-1.5 text-[10px] font-medium transition-colors ${playbackRate === rate ? "bg-primary text-primary-foreground" : "hover:bg-white/10"}`}
+                                                                className={`rounded-sm px-1 py-1.5 text-[10px] font-medium transition-colors ${playbackRate === rate ? "bg-primary text-primary-foreground" : "hover:bg-white/10"}`}
                                                             >
                                                                 {rate === 1 ? "Normal" : `${rate}x`}
                                                             </button>
@@ -2177,7 +2265,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <div className="h-px bg-white/10 my-2" />
 
                                                     {/* Subtitle size +/− */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
                                                         Subtitle Size
                                                     </DropdownMenuLabel>
                                                     <div className="flex items-center justify-between px-2 pb-2">
@@ -2199,7 +2287,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     </div>
 
                                                     {/* Subtitle position +/− */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
                                                         Subtitle Position
                                                     </DropdownMenuLabel>
                                                     <div className="flex items-center justify-between px-2 pb-2">
@@ -2221,7 +2309,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     </div>
 
                                                     {/* Subtitle delay */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
                                                         Subtitle Delay
                                                     </DropdownMenuLabel>
                                                     <div className="flex items-center justify-between px-2 pb-2">
@@ -2250,7 +2338,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     <div className="h-px bg-white/10 my-2" />
 
                                                     {/* Open in external player — platform-filtered */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-2 py-2">
+                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
                                                         Open In
                                                     </DropdownMenuLabel>
                                                     <div className="space-y-0.5 px-1 pb-1">

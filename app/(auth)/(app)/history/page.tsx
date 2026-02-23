@@ -142,6 +142,19 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
 
 const PAGE_SIZE = 50;
 
+function updateHistoryCaches(
+    queryClient: ReturnType<typeof useQueryClient>,
+    updater: (old: { history: HistoryEntry[]; total: number }) => { history: HistoryEntry[]; total: number }
+) {
+    queryClient.setQueriesData<{ history: HistoryEntry[]; total: number }>(
+        { queryKey: ["watch-history"] },
+        (old) => {
+            if (!old) return old;
+            return updater(old);
+        }
+    );
+}
+
 export default function HistoryPage() {
     const queryClient = useQueryClient();
     const [limit, setLimit] = useState(PAGE_SIZE);
@@ -150,9 +163,13 @@ export default function HistoryPage() {
 
     const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
         queryKey: ["watch-history", limit],
-        queryFn: () =>
-            fetch(`/api/history?limit=${limit}&offset=0`)
-                .then((r) => r.json() as Promise<{ history: HistoryEntry[]; total: number }>),
+        queryFn: async () => {
+            const res = await fetch(`/api/history?limit=${limit}&offset=0`);
+            if (!res.ok) {
+                throw new Error("Failed to fetch watch history");
+            }
+            return res.json() as Promise<{ history: HistoryEntry[]; total: number }>;
+        },
         staleTime: 30_000,
     });
 
@@ -165,29 +182,35 @@ export default function HistoryPage() {
         try {
             const res = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
-            queryClient.setQueryData<{ history: HistoryEntry[]; total: number }>(
-                ["watch-history", limit],
-                (old) => old ? { ...old, history: old.history.filter((e) => e.id !== id) } : old
-            );
+            updateHistoryCaches(queryClient, (old) => {
+                const nextHistory = old.history.filter((e) => e.id !== id);
+                const removed = old.history.length - nextHistory.length;
+                return {
+                    history: nextHistory,
+                    total: Math.max(0, old.total - removed),
+                };
+            });
         } catch {
             toast.error("Failed to remove entry");
         }
-    }, [queryClient, limit]);
+    }, [queryClient]);
 
     const handleClearAll = useCallback(async () => {
         setClearing(true);
         try {
             const res = await fetch("/api/history", { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
-            queryClient.setQueryData(["watch-history", limit], { history: [] });
-            toast.success("Watch history cleared");
+            queryClient.setQueriesData<{ history: HistoryEntry[]; total: number }>(
+                { queryKey: ["watch-history"] },
+                (old) => old ? { history: [], total: 0 } : old
+            );
             setClearOpen(false);
         } catch {
             toast.error("Failed to clear history");
         } finally {
             setClearing(false);
         }
-    }, [queryClient, limit]);
+    }, [queryClient]);
 
     const handleLoadMore = () => setLimit((prev) => prev + PAGE_SIZE);
 

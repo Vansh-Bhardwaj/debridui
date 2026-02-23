@@ -14,6 +14,7 @@ import { useUserAddons } from "@/hooks/use-addons";
 import { type Addon, type TvSearchParams } from "@/lib/addons/types";
 import Image from "next/image";
 import Link from "next/link";
+import { ScrollCarousel } from "@/components/common/scroll-carousel";
 
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
@@ -30,11 +31,6 @@ function formatRelativeTime(timestamp: number): string {
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
     return `${Math.floor(days / 7)}w ago`;
-}
-
-interface ContinueWatchingItemProps {
-    item: ProgressKey & ProgressData;
-    onRemove: (key: ProgressKey) => void;
 }
 
 /** Fetch season data from Trakt to determine the correct next episode,
@@ -277,13 +273,13 @@ export function ContinueWatching() {
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const handleScrollKeyDown = useCallback((e: React.KeyboardEvent) => {
-        const container = scrollRef.current;
-        if (!container) return;
+        const viewport = scrollRef.current?.parentElement;
+        if (!viewport) return;
         const scrollAmount = 200;
         if (e.key === "ArrowRight") {
-            container.scrollBy({ left: scrollAmount, behavior: "smooth" });
+            viewport.scrollBy({ left: scrollAmount, behavior: "smooth" });
         } else if (e.key === "ArrowLeft") {
-            container.scrollBy({ left: -scrollAmount, behavior: "smooth" });
+            viewport.scrollBy({ left: -scrollAmount, behavior: "smooth" });
         }
     }, []);
 
@@ -291,14 +287,16 @@ export function ContinueWatching() {
         return (
             <section className="mb-8">
                 <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-                <div className="flex gap-4 overflow-x-auto pb-2">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56">
-                            <Skeleton className="aspect-2/3 rounded-sm" />
-                            <Skeleton className="h-4 mt-2 w-3/4" />
-                        </div>
-                    ))}
-                </div>
+                <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
+                    <div className="flex gap-4 pb-2">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56">
+                                <Skeleton className="aspect-2/3 rounded-sm" />
+                                <Skeleton className="h-4 mt-2 w-3/4" />
+                            </div>
+                        ))}
+                    </div>
+                </ScrollCarousel>
             </section>
         );
     }
@@ -310,22 +308,24 @@ export function ContinueWatching() {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-            <div
-                ref={scrollRef}
-                tabIndex={0}
-                role="region"
-                aria-label="Continue watching"
-                onKeyDown={handleScrollKeyDown}
-                className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-            >
-                {items.map((item) => (
-                    <ContinueWatchingItem
-                        key={`${item.imdbId}-${item.season}-${item.episode}`}
-                        item={item}
-                        onRemove={handleRemove}
-                    />
-                ))}
-            </div>
+            <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
+                <div
+                    ref={scrollRef}
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Continue watching"
+                    onKeyDown={handleScrollKeyDown}
+                    className="flex gap-4 pb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                >
+                    {items.map((item) => (
+                        <ContinueWatchingItem
+                            key={`${item.imdbId}-${item.season}-${item.episode}`}
+                            item={item}
+                            onRemove={handleRemove}
+                        />
+                    ))}
+                </div>
+            </ScrollCarousel>
         </section>
     );
 }
