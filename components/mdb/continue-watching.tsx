@@ -287,16 +287,20 @@ export function ContinueWatching() {
         return (
             <section className="mb-8">
                 <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-                <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
-                    <div className="flex gap-4 pb-2">
+                <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent" />
+                    <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
+                        <div className="flex snap-x snap-mandatory gap-4 pb-2">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56">
+                            <div key={i} className="w-40 flex-shrink-0 snap-start sm:w-48 xl:w-52 2xl:w-56">
                                 <Skeleton className="aspect-2/3 rounded-sm" />
                                 <Skeleton className="h-4 mt-2 w-3/4" />
                             </div>
                         ))}
-                    </div>
-                </ScrollCarousel>
+                        </div>
+                    </ScrollCarousel>
+                </div>
             </section>
         );
     }
@@ -308,24 +312,29 @@ export function ContinueWatching() {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-            <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
-                <div
-                    ref={scrollRef}
-                    tabIndex={0}
-                    role="region"
-                    aria-label="Continue watching"
-                    onKeyDown={handleScrollKeyDown}
-                    className="flex gap-4 pb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-                >
-                    {items.map((item) => (
-                        <ContinueWatchingItem
-                            key={`${item.imdbId}-${item.season}-${item.episode}`}
-                            item={item}
-                            onRemove={handleRemove}
-                        />
-                    ))}
-                </div>
-            </ScrollCarousel>
+            <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent" />
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent" />
+                <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
+                    <div
+                        ref={scrollRef}
+                        tabIndex={0}
+                        role="region"
+                        aria-label="Continue watching"
+                        onKeyDown={handleScrollKeyDown}
+                        className="flex snap-x snap-mandatory gap-4 pb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+                    >
+                        {items.map((item) => (
+                            <div key={`${item.imdbId}-${item.season}-${item.episode}`} className="snap-start">
+                                <ContinueWatchingItem
+                                    item={item}
+                                    onRemove={handleRemove}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </ScrollCarousel>
+            </div>
         </section>
     );
 }

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
 import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar } from "lucide-react";
-import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
@@ -160,6 +159,7 @@ export default function HistoryPage() {
     const [limit, setLimit] = useState(PAGE_SIZE);
     const [clearOpen, setClearOpen] = useState(false);
     const [clearing, setClearing] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
         queryKey: ["watch-history", limit],
@@ -182,6 +182,7 @@ export default function HistoryPage() {
         try {
             const res = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
+            setActionError(null);
             updateHistoryCaches(queryClient, (old) => {
                 const nextHistory = old.history.filter((e) => e.id !== id);
                 const removed = old.history.length - nextHistory.length;
@@ -191,7 +192,7 @@ export default function HistoryPage() {
                 };
             });
         } catch {
-            toast.error("Failed to remove entry");
+            setActionError("Failed to remove entry. Please try again.");
         }
     }, [queryClient]);
 
@@ -200,13 +201,14 @@ export default function HistoryPage() {
         try {
             const res = await fetch("/api/history", { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
+            setActionError(null);
             queryClient.setQueriesData<{ history: HistoryEntry[]; total: number }>(
                 { queryKey: ["watch-history"] },
                 (old) => old ? { history: [], total: 0 } : old
             );
             setClearOpen(false);
         } catch {
-            toast.error("Failed to clear history");
+            setActionError("Failed to clear history. Please try again.");
         } finally {
             setClearing(false);
         }
@@ -234,6 +236,12 @@ export default function HistoryPage() {
                     ) : undefined
                 }
             />
+
+            {actionError && (
+                <div className="rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {actionError}
+                </div>
+            )}
 
             {isLoading && <LoadingState label="Loading watch history..." />}
             {error && <ErrorState title="Failed to load watch history" description="Please try refreshing the page" />}

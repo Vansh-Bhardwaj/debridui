@@ -202,6 +202,7 @@ export async function POST(request: NextRequest) {
         const normalizedType = type as "movie" | "show";
         const safeSeason = typeof season === "number" && Number.isFinite(season) ? season : null;
         const safeEpisode = typeof episode === "number" && Number.isFinite(episode) ? episode : null;
+        const normalizedEventType = eventType ?? "play_progress";
 
         // Completion clears cursor and un-hides any hidden shelf entry for this key.
         if (progressPercent >= 95) {
@@ -233,7 +234,7 @@ export async function POST(request: NextRequest) {
                 season: safeSeason,
                 episode: safeEpisode,
                 sessionId: sessionId ?? null,
-                eventType: eventType ?? "play_complete",
+                eventType: normalizedEventType,
                 idempotencyKey: dedupe,
                 progressSeconds: safeProgressSeconds,
                 durationSeconds: safeDurationSeconds,
@@ -255,6 +256,32 @@ export async function POST(request: NextRequest) {
             safeEpisode ?? NaN
         );
         await db.delete(hiddenContinueWatching).where(and(...hiddenConditions));
+
+        // Skip redundant heartbeat writes when the position hasn't meaningfully changed.
+        if (normalizedEventType === "play_progress") {
+            const existing = await db
+                .select({ progressSeconds: userProgress.progressSeconds, durationSeconds: userProgress.durationSeconds, updatedAt: userProgress.updatedAt })
+                .from(userProgress)
+                .where(and(...buildProgressConditions(
+                    session.user.id,
+                    imdbId,
+                    normalizedType,
+                    safeSeason ?? NaN,
+                    safeEpisode ?? NaN
+                )))
+                .limit(1);
+
+            const previous = existing[0];
+            if (previous) {
+                const progressDelta = Math.abs((previous.progressSeconds ?? 0) - safeProgressSeconds);
+                const durationDelta = Math.abs((previous.durationSeconds ?? 0) - safeDurationSeconds);
+                const ageMs = Date.now() - new Date(previous.updatedAt).getTime();
+
+                if (progressDelta <= 2 && durationDelta <= 2 && ageMs < 10_000) {
+                    return NextResponse.json({ success: true, deduped: true });
+                }
+            }
+        }
 
         // Upsert using ON CONFLICT - single efficient query
         await db
@@ -278,7 +305,7 @@ export async function POST(request: NextRequest) {
                 },
             });
 
-        const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${eventType ?? "play_progress"}:${Math.floor(Date.now() / 5_000)}`;
+        const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${normalizedEventType}:${Math.floor(Date.now() / 5_000)}`;
         await db.insert(watchEvents).values({
             userId: session.user.id,
             imdbId,
@@ -286,7 +313,7 @@ export async function POST(request: NextRequest) {
             season: safeSeason,
             episode: safeEpisode,
             sessionId: sessionId ?? null,
-            eventType: eventType ?? "play_progress",
+            eventType: normalizedEventType,
             idempotencyKey: dedupe,
             progressSeconds: safeProgressSeconds,
             durationSeconds: safeDurationSeconds,

@@ -94,6 +94,89 @@ function normalizeLangCode(code?: string | null): string | null {
     return lower;
 }
 
+interface AudioTrackInfo {
+    enabled: boolean;
+    label?: string;
+    language?: string;
+}
+
+function pickPreferredAudioTrackIndex(
+    tracks: { length: number; [i: number]: AudioTrackInfo },
+    preferredAudioLang?: string | null,
+    originalLanguageCode?: string | null
+): number {
+    let chosenIndex = 0;
+
+    const userLang = normalizeLangCode(preferredAudioLang);
+    if (userLang && tracks.length > 0) {
+        for (let i = 0; i < tracks.length; i++) {
+            const trackLang = normalizeLangCode(tracks[i]?.language);
+            if (trackLang && trackLang === userLang) {
+                chosenIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (chosenIndex === 0) {
+        const targetLang = normalizeLangCode(originalLanguageCode);
+        if (targetLang && tracks.length > 0) {
+            for (let i = 0; i < tracks.length; i++) {
+                const trackLang = normalizeLangCode(tracks[i]?.language);
+                if (trackLang && trackLang === targetLang) {
+                    chosenIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (chosenIndex === 0 && tracks.length > 1) {
+        let originalIndex = 0;
+        for (let i = 0; i < tracks.length; i++) {
+            if (tracks[i]?.enabled) {
+                originalIndex = i;
+                break;
+            }
+        }
+
+        if (!tracks[originalIndex]?.enabled) {
+            const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
+            if (!labelLower.includes("original") && !labelLower.includes("default")) {
+                for (let i = 0; i < tracks.length; i++) {
+                    const trackLabel = (tracks[i]?.label ?? "").toLowerCase();
+                    if (trackLabel.includes("original") || trackLabel.includes("default")) {
+                        originalIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        chosenIndex = originalIndex;
+    }
+
+    return chosenIndex;
+}
+
+async function resolveAddonStreamUrl(downloadUrl: string): Promise<{ url?: string; status?: number } | null> {
+    const endpoint = `/api/addon/resolve?url=${encodeURIComponent(downloadUrl)}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const response = await fetch(endpoint);
+            if (response.ok) {
+                return await response.json() as { url?: string; status?: number };
+            }
+        } catch {
+            // Retry transient network failures with backoff.
+        }
+        if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        }
+    }
+    return null;
+}
+
 
 export interface LegacyVideoPreviewProps {
     file: DebridFileNode;
@@ -327,6 +410,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const lastSeekSyncAtRef = useRef<number>(0);
     const pendingSeekSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastErrorToastAtRef = useRef<number>(0);
+    const debugEventStatsRef = useRef({ timeUpdates: 0, seeked: 0, syncWrites: 0 });
     const hasSeenkedToInitialRef = useRef(false);
     const hasShownResumeToastRef = useRef(false);
     const hasMarkedCompletedRef = useRef(false);
@@ -368,6 +452,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Reset actual watch-time counters for the new episode
             watchedTimeRef.current = 0;
             watchStartRef.current = null;
+            // Reset subtitle state to avoid carrying stale cues/tracks across media.
+            setParsedCues([]);
+            setActiveCueText("");
+            setActiveSubtitleIndex(-1);
         }
     }, [progressKey]);
 
@@ -394,6 +482,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             description: message,
             duration: 5000,
         });
+    }, []);
+
+    useEffect(() => {
+        if (process.env.NODE_ENV === "production") return;
+        const timer = setInterval(() => {
+            const stats = debugEventStatsRef.current;
+            if (stats.timeUpdates === 0 && stats.seeked === 0 && stats.syncWrites === 0) return;
+            console.debug("[legacy-player] event stats", { ...stats });
+            debugEventStatsRef.current = { timeUpdates: 0, seeked: 0, syncWrites: 0 };
+        }, 20_000);
+        return () => clearInterval(timer);
     }, []);
 
     const emitHistory = useCallback((eventType: "pause" | "stop" | "complete" | "session_end", force = false) => {
@@ -538,8 +637,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             triedUrlResolveRef.current = true;
             setIsLoading(true);
 
-            fetch(`/api/addon/resolve?url=${encodeURIComponent(downloadUrl)}`)
-                .then(r => r.ok ? r.json() as Promise<{ url?: string; status?: number }> : null)
+            resolveAddonStreamUrl(downloadUrl)
                 .then(data => {
                     const resolvedUrl = data?.url;
                     if (resolvedUrl && resolvedUrl !== downloadUrl && (data?.status ?? 999) < 400) {
@@ -579,69 +677,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
-            audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
+            audioTracks?: { length: number;[i: number]: AudioTrackInfo };
         }) | null;
         if (el?.audioTracks) {
             setAudioTrackCount(el.audioTracks.length);
-
-            const tracks = el.audioTracks;
-            let chosenIndex = 0;
-
-            // Priority 1: user's preferred audio language from settings
-            const userLang = normalizeLangCode(preferredAudioLang);
-            if (userLang && tracks.length > 0) {
-                for (let i = 0; i < tracks.length; i++) {
-                    const trackLang = normalizeLangCode(tracks[i]?.language);
-                    if (trackLang && trackLang === userLang) {
-                        chosenIndex = i;
-                        break;
-                    }
-                }
-            }
-
-            // Priority 2: Trakt original language (e.g. "en")
-            if (chosenIndex === 0) {
-                const targetLang = normalizeLangCode(originalLanguageCode);
-                if (targetLang && tracks.length > 0) {
-                    for (let i = 0; i < tracks.length; i++) {
-                        const trackLang = normalizeLangCode(tracks[i]?.language);
-                        if (trackLang && trackLang === targetLang) {
-                            chosenIndex = i;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Priority 3: fall back to browser default / "original" labels
-            if (chosenIndex === 0 && tracks.length > 1) {
-                let originalIndex = 0;
-
-                // Browser default (already enabled)
-                for (let i = 0; i < tracks.length; i++) {
-                    if (tracks[i]?.enabled) {
-                        originalIndex = i;
-                        break;
-                    }
-                }
-
-                // If no enabled track found, look for "original" or "default" in label
-                if (!tracks[originalIndex]?.enabled) {
-                    const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
-                    if (!labelLower.includes("original") && !labelLower.includes("default")) {
-                        for (let i = 0; i < tracks.length; i++) {
-                            const trackLabel = (tracks[i]?.label ?? "").toLowerCase();
-                            if (trackLabel.includes("original") || trackLabel.includes("default")) {
-                                originalIndex = i;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                chosenIndex = originalIndex;
-            }
-
+            const chosenIndex = pickPreferredAudioTrackIndex(el.audioTracks, preferredAudioLang, originalLanguageCode);
             setSelectedAudioIndex(chosenIndex);
         }
         if (el) {
@@ -710,6 +750,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         for (let i = 0; i < tracks.length; i++) {
             tracks[i].enabled = selectedAudioIndex === i;
         }
+
+        const ensureSelected = () => {
+            if (!tracks[selectedAudioIndex]?.enabled) {
+                for (let i = 0; i < tracks.length; i++) {
+                    tracks[i].enabled = false;
+                }
+                if (tracks[selectedAudioIndex]) {
+                    tracks[selectedAudioIndex].enabled = true;
+                }
+            }
+        };
+
+        const timer = setTimeout(ensureSelected, 50);
+        return () => clearTimeout(timer);
     }, [selectedAudioIndex, audioTrackCount]);
 
     useEffect(() => {
@@ -764,6 +818,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (Number.isFinite(dur) && dur > 0) scrobble("pause", (video.currentTime / dur) * 100);
         };
         const onTimeUpdate = () => {
+            debugEventStatsRef.current.timeUpdates += 1;
             const time = video.currentTime || 0;
             const dur = video.duration || 0;
             const now = Date.now();
@@ -821,6 +876,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Guard: skip when duration is invalid (NaN before metadata, Infinity for transcoded streams)
             if (progressKey && Number.isFinite(dur) && dur > 0 && now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL) {
                 lastProgressUpdateRef.current = now;
+                debugEventStatsRef.current.syncWrites += 1;
                 updateProgress(time, dur);
             }
 
@@ -844,11 +900,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         const onDurationChange = () => setDuration(video.duration || 0);
         const onSeeked = () => {
+            debugEventStatsRef.current.seeked += 1;
             // Coalesce rapid scrub seeks into fewer writes while keeping the final position durable.
             const now = Date.now();
             const elapsed = now - lastSeekSyncAtRef.current;
             if (elapsed >= SEEK_SYNC_MIN_INTERVAL) {
                 lastSeekSyncAtRef.current = now;
+                debugEventStatsRef.current.syncWrites += 1;
                 forceSync("play_progress", "seeked");
                 return;
             }
@@ -856,6 +914,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (pendingSeekSyncTimerRef.current) clearTimeout(pendingSeekSyncTimerRef.current);
             pendingSeekSyncTimerRef.current = setTimeout(() => {
                 lastSeekSyncAtRef.current = Date.now();
+                debugEventStatsRef.current.syncWrites += 1;
                 forceSync("play_progress", "seeked_coalesced");
                 pendingSeekSyncTimerRef.current = null;
             }, SEEK_SYNC_MIN_INTERVAL - elapsed);
@@ -1641,13 +1700,36 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         const parseTime = (t: string): number | null => {
             const s = t.trim().replace(",", ".");
-            const m = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(s);
-            if (!m) return null;
-            const hh = Number(m[1]);
-            const mm = Number(m[2]);
-            const ss = Number(m[3]);
-            const ms = Number((m[4] ?? "0").padEnd(3, "0"));
+            const parts = s.split(":");
+            if (parts.length !== 2 && parts.length !== 3) return null;
+
+            const [left, mid, rightRaw] = parts.length === 3 ? parts : ["0", parts[0], parts[1]];
+            const [rightSecRaw, msRaw = "0"] = rightRaw.split(".");
+
+            const hh = Number(left);
+            const mm = Number(mid);
+            const ss = Number(rightSecRaw);
+            const ms = Number(msRaw.padEnd(3, "0"));
+            if (![hh, mm, ss, ms].every(Number.isFinite)) return null;
             return hh * 3600 + mm * 60 + ss + ms / 1000;
+        };
+
+        const fetchSubtitleText = async (url: string): Promise<string | null> => {
+            const perRequestController = new AbortController();
+            const timeoutId = setTimeout(() => perRequestController.abort(), 8000);
+            const onAbort = () => perRequestController.abort();
+            controller.signal.addEventListener("abort", onAbort, { once: true });
+
+            try {
+                const res = await fetch(getProxyUrl(url), { signal: perRequestController.signal });
+                if (!res.ok) return null;
+                return await res.text();
+            } catch {
+                return null;
+            } finally {
+                clearTimeout(timeoutId);
+                controller.signal.removeEventListener("abort", onAbort);
+            }
         };
 
         const parseCuesFromText = (text: string): SubtitleCue[] => {
@@ -1687,24 +1769,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             );
             for (const t of existing) t.mode = "disabled";
 
+            setParsedCues(subtitles.map(() => []));
             const allCues: SubtitleCue[][] = [];
             for (const sub of subtitles) {
-                if (!sub.url || !sub.lang) {
+                if (!sub.url) {
                     allCues.push([]);
                     continue;
                 }
 
-                try {
-                    const res = await fetch(getProxyUrl(sub.url), { signal: controller.signal });
-                    if (!res.ok) {
-                        allCues.push([]);
-                        continue;
-                    }
-                    const txt = await res.text();
-                    allCues.push(parseCuesFromText(txt));
-                } catch {
+                const txt = await fetchSubtitleText(sub.url);
+                if (!txt) {
                     allCues.push([]);
+                    continue;
                 }
+                allCues.push(parseCuesFromText(txt));
             }
             setParsedCues(allCues);
         };
