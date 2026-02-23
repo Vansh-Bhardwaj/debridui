@@ -2001,52 +2001,64 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
-                    {/* Auto-next episode countdown */}
-                    {autoNextCountdown !== null && onNext && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-20 left-3 right-3 sm:bottom-24 sm:left-auto sm:right-4 z-45 flex items-end flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <button
-                                type="button"
-                                onClick={() => { cancelAutoNext(); onNext(); }}
-                                className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/80 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-primary hover:border-primary active:scale-95">
-                                <SkipForward className="size-4" />
-                                Next Episode ({autoNextCountdown})
-                            </button>
-                            <button
-                                type="button"
-                                onClick={cancelAutoNext}
-                                className="self-end px-3 py-1 rounded-sm text-xs text-white/60 hover:text-white/90 transition-colors">
-                                Cancel
-                            </button>
-                        </div>
-                    )}
+                    {/* Floating CTA stack: keep skip/next prompts in one place to avoid overlap */}
+                    {(autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
+                        <div
+                            data-player-controls
+                            onClick={(e) => e.stopPropagation()}
+                            onDoubleClick={(e) => e.stopPropagation()}
+                            className="absolute bottom-20 left-3 right-3 z-45 flex flex-col items-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 sm:bottom-24 sm:left-auto sm:right-4"
+                        >
+                            {autoNextCountdown !== null && onNext && (
+                                <div className="flex flex-col items-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { cancelAutoNext(); onNext(); }}
+                                        className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/80 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-primary hover:border-primary active:scale-95"
+                                    >
+                                        <SkipForward className="size-4" />
+                                        Next Episode ({autoNextCountdown})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={cancelAutoNext}
+                                        className="self-end rounded-sm px-3 py-1 text-xs text-white/60 transition-colors hover:text-white/90"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
 
-                    {/* IntroDB: Skip Intro / Skip Recap / Skip Credits button */}
-                    {activeSkipSegment && !autoSkipIntro && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-20 right-3 z-45 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300 sm:bottom-24 sm:right-4">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const seg = introSegments?.[activeSkipSegment];
-                                    if (seg && videoRef.current) {
-                                        skippedSegmentsRef.current.add(activeSkipSegment);
-                                        videoRef.current.currentTime = seg.end_sec;
-                                        setActiveSkipSegment(null);
-                                    }
-                                }}
-                                className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95">
-                                <SkipForward className="size-4" />
-                                {activeSkipSegment === 'intro' ? 'Skip Intro' : activeSkipSegment === 'recap' ? 'Skip Recap' : 'Skip Credits'}
-                            </button>
-                            <button
-                                type="button"
-                                aria-label="Dismiss"
-                                onClick={() => {
-                                    skippedSegmentsRef.current.add(activeSkipSegment);
-                                    setActiveSkipSegment(null);
-                                }}
-                                className="flex items-center justify-center rounded-sm border border-white/30 bg-black/70 p-2 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white active:scale-95">
-                                <X className="size-3" />
-                            </button>
+                            {activeSkipSegment && !autoSkipIntro && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const seg = introSegments?.[activeSkipSegment];
+                                            if (seg && videoRef.current) {
+                                                skippedSegmentsRef.current.add(activeSkipSegment);
+                                                videoRef.current.currentTime = seg.end_sec;
+                                                setActiveSkipSegment(null);
+                                            }
+                                        }}
+                                        className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95"
+                                    >
+                                        <SkipForward className="size-4" />
+                                        {activeSkipSegment === "intro" ? "Skip Intro" : activeSkipSegment === "recap" ? "Skip Recap" : "Skip Credits"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label="Dismiss"
+                                        onClick={() => {
+                                            skippedSegmentsRef.current.add(activeSkipSegment);
+                                            setActiveSkipSegment(null);
+                                        }}
+                                        className="flex items-center justify-center rounded-sm border border-white/30 bg-black/70 p-2 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white active:scale-95"
+                                    >
+                                        <X className="size-3" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -2506,7 +2518,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
                     {showLoadingHint && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-14 left-0 right-0 px-4 py-3 bg-black/90 text-white text-center text-xs z-50 backdrop-blur-md border-t border-white/10">
+                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/90 px-4 py-3 text-center text-xs text-white backdrop-blur-md sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">
                                 {hasCodecIssue 

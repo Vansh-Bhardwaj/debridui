@@ -78,6 +78,7 @@ type ResolvedStreamCacheEntry = {
 };
 
 const resolvedStreamCache = new Map<string, ResolvedStreamCacheEntry>();
+const inflightResolvedStreamRequests = new Map<string, Promise<{ url: string; chain?: string[] }>>();
 const RESOLVED_STREAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const RESOLVED_STREAM_CACHE_MAX_SIZE = 200;
 
@@ -236,6 +237,9 @@ interface ShowSourceToastParams {
 async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: string[] }> {
     if (typeof window === "undefined") return { url };
 
+    const inflight = inflightResolvedStreamRequests.get(url);
+    if (inflight) return inflight;
+
     const cached = resolvedStreamCache.get(url);
     if (cached && Date.now() - cached.cachedAt < RESOLVED_STREAM_CACHE_TTL_MS) {
         return { url: cached.url, chain: cached.chain };
@@ -245,30 +249,37 @@ async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: str
         resolvedStreamCache.delete(url);
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    try {
-        const res = await fetch(`/api/addon/resolve?url=${encodeURIComponent(url)}`, {
-            signal: controller.signal,
-        });
-        if (!res.ok) return { url };
-        const data = (await res.json()) as { url?: string; status?: number; chain?: string[] };
-        if (data.url && (data.status ?? 999) < 400) {
-            const resolved = { url: data.url, chain: data.chain };
-            resolvedStreamCache.set(url, { ...resolved, cachedAt: Date.now() });
+    const resolvePromise = (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10_000);
+        try {
+            const res = await fetch(`/api/addon/resolve?url=${encodeURIComponent(url)}`, {
+                signal: controller.signal,
+            });
+            if (!res.ok) return { url };
+            const data = (await res.json()) as { url?: string; status?: number; chain?: string[] };
+            if (data.url && (data.status ?? 999) < 400) {
+                const resolved = { url: data.url, chain: data.chain };
+                resolvedStreamCache.set(url, { ...resolved, cachedAt: Date.now() });
 
-            if (resolvedStreamCache.size > RESOLVED_STREAM_CACHE_MAX_SIZE) {
-                const oldestKey = resolvedStreamCache.keys().next().value;
-                if (oldestKey) resolvedStreamCache.delete(oldestKey);
+                if (resolvedStreamCache.size > RESOLVED_STREAM_CACHE_MAX_SIZE) {
+                    const oldestKey = resolvedStreamCache.keys().next().value;
+                    if (oldestKey) resolvedStreamCache.delete(oldestKey);
+                }
+
+                return resolved;
             }
-
-            return resolved;
+            return { url };
+        } catch {
+            return { url };
+        } finally {
+            clearTimeout(timeout);
+            inflightResolvedStreamRequests.delete(url);
         }
-    } catch { /* resolve failed — use original */ }
-    finally {
-        clearTimeout(timeout);
-    }
-    return { url };
+    })();
+
+    inflightResolvedStreamRequests.set(url, resolvePromise);
+    return resolvePromise;
 }
 
 function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay, otherSourcesCount, onPickSource }: ShowSourceToastParams) {

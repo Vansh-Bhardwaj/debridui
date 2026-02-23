@@ -123,7 +123,8 @@ export function PreviewDialog() {
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
-        retry: false,
+        retry: 1,
+        retryDelay: (attempt) => Math.min(1000, attempt * 500),
     });
 
     // Merge: store-provided streaming links take priority, then fetched

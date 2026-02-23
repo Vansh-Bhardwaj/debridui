@@ -234,6 +234,11 @@ export default function SettingsPage() {
         try {
             const res = await fetch("/api/history", { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
+            queryClient.setQueriesData<{ history: unknown[]; total: number }>(
+                { queryKey: ["watch-history"] },
+                (old) => old ? { history: [], total: 0 } : old
+            );
+            queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
             toast.success("Watch history cleared");
             setClearHistoryOpen(false);
         } catch {

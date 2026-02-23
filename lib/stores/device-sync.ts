@@ -99,6 +99,7 @@ interface DeviceSyncState {
 let wsClient: DeviceSyncClient | null = null;
 let broadcast: DeviceSyncBroadcast | null = null;
 let tokenCache: { token: string; expiresAt: number } | null = null;
+let tokenRequestPromise: Promise<string | null> | null = null;
 let transferPendingTimer: ReturnType<typeof setTimeout> | null = null;
 
 const SYNC_WORKER_URL = process.env.NEXT_PUBLIC_DEVICE_SYNC_URL ?? "";
@@ -109,18 +110,37 @@ async function fetchToken(): Promise<string | null> {
         return tokenCache.token;
     }
 
-    try {
-        const res = await fetchWithTimeout("/api/remote/token", undefined, 8000);
-        if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Device sync paused." })) {
+    if (tokenRequestPromise) {
+        return tokenRequestPromise;
+    }
+
+    tokenRequestPromise = (async () => {
+        try {
+            const res = await fetchWithTimeout("/api/remote/token", undefined, 8000);
+            if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Device sync paused." })) {
+                return null;
+            }
+            if (!res.ok) return null;
+            const data = (await res.json()) as { token: string };
+            // Token is valid 24hr, cache it
+            tokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600_000 };
+            return data.token;
+        } catch {
             return null;
+        } finally {
+            tokenRequestPromise = null;
         }
-        if (!res.ok) return null;
-        const data = (await res.json()) as { token: string };
-        // Token is valid 24hr, cache it
-        tokenCache = { token: data.token, expiresAt: Date.now() + 23 * 3600_000 };
-        return data.token;
-    } catch {
-        return null;
+    })();
+
+    return tokenRequestPromise;
+}
+
+function safeVideoPlay(video: HTMLVideoElement) {
+    const result = video.play();
+    if (result && typeof result.catch === "function") {
+        result.catch(() => {
+            // Ignore autoplay/user-gesture rejections for remote commands.
+        });
     }
 }
 
@@ -135,9 +155,9 @@ function handleRemoteCommand(action: string, payload?: Record<string, unknown>) 
             // Try browser player first, then VLC
             const video = document.querySelector("video");
             if (video) {
-                if (action === "play") video.play();
+                if (action === "play") safeVideoPlay(video);
                 else if (action === "pause") video.pause();
-                else if (video.paused) video.play(); else video.pause();
+                else if (video.paused) safeVideoPlay(video); else video.pause();
             } else {
                 // VLC control — import dynamically
                 import("@/lib/stores/vlc").then(({ useVLCStore }) => {

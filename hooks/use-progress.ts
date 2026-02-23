@@ -108,6 +108,9 @@ async function syncToServer(key: ProgressKey, data: ProgressData, meta?: SyncMet
             }),
         });
         handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired while syncing progress." });
+        if (res.status === 429) {
+            return;
+        }
     } catch (error) {
         console.error("[progress] sync error:", error);
     }
