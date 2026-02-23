@@ -89,7 +89,7 @@ export const MediaSection = memo(function MediaSection({
                             return (
                                 <div
                                     key={`${type}-${media!.ids?.trakt || index}`}
-                                    className="animate-in fade-in-0 slide-in-from-bottom-2"
+                                    className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                                     style={{
                                         animationDelay: `${Math.min(index * 30, 300)}ms`,
                                         animationDuration: "400ms",

@@ -92,16 +92,19 @@ function calculateScore(
         score -= 15;
     }
 
-    // Size consideration - prefer smaller files if similar quality (tie-breaker)
+    // Size tiebreaker — prefer larger files (higher bitrate) with diminishing returns.
+    // Log2 scaling prevents absurdly large (possibly fake) files from dominating,
+    // and the cap of 3 ensures size never overrides a resolution tier (10) or quality tier (5).
     if (source.size) {
-        // Parse size string (e.g., "4.5 GB") to number
         const sizeMatch = source.size.match(SIZE_PATTERN);
         if (sizeMatch) {
             let sizeGB = parseFloat(sizeMatch[1]);
             const unit = (sizeMatch[2] || "GB").toUpperCase();
             if (unit === "MB") sizeGB /= 1024;
             if (unit === "KB") sizeGB /= (1024 * 1024);
-            score += Math.min(sizeGB * 0.5, 5);
+            if (sizeGB > 0) {
+                score -= Math.min(Math.log2(sizeGB + 1) * 0.5, 3);
+            }
         }
     }
 
@@ -160,8 +163,8 @@ export function selectBestSource(
     cachedMatches.sort(sortByScore);
     uncachedMatches.sort(sortByScore);
 
-    // All sources sorted for alternative selection UI
-    const allSorted = [...cachedMatches, ...uncachedMatches];
+    // All sources sorted by score (cached bonus naturally ranks them higher)
+    const allSorted = [...matchingSources].sort(sortByScore);
 
     // Prefer cached sources
     if (cachedMatches.length > 0) {

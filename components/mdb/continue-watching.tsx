@@ -143,7 +143,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
 
     return (
-        <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative">
+        <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative [content-visibility:auto] [contain-intrinsic-size:160px_320px]">
             <WatchButton
                 imdbId={item.imdbId}
                 mediaType={item.type}
@@ -161,21 +161,21 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                             alt={title}
                             fill
                             sizes="(max-width: 640px) 160px, (max-width: 1280px) 192px, (max-width: 1536px) 208px, 224px"
-                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="object-cover transition-transform duration-300 group-hover:scale-hover"
                             unoptimized
                         />
                         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
 
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="h-12 w-12 rounded-full bg-primary/90 text-primary-foreground flex items-center justify-center backdrop-blur-sm shadow-xl">
-                                <Play className="h-6 w-6 fill-current translate-x-0.5" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <div className="size-12 rounded-full bg-primary/90 text-primary-foreground flex items-center justify-center backdrop-blur-sm shadow-xl">
+                                <Play className="size-6 fill-current translate-x-0.5" />
                             </div>
                         </div>
 
                         {/* Progress bar overlay at bottom */}
                         <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 backdrop-blur-sm">
                             <div
-                                className="h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.6)] transition-all duration-500"
+                                className="h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.6)] transition-all duration-300"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
@@ -214,7 +214,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 className="absolute top-1 right-1 p-1.5 rounded-sm bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive hover:text-white z-20"
                 aria-label="Remove from continue watching"
             >
-                <X className="h-3.5 w-3.5" />
+                <X className="size-3.5" />
             </button>
 
             {/* Next episode button */}
@@ -225,7 +225,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                     className="absolute top-1 left-1 p-1.5 rounded-sm bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-all hover:bg-primary hover:text-primary-foreground z-20"
                     aria-label={`Play S${String(nextEpisode.season).padStart(2, "0")}E${String(nextEpisode.episode).padStart(2, "0")}`}
                 >
-                    <SkipForward className="h-3.5 w-3.5" />
+                    <SkipForward className="size-3.5" />
                 </button>
             )}
         </div>
@@ -286,8 +286,8 @@ export function ContinueWatching() {
     if (loading) {
         return (
             <section className="mb-8">
-                <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-                <div className="relative">
+                <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Continue Watching</h2>
+                <div className="relative mt-4">
                     <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent" />
                     <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent" />
                     <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
@@ -311,8 +311,8 @@ export function ContinueWatching() {
 
     return (
         <section className="mb-8">
-            <h2 className="text-lg font-light mb-4">Continue Watching</h2>
-            <div className="relative">
+            <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Continue Watching</h2>
+            <div className="relative mt-4">
                 <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent" />
                 <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent" />
                 <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">

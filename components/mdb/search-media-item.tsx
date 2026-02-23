@@ -67,7 +67,7 @@ export const SearchMediaItem = memo(function SearchMediaItem({
                         <>
                             {media.year && <span className="text-border mx-1.5">·</span>}
                             <span className="flex items-center gap-1">
-                                <Star className="size-2.5 fill-yellow-400 text-yellow-400" />
+                                <Star className="size-2.5 fill-primary text-primary" />
                                 {media.rating.toFixed(1)}
                             </span>
                         </>

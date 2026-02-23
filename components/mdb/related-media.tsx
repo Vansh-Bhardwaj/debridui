@@ -21,7 +21,7 @@ export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: Relate
             {isLoading ? (
                 <div className="grid grid-rows-1 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
                     {Array.from({ length: 10 }, (_, i) => (
-                        <Skeleton key={i} className="aspect-2/3 rounded-sm" />
+                        <Skeleton key={i} className="aspect-2/3 rounded-sm animate-pulse" style={{ animationDelay: `${i * 50}ms` }} />
                     ))}
                 </div>
             ) : (
@@ -29,7 +29,7 @@ export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: Relate
                     {data!.map((media, i) => (
                         <div
                             key={media.ids?.trakt ?? media.ids?.imdb ?? media.ids?.slug ?? media.title ?? i}
-                            className="animate-in fade-in-0 slide-in-from-bottom-2"
+                            className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                             style={{
                                 animationDelay: `${Math.min(i * 30, 300)}ms`,
                                 animationDuration: "400ms",

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { type AddonSource, type AddonSubtitle, type TvSearchParams, type AddonManifest, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
-import { isEnglishSubtitle, getSubtitleLabel } from "@/lib/utils/subtitles";
+import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
 import { selectBestSource } from "@/lib/streaming/source-selector";
@@ -8,7 +8,7 @@ import { queryClient } from "@/lib/query-client";
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
-import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings } from "./settings";
+import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings, type PlaybackSettings } from "./settings";
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
@@ -134,7 +134,8 @@ type SubtitleQueryResult = {
     subtitles: AddonSubtitle[];
 };
 
-function combineEnglishSubtitles(results: SubtitleQueryResult[]): AddonSubtitle[] {
+function combineSubtitles(results: SubtitleQueryResult[]): AddonSubtitle[] {
+    const preferredLang = (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage || "english";
     const byKey = new Map<string, AddonSubtitle>();
 
     for (const { addonName, subtitles } of results) {
@@ -142,7 +143,7 @@ function combineEnglishSubtitles(results: SubtitleQueryResult[]): AddonSubtitle[
 
         for (const sub of subtitles) {
             if (!sub?.url || !sub.lang) continue;
-            if (!isEnglishSubtitle(sub)) continue;
+            if (!isSubtitleLanguage(sub, preferredLang)) continue;
 
             const key = `${sub.lang}:${sub.url}`;
             if (!byKey.has(key)) {
@@ -537,10 +538,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             if (requestId !== currentRequestId) return;
 
             const allSources = sourcesResults.flat();
-            const englishSubtitles = combineEnglishSubtitles(subtitleResults);
+            const subtitles = combineSubtitles(subtitleResults);
             timer.step("fetched-stream-data", {
                 totalSources: allSources.length,
-                subtitles: englishSubtitles.length,
+                subtitles: subtitles.length,
             });
 
             const streamingSettings = await getEffectiveStreamingSettings();
@@ -575,7 +576,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             set({
                 activeRequest: null,
                 selectedSource: source,
-                pendingPlayContext: { displayTitle, subtitles: englishSubtitles, progressKey },
+                pendingPlayContext: { displayTitle, subtitles, progressKey },
             });
 
             showSourceToast({
@@ -587,7 +588,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 onPlay: () =>
                     playSource(source, displayTitle, {
                         progressKey: progressKey ?? undefined,
-                        subtitles: englishSubtitles.length > 0 ? englishSubtitles : undefined,
+                        subtitles: subtitles.length > 0 ? subtitles : undefined,
                     }),
                 otherSourcesCount: result.allSorted.length - 1,
                 onPickSource: () => set({ sourcePickerOpen: true }),
@@ -679,7 +680,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             if (preloadRequestId !== currentPreloadId) return;
 
             const allSources = sourcesResults.flat();
-            const englishSubtitles = combineEnglishSubtitles(subtitleResults);
+            const subtitles = combineSubtitles(subtitleResults);
 
             const streamingSettings = await getEffectiveStreamingSettings();
             const result = selectBestSource(allSources, streamingSettings);
@@ -688,7 +689,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 set({
                     preloadedData: {
                         source: result.source,
-                        subtitles: englishSubtitles,
+                        subtitles: subtitles,
                         title: targetTitle,
                         season: targetSeason,
                         episode: targetEpisode,
