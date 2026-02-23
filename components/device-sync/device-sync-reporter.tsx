@@ -60,6 +60,15 @@ export function DeviceSyncReporter() {
     const lastReportRef = useRef(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    // Use refs for values consumed inside buildNowPlaying so the main effect
+    // doesn't tear down on every metadata/subtitle change.
+    const directTitleRef = useRef(directTitle);
+    directTitleRef.current = directTitle;
+    const progressKeyRef = useRef(progressKey);
+    progressKeyRef.current = progressKey;
+    const directSubtitlesRef = useRef(directSubtitles);
+    directSubtitlesRef.current = directSubtitles;
+
     // Eagerly load streaming store so getSourceSummaries() works in reports
     useEffect(() => {
         if (enabled) ensureStreamingStore();
@@ -76,7 +85,7 @@ export function DeviceSyncReporter() {
             // Use subtitles from the preview store (custom overlay renderer)
             // rather than native textTracks (which are disabled in our player)
             const activeSubIdx = parseInt(video.dataset.activeSubtitle ?? "-1", 10);
-            const subtitleTracks: TrackInfo[] = directSubtitles.map((s, i) => ({
+            const subtitleTracks: TrackInfo[] = directSubtitlesRef.current.map((s, i) => ({
                 id: i,
                 name: s.name || s.lang || `Track ${i + 1}`,
                 active: i === activeSubIdx,
@@ -97,11 +106,11 @@ export function DeviceSyncReporter() {
             }
 
             return {
-                title: directTitle || document.title || "Video",
-                imdbId: progressKey?.imdbId,
-                type: progressKey?.type,
-                season: progressKey?.season,
-                episode: progressKey?.episode,
+                title: directTitleRef.current || document.title || "Video",
+                imdbId: progressKeyRef.current?.imdbId,
+                type: progressKeyRef.current?.type,
+                season: progressKeyRef.current?.season,
+                episode: progressKeyRef.current?.episode,
                 progress: Math.round(video.currentTime),
                 duration: Math.round(video.duration || 0),
                 paused: video.paused,
@@ -125,7 +134,18 @@ export function DeviceSyncReporter() {
 
         const onPlay = (e: Event) => report(e.target as HTMLVideoElement);
         const onPause = (e: Event) => report(e.target as HTMLVideoElement);
-        const onEnded = () => reportNowPlaying(null);
+        const onEnded = () => {
+            // Don't immediately clear now-playing — if auto-next fires, the new
+            // episode will update the state. Use a short delay so the controller
+            // doesn't flash "No media playing" during episode transitions.
+            setTimeout(() => {
+                // Only clear if no new video has started (auto-next creates a new video element)
+                const currentVideo = document.querySelector("video");
+                if (!currentVideo || (!currentVideo.src && !currentVideo.currentSrc)) {
+                    reportNowPlaying(null);
+                }
+            }, 1500);
+        };
 
         const onLoadedData = (e: Event) => report(e.target as HTMLVideoElement);
 
@@ -162,9 +182,14 @@ export function DeviceSyncReporter() {
                     if (node instanceof HTMLVideoElement) {
                         detachFromVideo(node);
                         reportNowPlaying(null);
-                    }
-                    if (node instanceof HTMLElement && node.querySelector("video")) {
-                        reportNowPlaying(null);
+                    } else if (node instanceof HTMLElement) {
+                        // Detach from any nested video elements to prevent listener leaks
+                        node.querySelectorAll("video").forEach((v) => {
+                            detachFromVideo(v);
+                        });
+                        if (node.querySelector("video")) {
+                            reportNowPlaying(null);
+                        }
                     }
                 }
             }
@@ -220,7 +245,7 @@ export function DeviceSyncReporter() {
             if (intervalRef.current) clearInterval(intervalRef.current);
             document.querySelectorAll("video").forEach(detachFromVideo);
         };
-    }, [enabled, reportNowPlaying, directTitle, progressKey, directSubtitles]);
+    }, [enabled, reportNowPlaying]);
 
     // ── Report null when preview closes ───────────────────────────────
 

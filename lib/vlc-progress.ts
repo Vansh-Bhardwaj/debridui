@@ -18,6 +18,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSyncTime = 0;
 let lastSyncedPosition = 0;
 let lastVlcState: string | null = null;
+let lastKnownPosition = 0; // Track last known time for natural-end detection
 let lastHistoryEmitTime = 0;
 let lastHistoryProgress = 0;
 
@@ -169,6 +170,11 @@ async function poll() {
             lastVlcState = state;
         }
 
+        // Track last known position for natural-end detection
+        if (state === "playing" || state === "paused") {
+            lastKnownPosition = time;
+        }
+
         // Write to localStorage on every poll
         writeLocal(activeSession.key, time, length);
 
@@ -191,8 +197,13 @@ async function poll() {
 
         // Playback ended — final sync and clean up
         if (state === "stopped") {
-            const endedNaturally = time === 0 && length > 0;
-            const finalPosition = endedNaturally ? length : Math.max(0, time);
+            // VLC reports time=0 both for natural completion and manual stop.
+            // Distinguish by checking whether the last known position was
+            // near the end (>= 90%) — a manual stop from earlier in the
+            // track will have lastKnownPosition far from the end.
+            const wasNearEnd = lastKnownPosition >= length * 0.9;
+            const endedNaturally = time === 0 && length > 0 && wasNearEnd;
+            const finalPosition = endedNaturally ? length : Math.max(0, time || lastKnownPosition);
 
             if (endedNaturally) {
                 sendScrobble(activeSession.key, "stop", 100);
@@ -228,6 +239,7 @@ export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
     };
     lastSyncTime = 0;
     lastSyncedPosition = 0;
+    lastKnownPosition = 0;
     lastVlcState = null;
     lastHistoryEmitTime = 0;
     lastHistoryProgress = 0;
@@ -257,6 +269,7 @@ export function stopVLCProgressSync() {
     }
     activeSession = null;
     lastVlcState = null;
+    lastKnownPosition = 0;
     lastSyncedPosition = 0;
     lastHistoryEmitTime = 0;
     lastHistoryProgress = 0;

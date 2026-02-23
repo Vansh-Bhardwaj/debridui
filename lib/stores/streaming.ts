@@ -815,16 +815,34 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         if (prevEpisode < 1) {
             const prevSeason = episodeContext.season - 1;
             if (prevSeason >= 1) {
-                await play(
-                    {
-                        imdbId: episodeContext.imdbId,
-                        type: "show",
-                        title: episodeContext.title,
-                        tvParams: { season: prevSeason, episode: 1 }, // Imperfect, assumes 1
-                    },
-                    addons,
-                    options
-                );
+                // Fetch the previous season's episode list to find the last episode
+                try {
+                    const { traktClient } = await import("@/lib/trakt");
+                    const prevSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, prevSeason);
+                    const lastEpisode = prevSeasonEpisodes.length > 0 ? prevSeasonEpisodes.length : 1;
+                    await play(
+                        {
+                            imdbId: episodeContext.imdbId,
+                            type: "show",
+                            title: episodeContext.title,
+                            tvParams: { season: prevSeason, episode: lastEpisode },
+                        },
+                        addons,
+                        options
+                    );
+                } catch {
+                    // Fallback to episode 1 if metadata fetch fails
+                    await play(
+                        {
+                            imdbId: episodeContext.imdbId,
+                            type: "show",
+                            title: episodeContext.title,
+                            tvParams: { season: prevSeason, episode: 1 },
+                        },
+                        addons,
+                        options
+                    );
+                }
                 return;
             }
             toast.info("Beginning of series", { description: "You're at the first episode", position: TOAST_POSITION });
@@ -847,7 +865,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // Increment requestId to invalidate in-flight fetches
         requestId++;
         dismissToast();
-        set({ activeRequest: null, selectedSource: null });
+        set({ activeRequest: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false });
     },
 
     dismiss: () => {

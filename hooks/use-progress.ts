@@ -145,6 +145,11 @@ export function useProgress(key: ProgressKey | null) {
     const completedRef = useRef(false);
     const sessionIdRef = useRef<string>("sess_init");
     const sequenceRef = useRef(0);
+    // Ref mirrors `key` so the pagehide handler always reads the current key
+    // (the handler captures key from the effect closure, which may be stale
+    // during rapid episode transitions).
+    const keyRef = useRef(key);
+    useEffect(() => { keyRef.current = key; }, [key]);
 
     useEffect(() => {
         if (sessionIdRef.current !== "sess_init") return;
@@ -219,20 +224,22 @@ export function useProgress(key: ProgressKey | null) {
         const onPageHide = () => {
             const current = lastProgressRef.current;
             if (!current) return;
+            const k = keyRef.current;
+            if (!k) return;
 
             if (typeof navigator !== "undefined" && navigator.sendBeacon) {
                 try {
                     const seq = ++sequenceRef.current;
                     const payload = JSON.stringify({
-                        imdbId: key.imdbId,
-                        type: key.type,
-                        season: key.season,
-                        episode: key.episode,
+                        imdbId: k.imdbId,
+                        type: k.type,
+                        season: k.season,
+                        episode: k.episode,
                         progressSeconds: current.progressSeconds,
                         durationSeconds: current.durationSeconds,
                         eventType: "session_end",
                         sessionId: sessionIdRef.current,
-                        idempotencyKey: `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}:${sessionIdRef.current}:session_end:${seq}`,
+                        idempotencyKey: `${k.imdbId}:${k.type}:${k.season ?? "_"}:${k.episode ?? "_"}:${sessionIdRef.current}:session_end:${seq}`,
                         player: "browser",
                         reason: "pagehide",
                     });
@@ -247,15 +254,15 @@ export function useProgress(key: ProgressKey | null) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    imdbId: key.imdbId,
-                    type: key.type,
-                    season: key.season,
-                    episode: key.episode,
+                    imdbId: k.imdbId,
+                    type: k.type,
+                    season: k.season,
+                    episode: k.episode,
                     progressSeconds: current.progressSeconds,
                     durationSeconds: current.durationSeconds,
                     eventType: "session_end",
                     sessionId: sessionIdRef.current,
-                    idempotencyKey: `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}:${sessionIdRef.current}:session_end:${Date.now()}`,
+                    idempotencyKey: `${k.imdbId}:${k.type}:${k.season ?? "_"}:${k.episode ?? "_"}:${sessionIdRef.current}:session_end:${Date.now()}`,
                     player: "browser",
                     reason: "pagehide",
                 }),

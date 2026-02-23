@@ -521,9 +521,18 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
 
         tokenCache = null;
 
+        // Resolve any pending browse callbacks so promises don't hang
+        const callbacks = get()._browseCallbacks;
+        for (const [id, cb] of callbacks) {
+            cb({ requestId: id, files: [], error: "Disconnected" });
+        }
+        callbacks.clear();
+
         set({
             devices: [],
             connectionStatus: "disconnected",
+            activeTarget: null,
+            controlledBy: null,
             transferPending: null,
         });
     },
@@ -678,17 +687,28 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
             case "device-joined": {
                 const selfId = getDeviceId();
                 if (msg.device.id === selfId) break;
-                set((state) => ({
+                set((state) => {
                     // Filter out any existing entry with the same id OR same name+deviceType
                     // (handles reconnection with a fresh deviceId from the same physical device)
-                    devices: [
-                        ...state.devices.filter((d) =>
-                            d.id !== msg.device.id &&
-                            !(d.name === msg.device.name && d.deviceType === msg.device.deviceType)
-                        ),
-                        msg.device,
-                    ],
-                }));
+                    const replaced = state.devices.find((d) =>
+                        d.id !== msg.device.id &&
+                        d.name === msg.device.name && d.deviceType === msg.device.deviceType
+                    );
+                    // If the device we replaced was the active target, update to the new ID
+                    const updatedTarget = replaced && state.activeTarget === replaced.id
+                        ? msg.device.id
+                        : state.activeTarget;
+                    return {
+                        devices: [
+                            ...state.devices.filter((d) =>
+                                d.id !== msg.device.id &&
+                                !(d.name === msg.device.name && d.deviceType === msg.device.deviceType)
+                            ),
+                            msg.device,
+                        ],
+                        activeTarget: updatedTarget,
+                    };
+                });
                 break;
             }
             case "device-left": {
@@ -737,8 +757,14 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                         try {
                             const existing = localStorage.getItem(storageKey);
                             const existingData = existing ? JSON.parse(existing) : null;
-                            // Only overwrite if remote is more recent
-                            if (!existingData || Date.now() > (existingData.updatedAt ?? 0)) {
+                            // Only overwrite if no local data exists, or if the
+                            // remote progress is further along (meaning the remote
+                            // device has played more of this item than what's saved
+                            // locally). This avoids regressing local progress when
+                            // a remote device reports an earlier position.
+                            const remoteIsNewer = !existingData
+                                || np.progress > (existingData.progressSeconds ?? 0);
+                            if (remoteIsNewer) {
                                 localStorage.setItem(storageKey, JSON.stringify({
                                     progressSeconds: np.progress,
                                     durationSeconds: np.duration,
@@ -815,9 +841,13 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
 
 // ── Auto-init on module load ───────────────────────────────────────────────
 
+let _deviceSyncInitialized = false;
+
 export function initDeviceSync() {
     if (typeof window === "undefined") return;
     if (!SYNC_WORKER_URL) return;
+    if (_deviceSyncInitialized) return;
+    _deviceSyncInitialized = true;
 
     // Read enabled state from settings store (persisted via Zustand)
     const enabled = useSettingsStore.getState().get("deviceSync");

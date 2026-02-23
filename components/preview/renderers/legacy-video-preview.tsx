@@ -691,7 +691,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (el) {
             setDuration(el.duration || 0);
             if (hasSeenkedToInitialRef.current) {
-                applyResumePosition(startFromSeconds ?? initialProgress);
+                // On transcode fallback/source switch, prefer the user's current
+                // playback position over the initial resume point — the user may
+                // have watched further since the original seek.
+                const currentPos = el.currentTime;
+                const seekTarget = currentPos && currentPos > 5
+                    ? currentPos
+                    : (startFromSeconds ?? initialProgress);
+                applyResumePosition(seekTarget);
             }
             // Restore saved volume from localStorage
             const savedVol = localStorage.getItem("debridui-volume");
