@@ -345,9 +345,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Auto-next episode countdown
     const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
     const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    // Buffer stall detection
-    const stallTimestampsRef = useRef<number[]>([]);
-    const [showStallHint, setShowStallHint] = useState(false);
+
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
     // Seekbar hover tooltip
@@ -966,13 +964,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         const onWaiting = () => {
             setIsLoading(true);
-            // Track stalls in a 60s window; show hint if ≥3
-            const now = Date.now();
-            stallTimestampsRef.current = stallTimestampsRef.current.filter((t) => now - t < 60000);
-            stallTimestampsRef.current.push(now);
-            if (stallTimestampsRef.current.length >= 3) {
-                setShowStallHint(true);
-            }
         };
         const onPlaying = () => {
             setIsLoading(false);
@@ -3021,23 +3012,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </button>
                     )}
 
-                    {/* Buffer stall hint — frequent buffering detected */}
-                    {showStallHint && !showLoadingHint && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/90 px-4 py-2.5 text-center text-xs text-white backdrop-blur-md sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
-                            <p className="text-white/70">
-                                Frequent buffering detected.{" "}
-                                {streamingLinks?.apple ? (
-                                    <button type="button" className="text-primary hover:underline" onClick={() => { setShowStallHint(false); }}>
-                                        Try a transcoded stream or external player.
-                                    </button>
-                                ) : (
-                                    <button type="button" className="text-primary hover:underline" onClick={() => setShowStallHint(false)}>
-                                        Dismiss
-                                    </button>
-                                )}
-                            </p>
-                        </div>
-                    )}
+
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
                     {showLoadingHint && (
