@@ -11,7 +11,7 @@ interface FileListProps {
 
 export function FileList({ children, className }: FileListProps) {
     return (
-        <div className={cn("md:rounded-sm md:border md:border-border/50 overflow-hidden", className)}>{children}</div>
+        <div className={cn("md:rounded-sm md:border md:border-border/50 overflow-hidden", className)} data-tv-section>{children}</div>
     );
 }
 

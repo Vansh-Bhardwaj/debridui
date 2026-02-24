@@ -24,7 +24,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, className 
         `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(media.title)}`;
 
     return (
-        <Link href={linkHref} className="block group" aria-label={media.title}>
+        <Link href={linkHref} className="block group" aria-label={media.title} data-tv-focusable tabIndex={0}>
             <div
                 className={cn(
                     "relative overflow-hidden transition-transform duration-300 ease-out hover:scale-hover [content-visibility:auto] [contain-intrinsic-size:120px_180px]",

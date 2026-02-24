@@ -47,6 +47,7 @@ export const SeasonCard = memo(function SeasonCard({
             className={cn("group cursor-pointer w-28 sm:w-32 md:w-36 pt-1", className)}
             role="button"
             tabIndex={0}
+            data-tv-focusable
             onClick={onClick}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick?.(); }}
             onMouseEnter={prefetchSeason}>

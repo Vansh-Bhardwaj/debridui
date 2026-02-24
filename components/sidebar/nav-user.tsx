@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity } from "lucide-react";
+import { ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -17,6 +17,7 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useTVMode } from "@/hooks/use-tv-mode";
 import Link from "next/link";
 
 export function NavUser() {
@@ -24,6 +25,7 @@ export function NavUser() {
     const { session, logout, isLoggingOut } = useAuth();
     const [showLogoutDialog, setShowLogoutDialog] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const { toggle: toggleTV } = useTVMode();
 
     const user = {
         name: session?.user?.name || "User",
@@ -108,6 +110,10 @@ export function NavUser() {
                                         <Activity />
                                         Status
                                     </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setDropdownOpen(false); toggleTV(); }}>
+                                    <Tv />
+                                    TV Mode
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
                             <DropdownMenuSeparator />

@@ -21,6 +21,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/lib/stores/settings";
 import { getPosterUrl } from "@/lib/utils/media";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 
@@ -116,6 +117,7 @@ const CalendarSection = memo(function CalendarSection({
     error: Error | null;
     emptyMessage: string;
 }) {
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const grouped = useMemo(() => (items ? groupByDate(items) : {}), [items]);
     const sortedDates = useMemo(() => Object.keys(grouped).sort(), [grouped]);
 
@@ -138,7 +140,12 @@ const CalendarSection = memo(function CalendarSection({
             {sortedDates.map((date) => (
                 <div key={date} className="space-y-3">
                     <h3 className="text-xs tracking-widest uppercase text-muted-foreground">{formatDate(date)}</h3>
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(175px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+                    <div className={cn(
+                        "grid gap-3",
+                        tvMode
+                            ? "grid-cols-[repeat(auto-fill,minmax(200px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]"
+                            : "grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(175px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(190px,1fr))]"
+                    )}>
                         {grouped[date].map((item, i) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";
@@ -173,6 +180,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
     count: number;
 }) {
     const [expanded, setExpanded] = useState(false);
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const sorted = useMemo(
         () =>
@@ -192,12 +200,13 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
     if (count === 0) return null;
 
     return (
-        <section className="space-y-4">
+        <section className="space-y-4" data-tv-section>
             {/* Editorial section header */}
             <button
                 onClick={() => setExpanded((v) => !v)}
                 className="flex items-center gap-3 w-full group"
-                aria-expanded={expanded}>
+                aria-expanded={expanded}
+                data-tv-focusable>
                 <div className="h-px w-6 bg-primary" />
                 <Bell className="size-3.5 text-primary" />
                 <span className="text-xs tracking-widest uppercase text-muted-foreground">
@@ -238,12 +247,15 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
                                     animationFillMode: "backwards",
                                 }}>
                                 {/* Poster thumbnail */}
-                                <div className="relative w-9 h-[54px] shrink-0 rounded-sm overflow-hidden bg-muted/30">
+                                <div className={cn(
+                                    "relative shrink-0 rounded-sm overflow-hidden bg-muted/30",
+                                    tvMode ? "w-12 h-[72px]" : "w-9 h-[54px]"
+                                )}>
                                     <Image
                                         src={posterUrl}
                                         alt={show.title}
                                         fill
-                                        sizes="36px"
+                                        sizes={tvMode ? "48px" : "36px"}
                                         className="object-cover"
                                         unoptimized
                                     />
@@ -251,8 +263,8 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
 
                                 {/* Info */}
                                 <div className="flex-1 min-w-0 space-y-0.5">
-                                    <p className="text-sm font-medium truncate">{show.title}</p>
-                                    <span className="text-xs text-muted-foreground truncate block">
+                                    <p className={cn("font-medium truncate", tvMode ? "text-base" : "text-sm")}>{show.title}</p>
+                                    <span className={cn("text-muted-foreground truncate block", tvMode ? "text-sm" : "text-xs")}>
                                         S{String(ep.season).padStart(2, "0")}E{String(ep.number).padStart(2, "0")}
                                         {ep.title && (
                                             <>
@@ -279,6 +291,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
 const WatchlistPage = memo(function WatchlistPage() {
     const { data: settings } = useUserSettings();
     const isTraktConnected = !!settings?.trakt_access_token;
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const [filter, setFilter] = useState<WatchlistFilter>("all");
 
     const watchlistMovies = useTraktWatchlistMovies();
@@ -374,7 +387,10 @@ const WatchlistPage = memo(function WatchlistPage() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className={cn(
+            "space-y-6",
+            tvMode && "max-w-7xl mx-auto"
+        )}>
             <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
 
             {recentCount > 0 && recentEpisodes.data && (
@@ -383,15 +399,15 @@ const WatchlistPage = memo(function WatchlistPage() {
 
             <Tabs defaultValue="watchlist">
                 <TabsList variant="line">
-                    <TabsTrigger value="watchlist" className="gap-1.5">
+                    <TabsTrigger value="watchlist" className="gap-1.5" data-tv-focusable>
                         <Bookmark className="size-3.5" />
                         Watchlist
                     </TabsTrigger>
-                    <TabsTrigger value="favorites" className="gap-1.5">
+                    <TabsTrigger value="favorites" className="gap-1.5" data-tv-focusable>
                         <Heart className="size-3.5" />
                         Favorites
                     </TabsTrigger>
-                    <TabsTrigger value="calendar" className="gap-1.5">
+                    <TabsTrigger value="calendar" className="gap-1.5" data-tv-focusable>
                         <CalendarDays className="size-3.5" />
                         Calendar
                     </TabsTrigger>
@@ -399,7 +415,7 @@ const WatchlistPage = memo(function WatchlistPage() {
 
                 <TabsContent value="watchlist" className="space-y-8 pt-6">
                     {/* Filter chips */}
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2" data-tv-section>
                         {FILTERS.map((f) => {
                             const Icon = f.icon;
                             const count = filterCounts[f.id];
@@ -408,6 +424,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                                 <button
                                     key={f.id}
                                     onClick={() => setFilter(f.id)}
+                                    data-tv-focusable
                                     className={cn(
                                         "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-sm border transition-colors duration-200",
                                         isActive
@@ -486,7 +503,7 @@ const WatchlistPage = memo(function WatchlistPage() {
 
                 <TabsContent value="calendar" className="space-y-10 pt-6">
                     <SectionErrorBoundary section="Calendar Shows">
-                        <div className="space-y-4">
+                        <div className="space-y-4" data-tv-section>
                             <div className="flex items-center gap-2">
                                 <Tv className="size-4 text-primary" />
                                 <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Shows</h2>
@@ -501,7 +518,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                     </SectionErrorBoundary>
 
                     <SectionErrorBoundary section="Calendar Movies">
-                        <div className="space-y-4">
+                        <div className="space-y-4" data-tv-section>
                             <div className="flex items-center gap-2">
                                 <Film className="size-4 text-primary" />
                                 <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Upcoming Movies</h2>

@@ -149,6 +149,7 @@ export const FileListItem = memo(function FileListItem({
                     canExpand && "cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                     className
                 )}
+                data-tv-focusable="list"
                 {...(canExpand
                     ? {
                           role: "button",

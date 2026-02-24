@@ -369,7 +369,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
 
             <NextEpisodeBanner media={media} />
 
-            <section id="seasons" className="space-y-6 scroll-mt-16">
+            <section id="seasons" className="space-y-6 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Seasons & Episodes" />
 
                 {!isGroupView && (
@@ -472,12 +472,12 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                 )}
             </section>
 
-            <section className="space-y-6">
+            <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Cast & Crew" />
                 <PeopleSection mediaId={mediaId} type="shows" />
             </section>
 
-            <section className="space-y-6">
+            <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Related Shows" />
                 <RelatedMedia mediaId={mediaId} type="show" />
             </section>

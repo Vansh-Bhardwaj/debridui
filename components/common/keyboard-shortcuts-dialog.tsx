@@ -21,6 +21,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
             { keys: ["⌘", "K"], description: "Open search" },
             { keys: ["⌘", "B"], description: "Toggle sidebar" },
             { keys: ["?"], description: "Keyboard shortcuts" },
+            { keys: ["⇧", "T"], description: "Toggle TV mode" },
         ],
     },
     {
@@ -49,6 +50,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     },
 ];
 
+import { useSettingsStore } from "@/lib/stores/settings";
+
 function Kbd({ children }: { children: string }) {
     return (
         <kbd className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded border border-border/50 bg-muted text-[11px] font-mono text-muted-foreground">
@@ -71,6 +74,13 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
         if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             setIsOpen(true);
+        }
+
+        // Shift+T: toggle TV mode
+        if (e.key === "T" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            const store = useSettingsStore.getState();
+            store.set("tvMode", !store.settings.tvMode);
         }
     }, []);
 

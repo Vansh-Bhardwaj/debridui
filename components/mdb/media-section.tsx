@@ -8,6 +8,7 @@ import Link from "next/link";
 import { memo, useMemo } from "react";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 interface MediaSectionProps {
     title: string;
@@ -43,9 +44,16 @@ export const MediaSection = memo(function MediaSection({
     className,
     rows = 2,
 }: MediaSectionProps) {
-    const maxItems = rows === 1 ? 10 : 20;
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const effectiveRows = tvMode ? 1 : rows;
+    const maxItems = effectiveRows === 1 ? 10 : 20;
     const filteredItems = useMemo(() => items?.slice(0, maxItems).filter((item) => item.movie || item.show) ?? [], [items, maxItems]);
-    const gridRows = rows === 1 ? "grid-rows-1" : "grid-rows-2";
+    const gridRows = effectiveRows === 1 ? "grid-rows-1" : "grid-rows-2";
+
+    // TV mode: larger card columns for 10-foot viewing
+    const gridCols = tvMode
+        ? "auto-cols-[180px] sm:auto-cols-[200px] md:auto-cols-[220px] xl:auto-cols-[240px] 2xl:auto-cols-[260px]"
+        : "auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] xl:auto-cols-[175px] 2xl:auto-cols-[190px]";
 
     if (error) {
         return (
@@ -62,7 +70,7 @@ export const MediaSection = memo(function MediaSection({
     }
 
     return (
-        <section className={cn("space-y-4", className)}>
+        <section className={cn("space-y-4", className)} data-tv-section>
             {/* Section Header */}
             <div className="flex items-end justify-between gap-4">
                 <h2 className="text-sm tracking-widest uppercase text-muted-foreground">{title}</h2>
@@ -81,7 +89,7 @@ export const MediaSection = memo(function MediaSection({
                 {isLoading ? (
                     <MediaSectionSkeleton />
                 ) : (
-            <div className={cn("grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] xl:auto-cols-[175px] 2xl:auto-cols-[190px] gap-3 pt-2 pb-4 max-lg:px-4 w-max", gridRows)}>
+            <div className={cn("grid grid-rows-2 grid-flow-col gap-3 pt-2 pb-4 max-lg:px-4 w-max", gridCols, gridRows)}>
                         {filteredItems.map((item, index) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";

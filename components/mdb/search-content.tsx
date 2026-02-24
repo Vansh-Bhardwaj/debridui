@@ -199,6 +199,7 @@ export function SearchContent({
                     onChange={(e) => setQuery(e.target.value)}
                     autoFocus={autoFocus}
                     className="pl-11 h-12 text-base border-border/50 bg-transparent"
+                    data-tv-focusable
                 />
             </form>
 

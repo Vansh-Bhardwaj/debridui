@@ -13,6 +13,7 @@ import { useTraktRecommendations } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import { HeroCarouselSkeleton } from "./hero-carousel-skeleton";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 interface HeroSlideProps {
     item: TraktMediaItem;
@@ -20,9 +21,10 @@ interface HeroSlideProps {
     total: number;
     isActive: boolean;
     isPersonalized: boolean;
+    tvMode: boolean;
 }
 
-const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPersonalized }: HeroSlideProps) {
+const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPersonalized, tvMode }: HeroSlideProps) {
     const media = item.movie || item.show;
     const type = item.movie ? "movie" : "show";
     if (!media) return null;
@@ -42,7 +44,10 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
     return (
         <div className="relative w-full">
             {/* Desktop Layout */}
-            <div className="hidden md:block relative w-full aspect-[2/1] overflow-hidden">
+            <div className={cn(
+                "hidden md:block relative w-full overflow-hidden",
+                tvMode ? "h-[calc(100vh-4rem)]" : "aspect-[2/1]"
+            )}>
                 {/* Background Image with Ken Burns effect */}
                 <div
                     className={cn(
@@ -150,14 +155,14 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                             <div className="flex items-center gap-3 pt-2">
                                 {type === "movie" ? (
                                     <WatchButton imdbId={media.ids?.imdb || ""} mediaType={type} title={media.title}>
-                                        <Button size="lg" className="h-11 px-6 gap-2.5">
+                                        <Button size="lg" className="h-11 px-6 gap-2.5" data-tv-focusable>
                                             <Play className="size-4 fill-current" />
                                             Watch Now
                                         </Button>
                                     </WatchButton>
                                 ) : (
                                     <Link href={`${linkHref}#seasons`}>
-                                        <Button size="lg" className="h-11 px-6 gap-2.5">
+                                        <Button size="lg" className="h-11 px-6 gap-2.5" data-tv-focusable>
                                             <Play className="size-4 fill-current" />
                                             Browse Episodes
                                         </Button>
@@ -167,6 +172,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                                     <Button
                                         variant="outline"
                                         size="lg"
+                                        data-tv-focusable
                                         className="h-11 px-6 bg-background/50 backdrop-blur-sm border-border/50 hover:bg-background/80">
                                         More Info
                                         <ArrowRightIcon className="size-4 ml-1" />
@@ -304,6 +310,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
     const [api, setApi] = useState<CarouselApi>();
     const [current, setCurrent] = useState(0);
     const [count, setCount] = useState(0);
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const autoplay = useMemo(
         () =>
@@ -377,7 +384,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                 <CarouselContent className="-ml-0">
                     {mixed.map((item: TraktMediaItem, index: number) => (
                         <CarouselItem key={(item.movie ?? item.show)?.ids?.trakt ?? `hero-${index}`} className="pl-0">
-                            <HeroSlide item={item} index={index} total={mixed.length} isActive={index === current} isPersonalized={isPersonalized} />
+                            <HeroSlide item={item} index={index} total={mixed.length} isActive={index === current} isPersonalized={isPersonalized} tvMode={tvMode} />
                         </CarouselItem>
                     ))}
                 </CarouselContent>

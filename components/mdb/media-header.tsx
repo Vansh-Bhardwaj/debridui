@@ -76,7 +76,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         <div className="hidden md:flex flex-col gap-2">
                             {type === "movie" && media.ids?.imdb && (
                                 <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
-                                    <Button size="lg" className="w-full gap-2">
+                                    <Button size="lg" className="w-full gap-2" data-tv-focusable>
                                         <Play className="size-4 fill-current" />
                                         Watch Now
                                     </Button>
@@ -87,6 +87,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                     variant="outline"
                                     size="lg"
                                     className="w-full"
+                                    data-tv-focusable
                                     onClick={() =>
                                         openSinglePreview({
                                             url: media.trailer!,

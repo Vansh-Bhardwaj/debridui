@@ -142,6 +142,7 @@ type SettingsConfig = {
     smartOrder: SettingConfig<boolean>;
     hideTrash: SettingConfig<boolean>;
     deviceSync: SettingConfig<boolean>;
+    tvMode: SettingConfig<boolean>;
     mediaPlayer: SettingConfig<MediaPlayer>;
     downloadLinkMaxAge: SettingConfig<number>;
     streaming: SettingConfig<StreamingSettings>;
@@ -157,6 +158,9 @@ const settingsConfig: SettingsConfig = {
         defaultValue: false,
     },
     deviceSync: {
+        defaultValue: false,
+    },
+    tvMode: {
         defaultValue: false,
     },
     mediaPlayer: {
@@ -276,6 +280,7 @@ const getDefaultSettings = (): SettingsData => {
         smartOrder: settingsConfig.smartOrder.defaultValue,
         hideTrash: settingsConfig.hideTrash.defaultValue,
         deviceSync: settingsConfig.deviceSync.defaultValue,
+        tvMode: settingsConfig.tvMode.defaultValue,
         mediaPlayer: settingsConfig.mediaPlayer.defaultValue,
         downloadLinkMaxAge: settingsConfig.downloadLinkMaxAge.defaultValue,
         streaming: settingsConfig.streaming.defaultValue,

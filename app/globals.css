@@ -123,6 +123,30 @@
     --shadow-2xl: 0px 8px 20px 0px hsl(0, 0, 0 / 1.25);
 }
 
+/* ── Global thin scrollbar — matches editorial minimalism ── */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 15%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground) 15%, transparent);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--foreground) 25%, transparent);
+}
+
 @theme inline {
     /* Override letter-spacing scale for editorial design */
     --letter-spacing-wide: 0.1em;
@@ -969,4 +993,251 @@ input[type="range"]:hover::-moz-range-thumb {
 /* Hide cursor when controls are hidden */
 .player-hide-cursor {
     cursor: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TV MODE — 10-foot UI
+   Design tokens: font-light, tracking-widest, rounded-sm, border-border/50,
+   size-5 icons, bg-muted/30 fills, duration-300 transitions
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Typography: larger text for 10-foot viewing ── */
+[data-tv-mode] h1 { font-size: clamp(2rem, 4vw, 3.5rem); }
+[data-tv-mode] h2 { font-size: clamp(1rem, 1.5vw, 1.25rem); }
+[data-tv-mode] .text-sm { font-size: 0.975rem; }
+[data-tv-mode] .text-xs { font-size: 0.8125rem; }
+
+/* ── Navigation bar ── */
+.tv-nav-bar {
+    animation: tv-nav-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 200ms backwards;
+}
+
+@keyframes tv-nav-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-100%);
+    }
+}
+
+.tv-nav-item {
+    transition:
+        color 200ms ease,
+        background-color 200ms ease;
+}
+
+.tv-nav-item:focus-visible {
+    outline: none;
+    background: color-mix(in oklch, var(--primary) 12%, transparent);
+    color: var(--primary);
+}
+
+.tv-nav-item[data-active="true"] {
+    color: var(--primary);
+}
+
+.tv-nav-item[data-active="true"]::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 2px;
+    background: var(--primary);
+    border-radius: 1px;
+}
+
+/* ── Card overlays: always visible in TV mode (no hover on 10-foot) ── */
+[data-tv-mode] .sm\:opacity-0,
+[data-tv-mode] .group-hover\:opacity-100 {
+    opacity: 1;
+}
+
+[data-tv-mode] .sm\:translate-y-2 {
+    transform: translateY(0);
+}
+
+/* ── TV micro-interactions: subtle scale + glow on interactive items ── */
+[data-tv-mode] [data-tv-focusable] {
+    transition:
+        box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 200ms ease,
+        border-color 200ms ease;
+}
+
+/* Focused card / item — elevated with primary glow ring */
+[data-tv-mode] [data-tv-focusable]:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 2px var(--primary),
+        0 0 0 6px color-mix(in oklch, var(--primary) 25%, transparent),
+        0 8px 24px -4px rgba(0, 0, 0, 0.4),
+        0 4px 12px -2px rgba(0, 0, 0, 0.25);
+    transform: scale(1.03);
+    z-index: 20;
+    position: relative;
+    border-radius: var(--radius);
+}
+
+/* List-style focusable items (settings rows, account cards, file items)
+   — subtle highlight instead of scale, avoids layout shift in dense lists */
+[data-tv-mode] [data-tv-focusable="list"]:focus-visible {
+    transform: none;
+    box-shadow:
+        inset 3px 0 0 var(--primary),
+        0 0 0 1px color-mix(in oklch, var(--primary) 20%, transparent);
+    background: color-mix(in oklch, var(--primary) 5%, transparent);
+}
+
+/* TV item stagger entrance — applied via data-tv-stagger on parent */
+[data-tv-mode] [data-tv-stagger] > * {
+    animation: tv-item-enter 400ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+[data-tv-mode] [data-tv-stagger] > *:nth-child(1) { animation-delay: 0ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(2) { animation-delay: 50ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(3) { animation-delay: 100ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(4) { animation-delay: 150ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(5) { animation-delay: 200ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(6) { animation-delay: 250ms; }
+[data-tv-mode] [data-tv-stagger] > *:nth-child(n+7) { animation-delay: 300ms; }
+
+@keyframes tv-item-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+/* ── Clock tabular numbers ── */
+.tv-clock {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Prevent horizontal scroll + hide scrollbars ── */
+[data-tv-mode] {
+    overflow-x: hidden;
+}
+
+[data-tv-mode],
+[data-tv-mode] * {
+    scrollbar-width: none;
+}
+
+[data-tv-mode] ::-webkit-scrollbar {
+    display: none;
+}
+
+/* ── Hero carousel: full-bleed in TV mode ── */
+[data-tv-mode] .tv-hero-bleed {
+    margin-left: -2rem;
+    margin-right: -2rem;
+    margin-top: -1.5rem;
+}
+
+@media (min-width: 1280px) {
+    [data-tv-mode] .tv-hero-bleed {
+        margin-left: -3rem;
+        margin-right: -3rem;
+    }
+}
+
+@media (min-width: 1536px) {
+    [data-tv-mode] .tv-hero-bleed {
+        margin-left: -4rem;
+        margin-right: -4rem;
+    }
+}
+
+/* ── TV mode section entrance animation ── */
+[data-tv-mode] [data-tv-section] {
+    animation: tv-section-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+[data-tv-mode] [data-tv-section]:nth-child(1) { animation-delay: 0ms; }
+[data-tv-mode] [data-tv-section]:nth-child(2) { animation-delay: 100ms; }
+[data-tv-mode] [data-tv-section]:nth-child(3) { animation-delay: 200ms; }
+[data-tv-mode] [data-tv-section]:nth-child(4) { animation-delay: 300ms; }
+[data-tv-mode] [data-tv-section]:nth-child(5) { animation-delay: 400ms; }
+[data-tv-mode] [data-tv-section]:nth-child(6) { animation-delay: 500ms; }
+[data-tv-mode] [data-tv-section]:nth-child(7) { animation-delay: 600ms; }
+[data-tv-mode] [data-tv-section]:nth-child(8) { animation-delay: 700ms; }
+[data-tv-mode] [data-tv-section]:nth-child(n+9) { animation-delay: 800ms; }
+
+@keyframes tv-section-enter {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+}
+
+/* ── TV spacing: more breathing room for 10-foot ── */
+[data-tv-mode] [data-tv-section] + [data-tv-section] {
+    margin-top: 2.5rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TV MODE TRANSITION — Branded curtain
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Curtain overlay — covers entire screen instantly */
+.tv-curtain {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: var(--background);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    opacity: 0;
+    pointer-events: all;
+    will-change: opacity;
+}
+
+/* Instantly opaque — applied immediately, no transition */
+.tv-curtain-visible {
+    opacity: 1;
+}
+
+/* Curtain exit — lifts to reveal new layout */
+.tv-curtain-exit {
+    animation: tv-curtain-lift 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Branded text */
+.tv-curtain-text {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    font-weight: 300;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--foreground);
+    opacity: 0;
+    transform: translateY(8px);
+    animation: tv-curtain-text-in 400ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards;
+}
+
+/* Accent line under text */
+.tv-curtain-line {
+    width: 0;
+    height: 2px;
+    background: var(--primary);
+    animation: tv-curtain-line-grow 500ms cubic-bezier(0.16, 1, 0.3, 1) 300ms forwards;
+}
+
+@keyframes tv-curtain-text-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tv-curtain-line-grow {
+    from { width: 0; }
+    to { width: 3rem; }
+}
+
+@keyframes tv-curtain-lift {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }

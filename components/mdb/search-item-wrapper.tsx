@@ -48,6 +48,8 @@ function SearchItemWrapperComponent<T>({
     return (
         <div
             onClick={onSelect ? handleSelect : undefined}
+            data-tv-focusable="list"
+            tabIndex={0}
             className={cn(
                 "flex items-center gap-3 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors",
                 onSelect && "cursor-pointer",

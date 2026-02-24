@@ -67,7 +67,9 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
             className={cn(
                 "rounded-sm border border-border/50 p-4 transition-all duration-300 space-y-3",
                 addon.enabled ? "bg-card" : "bg-muted/30 opacity-75"
-            )}>
+            )}
+            data-tv-focusable="list"
+            tabIndex={0}>
             {/* Row 1: Icon + Name/Version */}
             <div className="flex gap-3 items-start">
                 {/* Column 1: Icon */}

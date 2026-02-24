@@ -15,6 +15,8 @@ import { CachedBadge } from "@/components/common/display";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { SectionDivider } from "@/components/common/section-divider";
 import { EmptyState } from "@/components/common/async-state";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { cn } from "@/lib/utils";
 
 const ADDON_PRESETS = [
     {
@@ -52,6 +54,7 @@ const CONFIGURABLE_ADDONS = [
 
 export default function AddonsPage() {
     const { data: serverAddons = [], isLoading, refetch } = useUserAddons();
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const addAddonMutation = useAddAddon();
     const removeAddonMutation = useRemoveAddon();
     const toggleAddonMutation = useToggleAddon();
@@ -169,7 +172,10 @@ export default function AddonsPage() {
     };
 
     return (
-        <div className="mx-auto w-full max-w-4xl space-y-8 pb-16">
+        <div className={cn(
+            "mx-auto w-full space-y-8 pb-16",
+            tvMode ? "max-w-6xl" : "max-w-4xl"
+        )}>
             <PageHeader
                 icon={Puzzle}
                 title="Stremio Addons"
@@ -183,7 +189,7 @@ export default function AddonsPage() {
             />
 
             {/* Add New Addon Section */}
-            <section className="space-y-4">
+            <section className="space-y-4" data-tv-section>
                 <SectionDivider label="Add Addon" />
 
                 <div className="space-y-3">
@@ -262,7 +268,7 @@ export default function AddonsPage() {
                         <p className="text-xs tracking-widest uppercase text-muted-foreground">
                             Configure &amp; Add
                         </p>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className={cn("grid gap-2 sm:grid-cols-2", tvMode ? "lg:grid-cols-3" : "lg:grid-cols-4")}>
                             {CONFIGURABLE_ADDONS.map((addon) => (
                                 <a
                                     key={addon.name}
@@ -288,7 +294,7 @@ export default function AddonsPage() {
             </section>
 
             {/* Addons List Section */}
-            <section className="space-y-4">
+            <section className="space-y-4" data-tv-section>
                 <SectionDivider label="Your Addons" />
 
                 <div className="flex items-center justify-between">
@@ -313,7 +319,7 @@ export default function AddonsPage() {
                         description="Add your first addon to start fetching sources"
                     />
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-tv-stagger>
                         {sortedAddons.map((addon, index) => (
                             <AddonCard
                                 key={addon.id}
@@ -332,7 +338,7 @@ export default function AddonsPage() {
             </section>
 
             {/* Info Section */}
-            <section className="space-y-4">
+            <section className="space-y-4" data-tv-section>
                 <SectionDivider label="Information" />
 
                 <div className="rounded-sm border border-border/50 p-4 space-y-3">

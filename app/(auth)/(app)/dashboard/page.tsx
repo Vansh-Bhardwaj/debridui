@@ -29,6 +29,7 @@ import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 const ContinueWatching = dynamic(
     () => import("@/components/mdb/continue-watching").then((m) => ({ default: m.ContinueWatching })),
@@ -156,6 +157,7 @@ const ContentSection = memo(function ContentSection({ label, icon, children, del
     return (
         <div
             className="space-y-8 animate-in fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
+            data-tv-section
             style={{
                 animationDelay: `${delay}ms`,
                 animationDuration: "600ms",
@@ -341,6 +343,7 @@ const AnticipatedSection = memo(function AnticipatedSection({ visible }: { visib
 const DashboardPage = memo(function DashboardPage() {
     const [searchOpen, setSearchOpen] = useState(false);
     const handleSearchClick = useCallback(() => setSearchOpen(true), []);
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     // Above-the-fold: always fetch
     const trendingMovies = useTraktTrendingMovies(20);
@@ -348,17 +351,19 @@ const DashboardPage = memo(function DashboardPage() {
 
     return (
         <div className="pb-12">
-            {/* Hero Carousel */}
-            <SectionErrorBoundary section="Hero">
-                <HeroCarousel autoFocus />
-            </SectionErrorBoundary>
+            {/* Hero Carousel — full bleed in TV mode */}
+            <div className={tvMode ? "tv-hero-bleed" : undefined}>
+                <SectionErrorBoundary section="Hero">
+                    <HeroCarousel autoFocus />
+                </SectionErrorBoundary>
+            </div>
 
-            {/* Welcome Section */}
-            <WelcomeSection onSearchClick={handleSearchClick} />
+            {/* Welcome Section — hidden in TV mode */}
+            {!tvMode && <WelcomeSection onSearchClick={handleSearchClick} />}
 
             <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
-            {/* Continue Watching - shown after welcome for logged-in users with progress */}
+            {/* Continue Watching */}
             <div className="lg:px-6 mb-8">
                 <SectionErrorBoundary section="Continue Watching">
                     <ContinueWatching />
@@ -415,8 +420,8 @@ const DashboardPage = memo(function DashboardPage() {
                     {(visible) => <AnticipatedSection visible={visible} />}
                 </LazyTraktSection>
 
-                {/* Footer */}
-                <MdbFooter className="pt-10 border-t border-border/50" />
+                {/* Footer — hidden in TV mode */}
+                {!tvMode && <MdbFooter className="pt-10 border-t border-border/50" />}
             </div>
         </div>
     );

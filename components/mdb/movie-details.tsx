@@ -22,7 +22,7 @@ export const MovieDetails = memo(function MovieDetails({ media, mediaId }: Movie
             <MediaHeader media={media} mediaId={mediaId} type="movie" />
 
             {media.ids?.imdb && (
-                <section className="space-y-6">
+                <section className="space-y-6" data-tv-section>
                     <SectionDivider label="Available Sources" />
                     <div id="sources">
                         <Sources imdbId={media.ids?.imdb} mediaType="movie" mediaTitle={media.title || "Movie"} />
@@ -32,12 +32,12 @@ export const MovieDetails = memo(function MovieDetails({ media, mediaId }: Movie
 
             <MovieCollection tmdbId={tmdbId} currentTmdbId={tmdbId} />
 
-            <section className="space-y-6">
+            <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Cast & Crew" />
                 <PeopleSection mediaId={mediaId} type="movies" />
             </section>
 
-            <section className="space-y-6">
+            <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Related Movies" />
                 <RelatedMedia mediaId={mediaId} type="movie" />
             </section>

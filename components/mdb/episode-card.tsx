@@ -98,7 +98,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                     {/* Episode thumbnail - clickable to watch */}
                     {imdbId ? (
                         <WatchButton imdbId={imdbId} mediaType="show" title={mediaTitle} tvParams={tvParams}>
-                            <button className={cn(thumbnailClass, "cursor-pointer group/thumb")}>
+                            <button className={cn(thumbnailClass, "cursor-pointer group/thumb")} data-tv-focusable>
                                 <ThumbnailContent
                                     screenshotUrl={screenshotUrl}
                                     title={episode.title}

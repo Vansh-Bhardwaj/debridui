@@ -152,6 +152,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             >
                 <button
                     type="button"
+                    data-tv-focusable
                     className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm overflow-hidden"
                 >
                     {/* Poster with progress overlay */}
@@ -293,7 +294,7 @@ export function ContinueWatching() {
                     <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
                         <div className="flex snap-x snap-mandatory gap-4 pb-2">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="w-40 flex-shrink-0 snap-start sm:w-48 xl:w-52 2xl:w-56">
+                            <div key={i} className="flex-shrink-0 snap-start w-40 sm:w-48 xl:w-52 2xl:w-56">
                                 <Skeleton className="aspect-2/3 rounded-sm" />
                                 <Skeleton className="h-4 mt-2 w-3/4" />
                             </div>
@@ -310,7 +311,7 @@ export function ContinueWatching() {
     }
 
     return (
-        <section className="mb-8">
+        <section className="mb-8" data-tv-section>
             <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Continue Watching</h2>
             <div className="relative mt-4">
                 <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent" />

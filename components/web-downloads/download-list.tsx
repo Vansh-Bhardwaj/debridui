@@ -97,7 +97,7 @@ export function DownloadList() {
 
     return (
         <>
-            <div className="-mx-4 md:mx-0 rounded-none md:rounded-sm border-y md:border border-border/50 bg-card overflow-hidden">
+            <div className="-mx-4 md:mx-0 rounded-none md:rounded-sm border-y md:border border-border/50 bg-card overflow-hidden" data-tv-section>
                 {/* Header with select all */}
                 <div className="flex items-center gap-3 px-3 py-2.5 border-b border-border/50 bg-muted/30">
                     <Checkbox

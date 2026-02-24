@@ -102,7 +102,9 @@ export const DownloadItem = memo(function DownloadItem({
             className={cn(
                 "group flex items-start gap-2.5 px-3 py-2 border-b border-border/50 last:border-b-0 transition-colors",
                 isSelected ? "bg-primary/5" : "hover:bg-muted/20"
-            )}>
+            )}
+            data-tv-focusable="list"
+            tabIndex={0}>
             {/* Checkbox */}
             {onToggleSelect && (
                 <Checkbox

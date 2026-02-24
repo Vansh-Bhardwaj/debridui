@@ -16,6 +16,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { DebridFile } from "@/lib/types";
 import { PAGE_SIZE } from "@/lib/constants";
 import { useDelayedFlag } from "@/hooks/use-delayed-flag";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { cn } from "@/lib/utils";
 
 export const FileExplorer = memo(function FileExplorer() {
     const { files, isLoading, currentPage, totalPages, setPage } = useFileExplorer();
@@ -23,6 +25,7 @@ export const FileExplorer = memo(function FileExplorer() {
     const searchParams = useSearchParams();
     const queryParam = searchParams.get("q") || "";
     const isIdSearch = queryParam.trim().startsWith("id:");
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const [searchResults, setSearchResults] = useState<DebridFile[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
@@ -121,16 +124,19 @@ export const FileExplorer = memo(function FileExplorer() {
 
     return (
         <>
-            <div className="md:mx-auto md:w-full md:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl pb-24">
+            <div className={cn(
+                "md:mx-auto md:w-full pb-24",
+                tvMode ? "md:max-w-6xl xl:max-w-7xl 2xl:max-w-[90rem]" : "md:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl"
+            )}>
                 <div className="flex flex-col gap-4">
-                    <h1 className="text-2xl sm:text-3xl font-light flex items-center gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-light flex items-center gap-3" data-tv-section>
                         <FolderOpen className="size-6 text-primary" strokeWidth={1.5} />
                         File Explorer
                     </h1>
                     <AddContent />
 
                     {/* Search and Sort Controls */}
-                    <div className="flex flex-col items-end md:flex-row md:items-center gap-2 sm:gap-4 mb-2 sm:mb-4">
+                    <div className="flex flex-col items-end md:flex-row md:items-center gap-2 sm:gap-4 mb-2 sm:mb-4" data-tv-section>
                         <SearchSection onSearchResults={handleSearchResults} />
                         <SortControls />
                     </div>

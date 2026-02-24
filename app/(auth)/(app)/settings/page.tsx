@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { useTheme } from "next-themes";
-import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw, ListVideo, Shield, History, SearchIcon } from "lucide-react";
+import { Monitor, Moon, Sun, Play, Trash2, Clock, Info, Settings, Zap, Sliders, Languages, FastForward, Type, SkipForward, Captions, ExternalLink, RefreshCw, ListVideo, Shield, History, SearchIcon, Tv } from "lucide-react";
 import {
     useSettingsStore,
     type StreamingSettings,
@@ -114,6 +114,7 @@ export default function SettingsPage() {
     const playback = get("playback");
     const tmdbApiKey = get("tmdbApiKey");
     const deviceSync = get("deviceSync");
+    const tvMode = get("tvMode");
 
     // Server-side settings sync
     const { data: serverSettings } = useUserSettings();
@@ -270,16 +271,20 @@ export default function SettingsPage() {
 
     return (
         <>
-        <div className="mx-auto w-full max-w-4xl space-y-8 pb-32">
+        <div className={cn(
+            "mx-auto w-full space-y-8 pb-32",
+            tvMode ? "max-w-6xl" : "max-w-4xl"
+        )}>
             <Suspense><TraktOAuthFeedback /></Suspense>
             <PageHeader icon={Settings} title="Settings" description="Manage your application preferences" />
 
             {/* Sticky section nav */}
-            <nav className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-border/50 flex gap-1 overflow-x-auto scrollbar-none">
+            <nav className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-border/50 flex gap-1 overflow-x-auto scrollbar-none" data-tv-section>
                 {SECTION_IDS.map((id) => (
                     <a
                         key={id}
                         href={`#${id}`}
+                        data-tv-focusable
                         className="shrink-0 px-3 py-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                     >
                         {SECTION_LABELS[id]}
@@ -288,11 +293,11 @@ export default function SettingsPage() {
             </nav>
 
             {/* ─── Integrations (highest priority) ─── */}
-            <section id="integrations" className="space-y-4 scroll-mt-16">
+            <section id="integrations" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Integrations" />
 
                 {/* Trakt — prominent card */}
-                <div className="rounded-sm border border-border/50 overflow-hidden transition-colors duration-200">
+                <div className="rounded-sm border border-border/50 overflow-hidden transition-colors duration-200" data-tv-focusable="list" tabIndex={0}>
                     <div className="flex items-center justify-between gap-4 p-4">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-[#ED1C24]/10">
@@ -378,7 +383,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Device Sync */}
-                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200">
+                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200" data-tv-focusable="list" tabIndex={0}>
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10">
                             <RefreshCw className="size-5 text-primary" />
@@ -393,14 +398,37 @@ export default function SettingsPage() {
                     <Switch
                         id="device-sync"
                         className="shrink-0"
+                        data-tv-focusable="list"
                         checked={deviceSync}
                         onCheckedChange={(checked) => set("deviceSync", checked)}
+                    />
+                </div>
+
+                {/* TV Mode */}
+                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200" data-tv-focusable="list" tabIndex={0}>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10">
+                            <Tv className="size-5 text-primary" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                            <Label htmlFor="tv-mode" className="text-sm font-medium">TV Mode</Label>
+                            <p className="text-xs text-muted-foreground">
+                                10-foot UI with large cards, arrow key &amp; gamepad navigation
+                            </p>
+                        </div>
+                    </div>
+                    <Switch
+                        id="tv-mode"
+                        className="shrink-0"
+                        data-tv-focusable="list"
+                        checked={tvMode}
+                        onCheckedChange={(checked) => set("tvMode", checked)}
                     />
                 </div>
             </section>
 
             {/* ─── Playback (most frequently changed) ─── */}
-            <section id="playback" className="space-y-4 scroll-mt-16">
+            <section id="playback" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Playback" />
 
                 <div className="space-y-4">
@@ -420,6 +448,7 @@ export default function SettingsPage() {
                         <Switch
                             id="auto-resume"
                             className="shrink-0"
+                            data-tv-focusable="list"
                             checked={playback.autoResume}
                             onCheckedChange={(checked) => updatePlayback({ autoResume: checked })}
                         />
@@ -441,6 +470,7 @@ export default function SettingsPage() {
                         <Switch
                             id="auto-next-episode"
                             className="shrink-0"
+                            data-tv-focusable="list"
                             checked={playback.autoNextEpisode}
                             onCheckedChange={(checked) => updatePlayback({ autoNextEpisode: checked })}
                         />
@@ -462,6 +492,7 @@ export default function SettingsPage() {
                         <Switch
                             id="auto-skip-intro"
                             className="shrink-0"
+                            data-tv-focusable="list"
                             checked={playback.autoSkipIntro}
                             onCheckedChange={(checked) => updatePlayback({ autoSkipIntro: checked })}
                         />
@@ -508,7 +539,7 @@ export default function SettingsPage() {
                         <Select
                             value={playback.subtitleLanguage}
                             onValueChange={(v) => updatePlayback({ subtitleLanguage: v })}>
-                            <SelectTrigger className="w-32">
+                            <SelectTrigger className="w-32" data-tv-focusable="list">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -634,7 +665,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Streaming ─── */}
-            <section id="streaming" className="space-y-4 scroll-mt-16">
+            <section id="streaming" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Streaming" />
                 {/* id for nav anchor is on the section element */}
 
@@ -650,6 +681,7 @@ export default function SettingsPage() {
                             <button
                                 key={profile.id}
                                 onClick={() => selectProfile(profile.id)}
+                                data-tv-focusable
                                 className={cn(
                                     "group relative px-3 py-1.5 text-sm rounded-sm border transition-all duration-300",
                                     streaming.profileId === profile.id
@@ -662,6 +694,7 @@ export default function SettingsPage() {
                         ))}
                         <button
                             onClick={() => selectProfile("custom")}
+                            data-tv-focusable
                             className={cn(
                                 "group relative px-3 py-1.5 text-sm rounded-sm border transition-all duration-300",
                                 isCustom
@@ -687,7 +720,7 @@ export default function SettingsPage() {
                                                 onValueChange={(v) =>
                                                     updateCustomRange({ minResolution: v as StreamingResolution })
                                                 }>
-                                                <SelectTrigger className="w-full">
+                                                <SelectTrigger className="w-full" data-tv-focusable="list">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -706,7 +739,7 @@ export default function SettingsPage() {
                                                 onValueChange={(v) =>
                                                     updateCustomRange({ maxResolution: v as StreamingResolution })
                                                 }>
-                                                <SelectTrigger className="w-full">
+                                                <SelectTrigger className="w-full" data-tv-focusable="list">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -735,7 +768,7 @@ export default function SettingsPage() {
                                                         minSourceQuality: v as SourceQuality | "any",
                                                     })
                                                 }>
-                                                <SelectTrigger className="w-full">
+                                                <SelectTrigger className="w-full" data-tv-focusable="list">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -756,7 +789,7 @@ export default function SettingsPage() {
                                                         maxSourceQuality: v as SourceQuality | "any",
                                                     })
                                                 }>
-                                                <SelectTrigger className="w-full">
+                                                <SelectTrigger className="w-full" data-tv-focusable="list">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -798,6 +831,7 @@ export default function SettingsPage() {
                             className="shrink-0"
                             checked={streaming.autoPlay}
                             onCheckedChange={(checked) => updateStreaming({ autoPlay: checked })}
+                            data-tv-focusable="list"
                         />
                     </div>
                     {/* Playback Speed */}                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
@@ -817,6 +851,7 @@ export default function SettingsPage() {
                             className="shrink-0"
                             checked={streaming.preferCached}
                             onCheckedChange={(checked) => updateStreaming({ preferCached: checked })}
+                            data-tv-focusable="list"
                         />
                     </div>
 
@@ -837,6 +872,7 @@ export default function SettingsPage() {
                             className="shrink-0"
                             checked={streaming.allowUncached}
                             onCheckedChange={(checked) => updateStreaming({ allowUncached: checked })}
+                            data-tv-focusable="list"
                         />
                     </div>
 
@@ -856,7 +892,7 @@ export default function SettingsPage() {
                         <Select
                             value={streaming.preferredLanguage}
                             onValueChange={(value) => updateStreaming({ preferredLanguage: value })}>
-                            <SelectTrigger className="w-32">
+                            <SelectTrigger className="w-32" data-tv-focusable="list">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -900,7 +936,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Appearance ─── */}
-            <section id="appearance" className="space-y-4 scroll-mt-16">
+            <section id="appearance" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Appearance" />
 
                 <div className="grid gap-6 md:grid-cols-2">
@@ -913,7 +949,7 @@ export default function SettingsPage() {
                             </Label>
                         </div>
                         <Select value={theme} onValueChange={setTheme}>
-                            <SelectTrigger id="theme" className="w-full">
+                            <SelectTrigger id="theme" className="w-full" data-tv-focusable="list">
                                 <SelectValue placeholder="Select theme" />
                             </SelectTrigger>
                             <SelectContent>
@@ -944,7 +980,7 @@ export default function SettingsPage() {
                             </Label>
                         </div>
                         <Select value={mediaPlayer} onValueChange={(value) => set("mediaPlayer", value as MediaPlayer)}>
-                            <SelectTrigger id="media-player" className="w-full">
+                            <SelectTrigger id="media-player" className="w-full" data-tv-focusable="list">
                                 <SelectValue placeholder="Select media player">
                                     {mediaPlayerPresets.find((p) => p.value === mediaPlayer)?.label}
                                 </SelectValue>
@@ -985,7 +1021,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Cache & Data ─── */}
-            <section id="cache" className="space-y-4 scroll-mt-16">
+            <section id="cache" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Cache & Data" />
 
                 {/* Cache Management */}
@@ -1003,7 +1039,8 @@ export default function SettingsPage() {
                             </div>
                             <Button
                                 onClick={() => handleClearCache([currentAccount.id, "getDownloadLink"])}
-                                variant="outline">
+                                variant="outline"
+                                data-tv-focusable>
                                 Clear Links
                             </Button>
                         </div>
@@ -1013,7 +1050,7 @@ export default function SettingsPage() {
                                 <p className="text-sm">All Cached Data</p>
                                 <p className="text-xs text-muted-foreground">Remove all cached data from browser</p>
                             </div>
-                            <Button onClick={() => handleClearCache()} variant="destructive">
+                            <Button onClick={() => handleClearCache()} variant="destructive" data-tv-focusable>
                                 Clear All
                             </Button>
                         </div>
@@ -1022,7 +1059,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Privacy & Data ─── */}
-            <section id="privacy" className="space-y-4 scroll-mt-16">
+            <section id="privacy" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Privacy & Data" />
 
                 <div className="space-y-2">
@@ -1042,6 +1079,7 @@ export default function SettingsPage() {
                             size="sm"
                             className="shrink-0 text-muted-foreground hover:text-destructive"
                             onClick={() => setClearHistoryOpen(true)}
+                            data-tv-focusable
                         >
                             <Trash2 className="size-3.5" />
                             Clear History
@@ -1064,6 +1102,7 @@ export default function SettingsPage() {
                             size="sm"
                             className="shrink-0 text-muted-foreground hover:text-destructive"
                             onClick={handleClearSearchHistory}
+                            data-tv-focusable
                         >
                             <Trash2 className="size-3.5" />
                             Clear Searches
@@ -1079,7 +1118,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── About ─── */}
-            <section id="about" className="space-y-4 scroll-mt-16">
+            <section id="about" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="About" />
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-muted-foreground">

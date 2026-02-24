@@ -15,6 +15,7 @@ import { formatSize, downloadLinks, getFileType } from "@/lib/utils";
 import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";
 import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -213,6 +214,7 @@ export function PreviewDialog() {
     const activeUrl = isSingleMode ? directUrl : linkInfo?.link;
     const activeTitle = isSingleMode ? directTitle : currentFile?.name;
     const activeFileType = isSingleMode ? (fileType ?? getFileType(directTitle || "")) : undefined;
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     if (!activeFile) return null;
 
@@ -224,14 +226,17 @@ export function PreviewDialog() {
     return (
         <Dialog open={isOpen} onOpenChange={closePreview}>
             <DialogContent
-                className="sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"
+                className={tvMode
+                    ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-screen p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%]"
+                    : "sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"}
                 showCloseButton={false}
                 aria-describedby="preview-dialog-description">
                 <DialogTitle className="sr-only">{activeTitle}</DialogTitle>
                 <p id="preview-dialog-description" className="sr-only">
                     Preview of {activeTitle}
                 </p>
-                {/* Header */}
+                {/* Header — hidden in TV mode for immersive playback */}
+                {!tvMode && (
                 <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
                     <div className="flex-1 min-w-0 mr-4">
                         <h2 className="text-lg font-light truncate">{activeTitle}</h2>
@@ -273,6 +278,7 @@ export function PreviewDialog() {
                         </Button>
                     </div>
                 </div>
+                )}
 
                 {/* Preview Content */}
                 <div

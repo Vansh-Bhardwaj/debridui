@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
 import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar } from "lucide-react";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { cn } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
@@ -56,6 +58,7 @@ interface HistoryItemProps {
 
 const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemProps) {
     const { data: media } = useTraktMedia(entry.imdbId, entry.type);
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const progressPercent = entry.durationSeconds > 0
         ? Math.min(Math.round((entry.progressSeconds / entry.durationSeconds) * 100), 100)
         : 0;
@@ -71,15 +74,24 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
         : null;
 
     return (
-        <div className="group flex items-center gap-4 p-3 rounded-sm border border-border/50 bg-card/30 hover:bg-card/60 transition-colors">
+        <div className={cn(
+                "group flex items-center gap-4 rounded-sm border border-border/50 bg-card/30 hover:bg-card/60 transition-colors",
+                tvMode ? "p-4 gap-5" : "p-3"
+            )}
+            data-tv-focusable="list"
+            tabIndex={0}
+        >
             {/* Poster */}
             <Link href={mediaHref} className="shrink-0">
-                <div className="relative w-10 h-[60px] rounded-sm overflow-hidden bg-muted border border-border/50">
+                <div className={cn(
+                    "relative rounded-sm overflow-hidden bg-muted border border-border/50",
+                    tvMode ? "w-14 h-[84px]" : "w-10 h-[60px]"
+                )}>
                     <Image
                         src={posterUrl}
                         alt={title}
                         fill
-                        sizes="40px"
+                        sizes={tvMode ? "56px" : "40px"}
                         className="object-cover"
                         unoptimized
                     />
@@ -89,14 +101,20 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
             {/* Info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                    <Link href={mediaHref} className="truncate text-sm font-medium hover:text-primary transition-colors">
+                    <Link href={mediaHref} className={cn(
+                        "truncate font-medium hover:text-primary transition-colors",
+                        tvMode ? "text-base" : "text-sm"
+                    )}>
                         {title}
                     </Link>
                     {entry.type === "movie"
-                        ? <Film className="size-3 text-muted-foreground/60 shrink-0" />
-                        : <Tv className="size-3 text-muted-foreground/60 shrink-0" />}
+                        ? <Film className={cn("text-muted-foreground/60 shrink-0", tvMode ? "size-4" : "size-3")} />
+                        : <Tv className={cn("text-muted-foreground/60 shrink-0", tvMode ? "size-4" : "size-3")} />}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                <div className={cn(
+                    "flex items-center gap-2 mt-0.5 text-muted-foreground",
+                    tvMode ? "text-xs" : "text-[11px]"
+                )}>
                     {episodeLabel && <span className="font-mono">{episodeLabel}</span>}
                     {episodeLabel && <span className="text-border">·</span>}
                     <span>{formatDuration(entry.progressSeconds)} watched</span>
@@ -110,7 +128,10 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
                     <span>{watchedTime}</span>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-1.5 h-0.5 bg-muted rounded-full overflow-hidden w-32">
+                <div className={cn(
+                    "mt-1.5 bg-muted rounded-full overflow-hidden",
+                    tvMode ? "h-1 w-48" : "h-0.5 w-32"
+                )}>
                     <div
                         className="h-full bg-primary/70 rounded-full"
                         style={{ width: `${progressPercent}%` }}
@@ -118,21 +139,24 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
                 </div>
             </div>
 
-            {/* Actions */}
-            <div className="shrink-0 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Actions — always visible in TV mode (no hover) */}
+            <div className={cn(
+                "shrink-0 flex items-center gap-2 transition-opacity",
+                tvMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}>
                 <Link href={mediaHref}>
-                    <Button variant="ghost" size="icon" className="size-7">
-                        <Play className="size-3.5" />
+                    <Button variant="ghost" size="icon" className={tvMode ? "size-9" : "size-7"}>
+                        <Play className={tvMode ? "size-4" : "size-3.5"} />
                     </Button>
                 </Link>
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-7 text-muted-foreground hover:text-destructive"
+                    className={cn("text-muted-foreground hover:text-destructive", tvMode ? "size-9" : "size-7")}
                     onClick={() => onDelete(entry.id)}
                     aria-label="Remove entry"
                 >
-                    <X className="size-3.5" />
+                    <X className={tvMode ? "size-4" : "size-3.5"} />
                 </Button>
             </div>
         </div>
@@ -160,6 +184,8 @@ export default function HistoryPage() {
     const [clearOpen, setClearOpen] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
+
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
         queryKey: ["watch-history", limit],
@@ -217,7 +243,10 @@ export default function HistoryPage() {
     const handleLoadMore = () => setLimit((prev) => prev + PAGE_SIZE);
 
     return (
-        <div className="mx-auto w-full max-w-4xl space-y-8 pb-16">
+        <div className={cn(
+            "mx-auto w-full space-y-8 pb-16",
+            tvMode ? "max-w-6xl" : "max-w-4xl"
+        )}>
             <PageHeader
                 icon={History}
                 title="Watch History"
@@ -256,7 +285,7 @@ export default function HistoryPage() {
             {!isLoading && !error && entries.length > 0 && (
                 <>
                     {/* Stats row */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className={cn("grid grid-cols-2 sm:grid-cols-4", tvMode ? "gap-4" : "gap-3")} data-tv-section>
                         {[
                             { icon: History, label: "Sessions", value: total > entries.length ? `${entries.length} of ${total}` : entries.length.toString() },
                             { icon: Clapperboard, label: "Titles", value: new Set(entries.map((e: HistoryEntry) => e.imdbId)).size.toString() },
@@ -267,11 +296,14 @@ export default function HistoryPage() {
                                 return now.getTime() - d.getTime() < 7 * 24 * 60 * 60 * 1000;
                             }).length.toString() },
                         ].map(({ icon: Icon, label, value }) => (
-                            <div key={label} className="rounded-sm border border-border/50 bg-card/30 p-3 flex items-center gap-3">
-                                <Icon className="size-4 text-muted-foreground shrink-0" />
+                            <div key={label} className={cn(
+                                "rounded-sm border border-border/50 bg-card/30 flex items-center gap-3",
+                                tvMode ? "p-4" : "p-3"
+                            )}>
+                                <Icon className={cn("text-muted-foreground shrink-0", tvMode ? "size-5" : "size-4")} />
                                 <div>
-                                    <p className="text-xs tracking-widest uppercase text-muted-foreground">{label}</p>
-                                    <p className="text-sm font-medium">{value}</p>
+                                    <p className={cn("tracking-widest uppercase text-muted-foreground", tvMode ? "text-sm" : "text-xs")}>{label}</p>
+                                    <p className={cn("font-medium", tvMode ? "text-base" : "text-sm")}>{value}</p>
                                 </div>
                             </div>
                         ))}
@@ -279,7 +311,7 @@ export default function HistoryPage() {
 
                     <div className="space-y-8">
                     {dateKeys.map((dateKey) => (
-                        <section key={dateKey} className="space-y-2">
+                        <section key={dateKey} className="space-y-2" data-tv-section>
                             <div className="flex items-center gap-3 py-1">
                                 <div className="h-px flex-1 bg-border/50" />
                                 <span className="text-xs tracking-widest uppercase text-muted-foreground px-2">
@@ -287,7 +319,7 @@ export default function HistoryPage() {
                                 </span>
                                 <div className="h-px flex-1 bg-border/50" />
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-2" data-tv-stagger>
                                 {groups[dateKey].map((entry) => (
                                     <HistoryItem key={entry.id} entry={entry} onDelete={handleDelete} />
                                 ))}

@@ -43,7 +43,9 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                 className={cn(
                     "group relative rounded-sm border bg-card p-3 sm:p-5 transition-colors duration-300",
                     isCurrentAccount ? "border-primary" : "border-border/50 hover:border-border"
-                )}>
+                )}
+                data-tv-focusable="list"
+                tabIndex={0}>
                 {/* Active badge on border */}
                 {isCurrentAccount && (
                     <span className="absolute -top-2.5 left-3 sm:left-4 px-2 py-0.5 text-[10px] tracking-widest uppercase bg-primary text-primary-foreground rounded-sm">

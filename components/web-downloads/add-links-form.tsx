@@ -106,6 +106,7 @@ export function AddLinksForm() {
                             onChange={(e) => setLinksText(e.target.value)}
                             disabled={isBusy}
                             className="font-mono text-xs sm:text-sm min-h-[100px] sm:min-h-[120px] resize-y pr-14"
+                            data-tv-focusable
                         />
                         <div className="absolute top-2 right-2 flex gap-0.5">
                             {linksText.trim() && (
@@ -135,7 +136,7 @@ export function AddLinksForm() {
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleUnlock} disabled={isDisabled} className="flex-1 sm:flex-none">
+                    <Button onClick={handleUnlock} disabled={isDisabled} className="flex-1 sm:flex-none" data-tv-focusable>
                         {isAdding ? (
                             <>
                                 <Loader2 className="size-4 animate-spin" />
@@ -153,7 +154,8 @@ export function AddLinksForm() {
                             onClick={handleSave}
                             disabled={isDisabled}
                             variant="outline"
-                            className="flex-1 sm:flex-none">
+                            className="flex-1 sm:flex-none"
+                            data-tv-focusable>
                             {isSaving ? (
                                 <>
                                     <Loader2 className="size-4 animate-spin" />

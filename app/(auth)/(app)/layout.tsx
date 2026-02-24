@@ -22,6 +22,10 @@ import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
 import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { RouteTransition } from "@/components/common/route-transition";
 import { Keyboard } from "lucide-react";
+import { TVNavigationBar } from "@/components/tv/tv-navigation";
+import { GamepadHints } from "@/components/tv/gamepad-hints";
+import { useTVMode } from "@/hooks/use-tv-mode";
+import { useTVFocus } from "@/hooks/use-tv-focus";
 
 
 // Header keyboard shortcuts button
@@ -37,10 +41,58 @@ function ShortcutsButton() {
     );
 }
 
+// Standard layout with sidebar
+function StandardLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <SidebarProvider>
+            <AppSidebar />
+            <SidebarInset className="overflow-x-hidden">
+                <ControlledIndicator />
+                <header className="flex h-12 shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                        <SidebarTrigger className="-ml-1 shrink-0" />
+                        <Separator orientation="vertical" className="h-4" />
+                        <Breadcrumbs />
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <DevicePicker />
+                        <ShortcutsButton />
+                        <SearchButton className="shrink-0" />
+                    </div>
+                </header>
+                <RouteTransition>
+                    <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
+                </RouteTransition>
+            </SidebarInset>
+        </SidebarProvider>
+    );
+}
+
+// TV mode layout — no sidebar, top nav bar
+function TVLayout({ children }: { children: React.ReactNode }) {
+    useTVFocus();
+
+    return (
+        <div className="min-h-screen bg-background">
+            <TVNavigationBar />
+            <ControlledIndicator />
+            <main className="pt-16">
+                <RouteTransition>
+                    <div className="flex flex-1 flex-col gap-4 p-4 px-8 pt-6 xl:px-12 2xl:px-16">
+                        {children}
+                    </div>
+                </RouteTransition>
+            </main>
+            <GamepadHints />
+        </div>
+    );
+}
+
 // App layout - requires at least one account
 // Redirect logic is centralized in AuthProvider
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const { userAccounts, currentAccount, currentUser, client } = useAuth();
+    const { tvMode } = useTVMode();
 
     // Initialize device sync once on mount (reads setting from Zustand)
     useEffect(() => { initDeviceSync(); }, []);
@@ -55,27 +107,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <KeyboardShortcutsDialog>
             <SearchProvider>
-                <SidebarProvider>
-                    <AppSidebar />
-                    <SidebarInset className="overflow-x-hidden">
-                        <ControlledIndicator />
-                        <header className="flex h-12 shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-                            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-                                <SidebarTrigger className="-ml-1 shrink-0" />
-                                <Separator orientation="vertical" className="h-4" />
-                                <Breadcrumbs />
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <DevicePicker />
-                                <ShortcutsButton />
-                                <SearchButton className="shrink-0" />
-                            </div>
-                        </header>
-                        <RouteTransition>
-                            <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
-                        </RouteTransition>
-                    </SidebarInset>
-                </SidebarProvider>
+                <div id="tv-mode-root" {...(tvMode ? { "data-tv-mode": "" } : {})}>
+                    {tvMode ? (
+                        <TVLayout>{children}</TVLayout>
+                    ) : (
+                        <StandardLayout>{children}</StandardLayout>
+                    )}
+                </div>
                 <PreviewDialog />
                 <SourcePickerSheet />
                 <PreviewRegistryLoader />
