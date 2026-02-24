@@ -870,6 +870,29 @@ export default function SettingsPage() {
                                 <SelectItem value="japanese">Japanese</SelectItem>
                                 <SelectItem value="korean">Korean</SelectItem>
                                 <SelectItem value="hindi">Hindi</SelectItem>
+                                <SelectItem value="arabic">Arabic</SelectItem>
+                                <SelectItem value="chinese">Chinese</SelectItem>
+                                <SelectItem value="dutch">Dutch</SelectItem>
+                                <SelectItem value="polish">Polish</SelectItem>
+                                <SelectItem value="turkish">Turkish</SelectItem>
+                                <SelectItem value="swedish">Swedish</SelectItem>
+                                <SelectItem value="czech">Czech</SelectItem>
+                                <SelectItem value="romanian">Romanian</SelectItem>
+                                <SelectItem value="greek">Greek</SelectItem>
+                                <SelectItem value="thai">Thai</SelectItem>
+                                <SelectItem value="vietnamese">Vietnamese</SelectItem>
+                                <SelectItem value="indonesian">Indonesian</SelectItem>
+                                <SelectItem value="ukrainian">Ukrainian</SelectItem>
+                                <SelectItem value="norwegian">Norwegian</SelectItem>
+                                <SelectItem value="danish">Danish</SelectItem>
+                                <SelectItem value="finnish">Finnish</SelectItem>
+                                <SelectItem value="hebrew">Hebrew</SelectItem>
+                                <SelectItem value="hungarian">Hungarian</SelectItem>
+                                <SelectItem value="bulgarian">Bulgarian</SelectItem>
+                                <SelectItem value="croatian">Croatian</SelectItem>
+                                <SelectItem value="serbian">Serbian</SelectItem>
+                                <SelectItem value="malay">Malay</SelectItem>
+                                <SelectItem value="slovak">Slovak</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
