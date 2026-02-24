@@ -151,7 +151,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                         <h4 className="text-sm sm:text-base font-light line-clamp-1 group-hover:text-foreground/80 transition-colors">
                                             {episode.title || `Episode ${episode.number}`}
                                         </h4>
-                                        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-muted-foreground">
+                                        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                                             {episode.first_aired && <span>{formatLocalizedDate(episode.first_aired)}</span>}
                                             {episode.first_aired && episode.runtime && (
                                                 <span className="text-border">·</span>
@@ -169,7 +169,7 @@ export const EpisodeCard = memo(function EpisodeCard({ episode, className, imdbI
                                     </div>
                                 </div>
                                 {episode.overview && (
-                                    <p className="text-[10px] sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1 sm:mt-1.5 md:mt-2">
+                                    <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed mt-1 sm:mt-1.5 md:mt-2">
                                         {episode.overview}
                                     </p>
                                 )}

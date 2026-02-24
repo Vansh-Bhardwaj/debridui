@@ -33,7 +33,7 @@ export function QuickSettings() {
                 <DialogHeader>
                     <DialogTitle className="font-light">Quick Settings</DialogTitle>
                 </DialogHeader>
-                <DialogDescription asChild>
+                <DialogDescription className="sr-only">Configure file explorer display settings</DialogDescription>
                     <div className="flex flex-col gap-4 py-4">
                         <div className="flex items-center justify-between py-2 border-b border-border/50">
                             <Label htmlFor="smart-order" className="text-sm text-foreground">
@@ -56,7 +56,6 @@ export function QuickSettings() {
                             />
                         </div>
                     </div>
-                </DialogDescription>
                 <DialogFooter className="flex flex-row justify-end gap-2">
                     <Button variant="outline" onClick={handleReset}>
                         Reset

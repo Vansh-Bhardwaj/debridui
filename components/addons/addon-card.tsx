@@ -102,7 +102,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                 </div>
             ) : (
                 manifest?.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap break-all">
+                    <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap break-words">
                         {manifest.description}
                     </p>
                 )

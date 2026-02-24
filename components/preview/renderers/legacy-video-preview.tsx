@@ -1916,7 +1916,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             try {
                 const res = await fetch(getProxyUrl(url), { signal: perRequestController.signal });
                 if (!res.ok) return null;
-                return await res.text();
+                // Read as raw bytes and detect encoding ourselves.
+                // The CORS proxy may not forward charset correctly, causing
+                // UTF-8 bytes to be decoded as Latin-1 (e.g. "…" → "â€¦").
+                const buf = await res.arrayBuffer();
+                try {
+                    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+                } catch {
+                    return new TextDecoder("windows-1252").decode(buf);
+                }
             } catch {
                 return null;
             } finally {
@@ -1927,13 +1935,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         const parseCuesFromText = (text: string): SubtitleCue[] => {
             const cues: SubtitleCue[] = [];
-            const raw = text.replace(/\r\n/g, "\n").trim();
-            const body = raw.startsWith("WEBVTT") ? raw.replace(/^WEBVTT[^\n]*\n+/, "") : raw;
-            const blocks = body.split(/\n{2,}/);
+            const raw = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+            // Strip UTF-8 BOM if present
+            const clean = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
+            const body = clean.startsWith("WEBVTT") ? clean.replace(/^WEBVTT[^\n]*\n+/, "") : clean;
+            // Strip NOTE blocks (VTT comments)
+            const withoutNotes = body.replace(/^NOTE\b[^\n]*\n(?:(?!\n\n)[\s\S])*?\n{2,}/gm, "");
+            const blocks = withoutNotes.split(/\n{2,}/);
 
             for (const block of blocks) {
                 const lines = block.split("\n").filter(Boolean);
                 if (lines.length < 2) continue;
+
+                // Skip STYLE blocks
+                if (lines[0]!.startsWith("STYLE")) continue;
 
                 const timeLineIdx = /^\d+$/.test(lines[0]!) ? 1 : 0;
                 const timeLine = lines[timeLineIdx];
@@ -1944,13 +1959,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 const end = parseTime(endRaw.split(/\s+/)[0] ?? "");
                 if (start == null || end == null) continue;
 
-                const cueText = lines.slice(timeLineIdx + 1).join("\n")
-                    // Strip SSA/ASS style tags: {\an8}, {\i1}, etc.
-                    .replace(/\{[^}]+\}/g, "")
+                let cueText = lines.slice(timeLineIdx + 1).join("\n")
+                    // Strip SSA/ASS style tags: {\an8}, {\i1}, {\pos(x,y)}, etc.
+                    .replace(/\{\\[^}]+\}/g, "")
+                    // Strip SSA/ASS override blocks: {text} (only if it looks like a tag)
+                    .replace(/\{[^}]*\\[^}]+\}/g, "")
                     // Strip HTML formatting tags: <i>, </i>, <b>, <font ...>, etc.
                     .replace(/<\/?[^>]+(>|$)/g, "")
                     .trim();
-                cues.push({ start, end, text: cueText });
+
+                // Decode HTML entities (common in OpenSubtitles and community subs)
+                if (cueText.includes("&")) {
+                    cueText = cueText
+                        .replace(/&amp;/gi, "&")
+                        .replace(/&lt;/gi, "<")
+                        .replace(/&gt;/gi, ">")
+                        .replace(/&quot;/gi, '"')
+                        .replace(/&apos;/gi, "'")
+                        .replace(/&nbsp;/gi, " ")
+                        .replace(/&lrm;/gi, "\u200E")
+                        .replace(/&rlm;/gi, "\u200F")
+                        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+                        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+                }
+
+                if (cueText) cues.push({ start, end, text: cueText });
             }
             return cues;
         };

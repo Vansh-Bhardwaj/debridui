@@ -50,11 +50,11 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, className 
                         </div>
                     )}
 
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {/* Gradient overlay — always visible on touch, hover on desktop */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300" />
 
-                    {/* Content on hover */}
-                    <div className="absolute inset-x-0 bottom-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                    {/* Content — always visible on touch, hover on desktop */}
+                    <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 opacity-100 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 transition-all duration-300">
                         <h3 className="font-light text-sm text-white leading-tight line-clamp-2 mb-1.5">
                             {media.title}
                         </h3>

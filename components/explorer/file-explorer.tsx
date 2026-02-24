@@ -142,17 +142,14 @@ export const FileExplorer = memo(function FileExplorer() {
                             selectedCount={selectedFileIds.size}
                         />
                         <FileListBody>
-                            {activeData.length > 0 && !isSearching && (
-                                <>
-                                    {activeData.map((file) => (
-                                        <FileListRow key={file.id} file={file} autoExpand={isIdSearch} />
-                                    ))}
-                                </>
-                            )}
                             {showLoading ? (
                                 <FileListLoading />
+                            ) : activeData.length > 0 && !isSearching ? (
+                                activeData.map((file) => (
+                                    <FileListRow key={file.id} file={file} autoExpand={isIdSearch} />
+                                ))
                             ) : (
-                                activeData.length === 0 && <FileListEmpty />
+                                !showLoading && activeData.length === 0 && <FileListEmpty />
                             )}
                         </FileListBody>
                     </FileList>
