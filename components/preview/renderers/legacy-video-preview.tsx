@@ -1095,17 +1095,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (!video) return;
         const update = () => {
             if (!video.duration) return;
-            let end = 0;
+            // Find the buffered range containing the current playback position
+            const ct = video.currentTime;
+            let end = ct; // Default to current time if no range found
             for (let i = 0; i < video.buffered.length; i++) {
-                end = Math.max(end, video.buffered.end(i));
+                if (video.buffered.start(i) <= ct && ct <= video.buffered.end(i)) {
+                    end = video.buffered.end(i);
+                    break;
+                }
             }
             setBufferedPercent((end / video.duration) * 100);
         };
         video.addEventListener("progress", update);
-        video.addEventListener("durationchange", update);
+        video.addEventListener("timeupdate", update);
+        video.addEventListener("seeked", update);
         return () => {
             video.removeEventListener("progress", update);
-            video.removeEventListener("durationchange", update);
+            video.removeEventListener("timeupdate", update);
+            video.removeEventListener("seeked", update);
         };
     }, []);
 
@@ -2423,7 +2430,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 <div className="player-seekbar-track">
                                     <div
                                         className="player-seekbar-buffered absolute inset-y-0 left-0 bg-white/30 rounded-[inherit]"
-                                        style={{ width: `${Math.max(bufferedPercent, duration > 0 ? (currentTime / duration) * 100 : 0)}%` }}
+                                        style={{ width: `${bufferedPercent}%` }}
                                     />
                                     <div
                                         className="player-seekbar-progress absolute inset-y-0 left-0 rounded-[inherit]"
