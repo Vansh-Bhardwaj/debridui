@@ -112,7 +112,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
             "content-type": isSrt ? "application/x-subrip; charset=utf-8" : "text/vtt; charset=utf-8",
             "content-disposition": `inline; filename="${filename}"`,
             "access-control-allow-origin": "*",
-            "cache-control": "public, max-age=300",
+            "cache-control": "public, max-age=3600, stale-while-revalidate=1800",
         },
     });
 }

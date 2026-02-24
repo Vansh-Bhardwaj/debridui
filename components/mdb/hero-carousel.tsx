@@ -48,6 +48,9 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                 "hidden md:block relative w-full overflow-hidden",
                 tvMode ? "h-[calc(100vh-4rem)]" : "aspect-[2/1]"
             )}>
+                {/* Shimmer skeleton while image loads */}
+                <div className="absolute inset-0 bg-muted animate-pulse" />
+
                 {/* Background Image with Ken Burns effect */}
                 <div
                     className={cn(
@@ -186,6 +189,9 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
 
             {/* Mobile Layout */}
             <div className="md:hidden relative w-full aspect-[9/14] overflow-hidden">
+                {/* Shimmer skeleton while image loads */}
+                <div className="absolute inset-0 bg-muted animate-pulse" />
+
                 {/* Background */}
                 <div
                     className={cn(

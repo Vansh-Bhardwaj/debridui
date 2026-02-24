@@ -3,7 +3,7 @@
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { WatchButton } from "@/components/common/watch-button";
 import { Play, X, Star, SkipForward } from "lucide-react";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
@@ -108,8 +108,6 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
         e.preventDefault();
         e.stopPropagation();
         if (!nextEpisode || !media) return;
-        // Mark the current episode as done so it no longer appears in continue watching
-        // while the new episode is loading. The user explicitly chose to skip forward.
         onRemove(item);
         const enabledAddons = addons
             .filter((a: Addon) => a.enabled)
@@ -120,6 +118,54 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             enabledAddons,
         );
     }, [nextEpisode, play, addons, item, media, onRemove]);
+
+    // Poster fallback chain: primary → metahub → RPDB → API-based → CSS placeholder
+    const primaryPoster = getPosterUrl(media?.images);
+    const imdbId = item.imdbId;
+    const metahub = imdbId.startsWith("tt")
+        ? `https://images.metahub.space/poster/medium/${imdbId}/img`
+        : null;
+    const rpdb = imdbId.startsWith("tt")
+        ? `https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/${imdbId}.jpg`
+        : null;
+
+    // Build deduped URL fallback chain
+    const urlChain = useMemo(() => {
+        const urls: string[] = [];
+        const seen = new Set<string>();
+        for (const url of [primaryPoster, metahub, rpdb]) {
+            if (url && !seen.has(url)) {
+                seen.add(url);
+                urls.push(url);
+            }
+        }
+        return urls;
+    }, [primaryPoster, metahub, rpdb]);
+
+    const [urlIndex, setUrlIndex] = useState(0);
+    const [posterSrc, setPosterSrc] = useState<string | null>(urlChain[0] ?? null);
+    const apiCheckedRef = useRef(false);
+
+    const handlePosterError = useCallback(() => {
+        const nextIdx = urlIndex + 1;
+        if (nextIdx < urlChain.length) {
+            setUrlIndex(nextIdx);
+            setPosterSrc(urlChain[nextIdx]);
+        } else {
+            setPosterSrc(null);
+        }
+    }, [urlIndex, urlChain]);
+
+    // API-based fallback when all URL sources fail (uses same shared cache as MediaCard)
+    useEffect(() => {
+        if (posterSrc !== null || apiCheckedRef.current || !imdbId.startsWith("tt")) return;
+        apiCheckedRef.current = true;
+        import("@/lib/utils/poster-fallback").then(({ fetchPosterFromAPIs }) =>
+            fetchPosterFromAPIs(imdbId, item.type, urlChain).then((url) => {
+                if (url) setPosterSrc(url);
+            })
+        );
+    }, [posterSrc, imdbId, item.type, urlChain]);
 
     if (loading) {
         return (
@@ -137,7 +183,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 
     const relativeTime = formatRelativeTime(item.updatedAt);
 
-    const posterUrl = getPosterUrl(media?.images) || `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(title)}`;
+    const posterUrl = posterSrc;
 
     const mediaSlug = media?.ids?.slug || media?.ids?.imdb;
     const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
@@ -157,14 +203,23 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 >
                     {/* Poster with progress overlay */}
                     <div className="relative aspect-2/3 bg-muted rounded-sm overflow-hidden border border-border/50">
-                        <Image
-                            src={posterUrl}
-                            alt={title}
-                            fill
-                            sizes="(max-width: 640px) 160px, (max-width: 1280px) 192px, (max-width: 1536px) 208px, 224px"
-                            className="object-cover transition-transform duration-300 group-hover:scale-hover"
-                            unoptimized
-                        />
+                        {posterUrl ? (
+                            <Image
+                                src={posterUrl}
+                                alt={title}
+                                fill
+                                sizes="(max-width: 640px) 160px, (max-width: 1280px) 192px, (max-width: 1536px) 208px, 224px"
+                                className="object-cover transition-transform duration-300 group-hover:scale-hover"
+                                unoptimized
+                                onError={handlePosterError}
+                            />
+                        ) : (
+                            <div className="absolute inset-0 bg-gradient-to-b from-muted/80 to-muted flex items-center justify-center p-3">
+                                <span className="text-sm font-light text-muted-foreground text-center line-clamp-3 leading-snug">
+                                    {title}
+                                </span>
+                            </div>
+                        )}
                         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
 
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">

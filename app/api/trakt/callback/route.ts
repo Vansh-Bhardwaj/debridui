@@ -95,6 +95,7 @@ export async function GET(request: NextRequest) {
         const response = NextResponse.redirect(new URL("/settings?trakt=connected", getAppUrl()));
         // Clear the OAuth state cookie
         response.cookies.set("trakt_oauth_state", "", { path: "/", maxAge: 0 });
+        response.headers.set("Cache-Control", "no-store");
         return response;
     } catch (error) {
         console.error("[trakt] Token exchange failed:", {

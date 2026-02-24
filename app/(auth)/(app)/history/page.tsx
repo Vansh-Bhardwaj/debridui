@@ -320,8 +320,14 @@ export default function HistoryPage() {
                                 <div className="h-px flex-1 bg-border/50" />
                             </div>
                             <div className="space-y-2" data-tv-stagger>
-                                {groups[dateKey].map((entry) => (
-                                    <HistoryItem key={entry.id} entry={entry} onDelete={handleDelete} />
+                                {groups[dateKey].map((entry, i) => (
+                                    <div
+                                        key={entry.id}
+                                        className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
+                                        style={{ animationDelay: `${Math.min(i * 50, 300)}ms`, animationFillMode: "backwards" }}
+                                    >
+                                        <HistoryItem entry={entry} onDelete={handleDelete} />
+                                    </div>
                                 ))}
                             </div>
                         </section>

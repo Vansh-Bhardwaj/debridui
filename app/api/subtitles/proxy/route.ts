@@ -112,7 +112,7 @@ export async function GET(req: Request) {
                 "content-type": ext === "vtt" ? "text/vtt; charset=utf-8" : "application/x-subrip; charset=utf-8",
                 "content-disposition": `inline; filename="${filename}"`,
                 "access-control-allow-origin": "*",
-                "cache-control": "public, max-age=300",
+                "cache-control": "public, max-age=3600, stale-while-revalidate=1800",
                 ...(lang ? { "content-language": lang } : {}),
             },
         });
@@ -134,7 +134,7 @@ export async function GET(req: Request) {
             headers: {
                 "content-type": "text/vtt; charset=utf-8",
                 "access-control-allow-origin": "*",
-                "cache-control": "public, max-age=300",
+                "cache-control": "public, max-age=3600, stale-while-revalidate=1800",
             },
         });
     }
@@ -149,7 +149,7 @@ export async function GET(req: Request) {
             headers: {
                 "content-type": "text/vtt; charset=utf-8",
                 "access-control-allow-origin": "*",
-                "cache-control": "public, max-age=300",
+                "cache-control": "public, max-age=3600, stale-while-revalidate=1800",
             },
         });
     }
@@ -163,7 +163,7 @@ export async function GET(req: Request) {
         headers: {
             "content-type": "text/vtt; charset=utf-8",
             "access-control-allow-origin": "*",
-            "cache-control": "public, max-age=300",
+            "cache-control": "public, max-age=3600, stale-while-revalidate=1800",
         },
     });
 }

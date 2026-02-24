@@ -282,7 +282,7 @@ export function PreviewDialog() {
 
                 {/* Preview Content */}
                 <div
-                    className="flex-1 relative overflow-hidden min-h-0 animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+                    className="flex-1 relative overflow-hidden min-h-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
                     key={isSingleMode ? directUrl : currentFile?.id}>
                     {!isSingleMode && isLoading ? (
                         <div className="flex items-center justify-center h-full">

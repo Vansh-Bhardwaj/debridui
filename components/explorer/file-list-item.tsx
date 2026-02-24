@@ -150,6 +150,7 @@ export const FileListItem = memo(function FileListItem({
                     className
                 )}
                 data-tv-focusable="list"
+                aria-label={`${file.name}${file.status !== "completed" ? `, ${file.status}` : ""}${showProgress ? `, ${file.progress?.toFixed(0)}% complete` : ""}`}
                 {...(canExpand
                     ? {
                           role: "button",
@@ -192,6 +193,16 @@ export const FileListItem = memo(function FileListItem({
                                 <StatusBadge status={file.status} hide="completed" />
                             </div>
                         </div>
+
+                        {/* Visual progress bar for active downloads */}
+                        {showProgress && (
+                            <div className="h-1 w-full rounded-full bg-muted overflow-hidden mt-1">
+                                <div
+                                    className="h-full rounded-full bg-primary/70 transition-all duration-500 ease-out"
+                                    style={{ width: `${Math.min(file.progress ?? 0, 100)}%` }}
+                                />
+                            </div>
+                        )}
 
                         <div className="flex flex-wrap items-center gap-1 md:gap-2 text-xs text-muted-foreground">
                             <SizeDisplay

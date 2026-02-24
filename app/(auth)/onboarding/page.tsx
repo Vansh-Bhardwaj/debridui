@@ -25,8 +25,14 @@ const STEPS = [
 export default function OnboardingPage() {
     const { logout, isLoggingOut } = useAuth();
     const [step, setStep] = useState(0);
+    const [direction, setDirection] = useState<"forward" | "back">("forward");
     const { data: accounts } = useUserAccounts();
     const hasAccount = (accounts?.length ?? 0) > 0;
+
+    const goTo = useCallback((target: number) => {
+        setDirection(target > step ? "forward" : "back");
+        setStep(target);
+    }, [step]);
 
     return (
         <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
@@ -68,7 +74,7 @@ export default function OnboardingPage() {
                             <button
                                 onClick={() => {
                                     // Only allow going back or to completed steps
-                                    if (i < step || (i === 0 && hasAccount)) setStep(i);
+                                    if (i < step || (i === 0 && hasAccount)) goTo(i);
                                 }}
                                 className={cn(
                                     "flex items-center gap-1.5 px-2 py-1 rounded-sm text-xs transition-colors",
@@ -106,19 +112,27 @@ export default function OnboardingPage() {
                 </div>
 
                 {/* Step content */}
-                {step === 0 && (
-                    <StepConnect
-                        hasAccount={hasAccount}
-                        onNext={() => setStep(1)}
-                    />
-                )}
-                {step === 1 && (
-                    <StepTrakt onNext={() => setStep(2)} onSkip={() => setStep(2)} />
-                )}
-                {step === 2 && (
-                    <StepTmdb onNext={() => setStep(3)} onSkip={() => setStep(3)} />
-                )}
-                {step === 3 && <StepReady />}
+                <div
+                    key={step}
+                    className={cn(
+                        "animate-in fade-in-0 duration-300 motion-reduce:animate-none",
+                        direction === "forward" ? "slide-in-from-right-4" : "slide-in-from-left-4"
+                    )}
+                >
+                    {step === 0 && (
+                        <StepConnect
+                            hasAccount={hasAccount}
+                            onNext={() => goTo(1)}
+                        />
+                    )}
+                    {step === 1 && (
+                        <StepTrakt onNext={() => goTo(2)} onSkip={() => goTo(2)} />
+                    )}
+                    {step === 2 && (
+                        <StepTmdb onNext={() => goTo(3)} onSkip={() => goTo(3)} />
+                    )}
+                    {step === 3 && <StepReady />}
+                </div>
             </div>
         </div>
     );

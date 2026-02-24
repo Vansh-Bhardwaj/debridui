@@ -20,6 +20,8 @@ interface MediaSectionProps {
     className?: string;
     /** Number of grid rows (default 2). Use 1 for compact catalog rows. */
     rows?: 1 | 2;
+    /** Called to retry a failed fetch */
+    onRetry?: () => void;
 }
 
 const MediaSectionSkeleton = memo(function MediaSectionSkeleton() {
@@ -43,6 +45,7 @@ export const MediaSection = memo(function MediaSection({
     viewAllHref,
     className,
     rows = 2,
+    onRetry,
 }: MediaSectionProps) {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const effectiveRows = tvMode ? 1 : rows;
@@ -61,9 +64,17 @@ export const MediaSection = memo(function MediaSection({
                 <div className="flex items-end justify-between gap-4">
                     <h2 className="text-sm tracking-widest uppercase text-muted-foreground">{title}</h2>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground py-8">
                     <AlertCircle className="size-4" />
                     <span>Failed to load content</span>
+                    {onRetry && (
+                        <button
+                            onClick={onRetry}
+                            className="text-xs text-primary hover:text-primary/80 transition-colors underline underline-offset-2"
+                        >
+                            Retry
+                        </button>
+                    )}
                 </div>
             </section>
         );

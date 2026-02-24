@@ -81,16 +81,18 @@ export const MediaDetails = memo(function MediaDetails({ media, mediaId, type, i
                 <div className="flex items-center justify-center min-h-[50vh]">
                     <div className="text-center space-y-4 max-w-sm">
                         <div className="text-xs tracking-widest uppercase text-muted-foreground">Not in Database</div>
-                        <p className="text-xl font-light">Trakt doesn&apos;t have this title</p>
+                        <p className="text-xl font-light">Title not found</p>
                         <p className="text-sm text-muted-foreground">
-                            This content isn&apos;t indexed by Trakt, but you may still be able to stream it.
+                            This content isn&apos;t indexed by any metadata source, but you may still be able to stream it.
                         </p>
-                        <WatchButton imdbId={mediaId} mediaType={type} title={mediaId}>
-                            <Button size="lg" className="gap-2">
-                                <Play className="size-4 fill-current" />
-                                Find Streams
-                            </Button>
-                        </WatchButton>
+                        <div className="flex flex-col items-center gap-2">
+                            <WatchButton imdbId={mediaId} mediaType={type} title={mediaId}>
+                                <Button size="lg" className="gap-2">
+                                    <Play className="size-4 fill-current" />
+                                    Find Streams
+                                </Button>
+                            </WatchButton>
+                        </div>
                     </div>
                 </div>
             );

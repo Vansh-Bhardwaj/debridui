@@ -17,5 +17,5 @@ export async function POST(request: NextRequest) {
     } catch {
         // Silently fail — analytics should never break the user experience
     }
-    return new NextResponse(null, { status: 204 });
+    return new NextResponse(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 }

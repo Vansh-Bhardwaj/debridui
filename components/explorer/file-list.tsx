@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FolderOpen } from "lucide-react";
 
 interface FileListProps {
     children: React.ReactNode;
@@ -33,10 +34,14 @@ export function FileListEmpty({ message = "No results.", className }: FileListEm
     return (
         <div
             className={cn(
-                "flex items-center justify-center py-8 sm:py-12 md:py-16 text-sm text-muted-foreground bg-muted/20",
+                "flex flex-col items-center justify-center gap-3 py-8 sm:py-12 md:py-16 text-sm text-muted-foreground bg-muted/20",
                 className
             )}>
-            {message}
+            <FolderOpen className="size-10 text-muted-foreground/30" strokeWidth={1} />
+            <div className="text-center space-y-1">
+                <p className="font-medium text-muted-foreground/70">{message}</p>
+                <p className="text-xs text-muted-foreground/50">Add torrents or magnet links to get started</p>
+            </div>
         </div>
     );
 }

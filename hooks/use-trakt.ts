@@ -1,6 +1,9 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { traktClient, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
+import { traktClient, TraktError, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { createTMDBClient, tmdbToTraktMedia } from "@/lib/tmdb";
+import { fetchCinemetaMeta, cinemetaToTraktMedia } from "@/lib/cinemeta";
 import { toast } from "sonner";
 
 // Cache duration constants
@@ -171,9 +174,39 @@ export function useTraktRecommendations(enabled = true) {
 }
 
 export function useTraktMedia(slug: string, type: "movie" | "show") {
+    const tmdbApiKey = useSettingsStore((s) => s.get("tmdbApiKey"));
+
     return useQuery({
-        queryKey: ["trakt", "media", slug, type],
-        queryFn: () => (type === "movie" ? traktClient.getMovie(slug) : traktClient.getShow(slug)),
+        queryKey: ["trakt", "media", slug, type, { tmdbFallback: !!tmdbApiKey }],
+        queryFn: async () => {
+            try {
+                return await (type === "movie" ? traktClient.getMovie(slug) : traktClient.getShow(slug));
+            } catch (error) {
+                const is404 = error instanceof TraktError && error.status === 404;
+                const isImdbId = slug.startsWith("tt");
+
+                if (is404 && isImdbId) {
+                    // Try TMDB first if the user has an API key configured
+                    if (tmdbApiKey) {
+                        try {
+                            const client = createTMDBClient(tmdbApiKey);
+                            if (client) {
+                                const detail = await client.findByImdbId(slug, type);
+                                if (detail) return tmdbToTraktMedia(detail, type, slug);
+                            }
+                        } catch {
+                            // TMDB failed (network error, etc.) — fall through to Cinemeta
+                        }
+                    }
+
+                    // Always try Cinemeta as final fallback (free, no key needed)
+                    const meta = await fetchCinemetaMeta(slug, type);
+                    if (meta) return cinemetaToTraktMedia(meta, type);
+                }
+
+                throw error;
+            }
+        },
         staleTime: CACHE_DURATION.LONG,
         gcTime: CACHE_DURATION.LONG,
     });

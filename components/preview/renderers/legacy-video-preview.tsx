@@ -357,14 +357,27 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Center action icon (YouTube-style play/pause flash)
     const [centerAction, setCenterAction] = useState<"play" | "pause" | null>(null);
     const centerActionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Tracks whether the fade-out animation has completed, so the idle play button
+    // doesn't mount while the flash icon is still animating out (prevents stacking).
+    const [centerActionDone, setCenterActionDone] = useState(true);
+    const fadeOutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Prevents the center-action-out animation from running on initial mount
+    const [centerActionTriggered, setCenterActionTriggered] = useState(false);
     // Seek ripple
     const [seekRipple, setSeekRipple] = useState<{ dir: "left" | "right"; key: number } | null>(null);
     const seekRippleKeyRef = useRef(0);
 
     const showCenterAction = useCallback((action: "play" | "pause") => {
         if (centerActionTimeoutRef.current) clearTimeout(centerActionTimeoutRef.current);
+        if (fadeOutTimeoutRef.current) clearTimeout(fadeOutTimeoutRef.current);
         setCenterAction(action);
-        centerActionTimeoutRef.current = setTimeout(() => setCenterAction(null), 600);
+        setCenterActionDone(false);
+        setCenterActionTriggered(true);
+        centerActionTimeoutRef.current = setTimeout(() => {
+            setCenterAction(null);
+            // Wait for the 350ms CSS fade-out animation before allowing idle play button
+            fadeOutTimeoutRef.current = setTimeout(() => setCenterActionDone(true), 350);
+        }, 600);
     }, []);
 
     const triggerSeekRipple = useCallback((dir: "left" | "right") => {
@@ -2105,21 +2118,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
 
                     {/* YouTube-style center action icon (flash on play/pause) */}
-                    <div className="player-center-action">
-                        <div
-                            className="player-center-action-icon"
-                            data-visible={centerAction !== null ? "true" : "false"}
-                        >
-                            {centerAction === "play" ? (
-                                <Play className="h-6 w-6 fill-current ml-0.5" />
-                            ) : (
-                                <Pause className="h-6 w-6 fill-current" />
-                            )}
+                    {centerActionTriggered && (
+                        <div className="player-center-action">
+                            <div
+                                className="player-center-action-icon"
+                                data-visible={centerAction !== null ? "true" : "false"}
+                            >
+                                {centerAction === "play" ? (
+                                    <Play className="h-6 w-6 fill-current ml-0.5" />
+                                ) : (
+                                    <Pause className="h-6 w-6 fill-current" />
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* Big center play button when paused (idle state) */}
-                    {!isLoading && !isPlaying && !centerAction && (
+                    {/* Big center play button when paused (idle state — hidden on mobile where compact controls have their own) */}
+                    {!isLoading && !isPlaying && centerActionDone && !useCompactControls && (
                         <div className="player-center-action">
                             <button
                                 onClick={(e) => {

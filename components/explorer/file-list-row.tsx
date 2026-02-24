@@ -10,6 +10,7 @@ import { queryClient } from "@/lib/query-client";
 import { processFileNodes, collectNodeIds } from "@/lib/utils/file";
 import { getTorrentFilesCacheKey } from "@/lib/utils/cache-keys";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 
 interface FileListRowProps {
     file: DebridFile;
@@ -32,21 +33,23 @@ export const FileListRow = memo(function FileListRow({ file, autoExpand = false 
         toggleFileSelection(file.id, processedFileNodes ? collectNodeIds(processedFileNodes) : [], processedFileNodes);
     };
 
+    const canExpand = file.status === "completed" || file.status === "seeding";
+
     return (
-        <React.Fragment>
+        <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
             <FileListItem
                 file={file}
                 isSelected={isSelected}
                 isExpanded={isExpanded}
-                canExpand={file.status === "completed" || file.status === "seeding"}
+                canExpand={canExpand}
                 onToggleSelect={handleSelectFile}
                 onToggleExpand={() => setIsExpanded(!isExpanded)}
             />
-            {isExpanded && (
-                <div className="border-b border-border/50 bg-muted/10">
+            {canExpand && (
+                <CollapsibleContent className="border-b border-border/50 bg-muted/10">
                     <ExpandedRow file={file} />
-                </div>
+                </CollapsibleContent>
             )}
-        </React.Fragment>
+        </Collapsible>
     );
 });
