@@ -101,7 +101,7 @@ export default function SignupForm() {
             <div className="bg-background grid grid-rows-[1fr_auto] min-h-svh p-6 md:p-10">
                 <div className="flex items-center justify-center">
                     <div className="w-full max-w-sm">
-                        <div className="flex flex-col items-center gap-2 mb-6">
+                        <div className="flex flex-col items-center gap-2 mb-6 animate-[splash-logo_0.6s_cubic-bezier(0.16,1,0.3,1)_both]">
                             <Link href="/" className="flex flex-col items-center gap-2 font-medium">
                                 <div className="flex size-12 items-center justify-center">
                                     <Image
@@ -153,7 +153,7 @@ export default function SignupForm() {
         <div className="bg-background grid grid-rows-[1fr_auto] min-h-svh p-6 md:p-10">
             <div className="flex items-center justify-center">
                 <div className="w-full max-w-sm">
-                    <div className="flex flex-col items-center gap-2 mb-6">
+                    <div className="flex flex-col items-center gap-2 mb-6 animate-[splash-logo_0.6s_cubic-bezier(0.16,1,0.3,1)_both]">
                         <Link href="/" className="flex flex-col items-center gap-2 font-medium">
                             <div className="flex size-12 items-center justify-center">
                                 <Image
@@ -171,7 +171,7 @@ export default function SignupForm() {
                     </div>
 
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6 animate-[splash-text_0.5s_0.15s_ease_both]">
                             <GoogleSignInButton callbackURL="/dashboard" disabled={isDisabled} />
 
                             {isGoogleOAuthEnabled && !isEmailSignupDisabled && (

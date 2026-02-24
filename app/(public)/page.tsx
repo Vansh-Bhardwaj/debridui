@@ -30,6 +30,9 @@ import { Badge } from "@/components/ui/badge";
 import { Gallery } from "@/components/common/gallery";
 import { DISCORD_URL, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ICONS } from "@/lib/constants";
 import { AccountType } from "@/lib/types";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { LandingStickyNav } from "@/components/common/landing-sticky-nav";
 
 const screenshots = [
     {
@@ -125,14 +128,21 @@ const steps = [
     { num: "03", title: "Watch", desc: "Browse, stream and pick up where you left off" },
 ];
 
-export default function Home() {
+export default async function Home() {
+    // Auto-redirect logged-in users to dashboard
+    const { data: session } = await auth.getSession();
+    if (session?.user) redirect("/dashboard");
+
     return (
         <div className="min-h-screen">
+            {/* Sticky navigation — appears after scrolling past hero */}
+            <LandingStickyNav />
+
             {/* Hero */}
             <section className="relative min-h-svh flex flex-col justify-center px-6 py-20 md:px-12 lg:px-20">
                 <div className="max-w-6xl mx-auto w-full">
                     {/* Top bar */}
-                    <div className="flex items-center justify-between mb-16 md:mb-24">
+                    <div className="flex items-center justify-between mb-16 md:mb-24 animate-[splash-text_0.5s_0.1s_ease_both]">
                         <div className="flex items-center gap-4 text-xs text-muted-foreground tracking-wide uppercase">
                             {techStack.map((tech, i) => (
                                 <span key={tech.name} className="hidden sm:flex items-center gap-1.5">
@@ -155,7 +165,7 @@ export default function Home() {
                     {/* Main content */}
                     <div className="space-y-8 md:space-y-12">
                         <Image
-                            className="dark:invert w-full max-w-[220px] sm:max-w-[320px] md:max-w-[420px] h-auto"
+                            className="dark:invert w-full max-w-[220px] sm:max-w-[320px] md:max-w-[420px] h-auto animate-[splash-logo_0.6s_0.15s_cubic-bezier(0.16,1,0.3,1)_both]"
                             src="/logo.svg"
                             alt="DebridUI"
                             width={420}
@@ -163,11 +173,11 @@ export default function Home() {
                             priority
                         />
 
-                        <p className="text-muted-foreground text-xl sm:text-2xl md:text-3xl max-w-xl leading-snug font-light">
+                        <p className="text-muted-foreground text-xl sm:text-2xl md:text-3xl max-w-xl leading-snug font-light animate-[splash-text_0.5s_0.25s_ease_both]">
                             A performance-focused debrid client with built-in playback, cross-device sync, and subtitle support — deployed at the edge.
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-3 pt-4">
+                        <div className="flex flex-wrap items-center gap-3 pt-4 animate-[splash-text_0.5s_0.35s_ease_both]">
                             <Button asChild size="lg" className="h-12 tracking-wide">
                                 <Link href="/dashboard">
                                     Open App
@@ -193,7 +203,7 @@ export default function Home() {
                             </Button>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2 pt-2 text-xs sm:text-sm text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2 pt-2 text-xs sm:text-sm text-muted-foreground animate-[splash-text_0.5s_0.45s_ease_both]">
                             <span className="w-full sm:w-auto">Supports</span>
                             {Object.values(AccountType).map((type, i) => (
                                 <span key={type} className="inline-flex items-center gap-1 sm:gap-1.5">

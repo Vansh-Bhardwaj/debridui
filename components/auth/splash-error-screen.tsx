@@ -1,5 +1,6 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DISCORD_URL } from "@/lib/constants";
 
 interface SplashErrorScreenProps {
     title?: string;
@@ -37,6 +38,17 @@ export function SplashErrorScreen({
                         </Button>
                     )}
                 </div>
+                {DISCORD_URL && (
+                    <a
+                        href={DISCORD_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        Need help? Join Discord
+                        <ExternalLink className="size-3" />
+                    </a>
+                )}
             </div>
         </div>
     );

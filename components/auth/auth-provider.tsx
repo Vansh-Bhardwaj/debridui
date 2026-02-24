@@ -133,12 +133,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const hasAccounts = userAccounts.length > 0;
         const isOnboarding = pathname === "/onboarding";
 
-        // Has accounts + on onboarding → dashboard
-        if (hasAccounts && isOnboarding) {
-            router.push("/dashboard");
-            return;
-        }
-
         // No accounts + not on onboarding → onboarding
         if (!hasAccounts && !isOnboarding) {
             router.push("/onboarding");

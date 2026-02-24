@@ -62,7 +62,7 @@ export default function LoginForm() {
     return (
         <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
             <div className="w-full max-w-sm">
-                <div className="flex flex-col items-center gap-2 mb-6">
+                <div className="flex flex-col items-center gap-2 mb-6 animate-[splash-logo_0.6s_cubic-bezier(0.16,1,0.3,1)_both]">
                     <Link href="/" className="flex flex-col items-center gap-2 font-medium">
                         <div className="flex size-12 items-center justify-center">
                             <Image
@@ -80,7 +80,7 @@ export default function LoginForm() {
                 </div>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6 animate-[splash-text_0.5s_0.15s_ease_both]">
                         <GoogleSignInButton callbackURL="/dashboard" disabled={isDisabled} />
 
                         {/* Runtime comparison for Docker env injection support */}

@@ -257,14 +257,38 @@ export default function SettingsPage() {
         }
     }, []);
 
+    const SECTION_IDS = ["integrations", "playback", "streaming", "appearance", "cache", "privacy", "about"] as const;
+    const SECTION_LABELS: Record<(typeof SECTION_IDS)[number], string> = {
+        integrations: "Integrations",
+        playback: "Playback",
+        streaming: "Streaming",
+        appearance: "Appearance",
+        cache: "Cache",
+        privacy: "Privacy",
+        about: "About",
+    };
+
     return (
         <>
-        <div className="mx-auto w-full max-w-4xl space-y-8 pb-16">
+        <div className="mx-auto w-full max-w-4xl space-y-8 pb-32">
             <Suspense><TraktOAuthFeedback /></Suspense>
             <PageHeader icon={Settings} title="Settings" description="Manage your application preferences" />
 
+            {/* Sticky section nav */}
+            <nav className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/80 backdrop-blur-md border-b border-border/50 flex gap-1 overflow-x-auto scrollbar-none">
+                {SECTION_IDS.map((id) => (
+                    <a
+                        key={id}
+                        href={`#${id}`}
+                        className="shrink-0 px-3 py-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                        {SECTION_LABELS[id]}
+                    </a>
+                ))}
+            </nav>
+
             {/* ─── Integrations (highest priority) ─── */}
-            <section className="space-y-4">
+            <section id="integrations" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Integrations" />
 
                 {/* Trakt — prominent card */}
@@ -376,7 +400,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Playback (most frequently changed) ─── */}
-            <section className="space-y-4">
+            <section id="playback" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Playback" />
 
                 <div className="space-y-4">
@@ -610,8 +634,9 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Streaming ─── */}
-            <section className="space-y-4">
+            <section id="streaming" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Streaming" />
+                {/* id for nav anchor is on the section element */}
 
                 {/* Quality Profile */}
                 <div className="space-y-3">
@@ -852,7 +877,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Appearance ─── */}
-            <section className="space-y-4">
+            <section id="appearance" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Appearance" />
 
                 <div className="grid gap-6 md:grid-cols-2">
@@ -937,7 +962,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Cache & Data ─── */}
-            <section className="space-y-4">
+            <section id="cache" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Cache & Data" />
 
                 {/* Cache Management */}
@@ -974,7 +999,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── Privacy & Data ─── */}
-            <section className="space-y-4">
+            <section id="privacy" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="Privacy & Data" />
 
                 <div className="space-y-2">
@@ -1031,7 +1056,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ─── About ─── */}
-            <section className="space-y-4">
+            <section id="about" className="space-y-4 scroll-mt-16">
                 <SectionDivider label="About" />
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-muted-foreground">
