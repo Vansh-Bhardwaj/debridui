@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, Loader2, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
@@ -222,13 +222,11 @@ function PlayerCastButton({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-white hover:bg-white/20"
+                <button
+                    className={cn(PLAYER_BTN_SM)}
                     aria-label="Cast to device">
                     <Cast className={cn("h-5 w-5", isRemoteActive && "text-primary")} />
-                </Button>
+                </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
                 align="end"
@@ -272,6 +270,15 @@ function PlayerCastButton({
     );
 }
 
+const PLAYER_BTN = "inline-flex items-center justify-center rounded-full text-white bg-transparent border-none cursor-pointer shrink-0 transition-all duration-150 hover:bg-white/15 active:scale-90 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent";
+const PLAYER_BTN_SM = `${PLAYER_BTN} w-9 h-9`;
+const PLAYER_BTN_MD = `${PLAYER_BTN} w-10 h-10`;
+const POPUP_STYLE: React.CSSProperties = { background: "rgba(15,15,15,0.95)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.1)" };
+const POPUP_CLS = "player-popup rounded-lg text-white";
+const POPUP_LABEL = "player-popup-label text-[10px] tracking-[0.15em] uppercase text-white/40 px-3.5 pt-2.5 pb-1.5 select-none";
+const POPUP_ITEM = "player-popup-item relative flex items-center gap-2.5 w-full px-3.5 py-2 text-[13px] text-white/85 bg-transparent border-none cursor-pointer text-left transition-colors hover:bg-white/[0.08] hover:text-white";
+const POPUP_DIVIDER = "player-popup-divider h-px bg-white/[0.08] my-1";
+
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
 export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, startFromSeconds, onNext, onPrev, onPreload, onLoad, onError }: LegacyVideoPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -280,6 +287,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [error, setError] = useState(false);
     const [showCodecWarning, setShowCodecWarning] = useState(true);
     const [showHelp, setShowHelp] = useState(false);
+    const [showRemainingTime, setShowRemainingTime] = useState(false);
     const ios = isIOS();
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
     const [showLoadingHint, setShowLoadingHint] = useState(false);
@@ -294,6 +302,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         () => useSettingsStore.getState().settings.playback.subtitlePosition
     );
     const [subtitleDelay, setSubtitleDelay] = useState(0); // ms, negative = earlier, positive = later
+    const [subtitleBackground, setSubtitleBackground] = useState<'solid' | 'semi' | 'outline' | 'none'>(
+        () => useSettingsStore.getState().settings.playback.subtitleBackground ?? 'semi'
+    );
+    const [subtitleColor, setSubtitleColor] = useState(
+        () => useSettingsStore.getState().settings.playback.subtitleColor ?? '#ffffff'
+    );
+    const [subtitleFont, setSubtitleFont] = useState<'default' | 'mono' | 'serif' | 'trebuchet'>(
+        () => useSettingsStore.getState().settings.playback.subtitleFont ?? 'default'
+    );
     const [playbackRate, setPlaybackRate] = useState(
         () => useSettingsStore.getState().settings.playback.playbackSpeed
     );
@@ -320,19 +337,48 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // In-player OSD (on-screen display) for keyboard feedback
     const [osdText, setOsdText] = useState("");
     const [osdVisible, setOsdVisible] = useState(false);
+    type OsdPosition = "top-right" | "center" | "left" | "right";
+    const [osdPosition, setOsdPosition] = useState<OsdPosition>("top-right");
     const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Accumulates total seek distance while a seek key is held
     const seekAccRef = useRef<{ direction: 1 | -1; total: number } | null>(null);
     // Auto-next episode countdown
     const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
     const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Buffer stall detection
+    const stallTimestampsRef = useRef<number[]>([]);
+    const [showStallHint, setShowStallHint] = useState(false);
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
     // Seekbar hover tooltip
     const [seekHoverPct, setSeekHoverPct] = useState<number | null>(null);
-    const showOsd = useCallback((text: string) => {
+    // Custom seekbar drag state
+    const seekbarRef = useRef<HTMLDivElement>(null);
+    const [isDraggingSeekbar, setIsDraggingSeekbar] = useState(false);
+    const wasPausedBeforeDragRef = useRef(false);
+    // Center action icon (YouTube-style play/pause flash)
+    const [centerAction, setCenterAction] = useState<"play" | "pause" | null>(null);
+    const centerActionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Seek ripple
+    const [seekRipple, setSeekRipple] = useState<{ dir: "left" | "right"; key: number } | null>(null);
+    const seekRippleKeyRef = useRef(0);
+
+    const showCenterAction = useCallback((action: "play" | "pause") => {
+        if (centerActionTimeoutRef.current) clearTimeout(centerActionTimeoutRef.current);
+        setCenterAction(action);
+        centerActionTimeoutRef.current = setTimeout(() => setCenterAction(null), 600);
+    }, []);
+
+    const triggerSeekRipple = useCallback((dir: "left" | "right") => {
+        seekRippleKeyRef.current += 1;
+        setSeekRipple({ dir, key: seekRippleKeyRef.current });
+        setTimeout(() => setSeekRipple(null), 600);
+    }, []);
+
+    const showOsd = useCallback((text: string, position: OsdPosition = "top-right") => {
         setOsdText(text);
         setOsdVisible(true);
+        setOsdPosition(position);
         if (osdTimeoutRef.current) clearTimeout(osdTimeoutRef.current);
         osdTimeoutRef.current = setTimeout(() => {
             setOsdVisible(false);
@@ -435,6 +481,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         if (historySessionIdRef.current !== "sess_init") return;
         historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+    }, []);
+
+    // Capture ? key before the global shortcuts dialog can handle it.
+    // Uses capture phase on document to fire before any bubble-phase handlers.
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+            if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                setShowHelp((v) => !v);
+            }
+        };
+        document.addEventListener("keydown", handler, true);
+        return () => document.removeEventListener("keydown", handler, true);
     }, []);
 
     // Reset skipped-segment tracking whenever the episode changes
@@ -902,7 +964,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 }
             }
         };
-        const onWaiting = () => setIsLoading(true);
+        const onWaiting = () => {
+            setIsLoading(true);
+            // Track stalls in a 60s window; show hint if ≥3
+            const now = Date.now();
+            stallTimestampsRef.current = stallTimestampsRef.current.filter((t) => now - t < 60000);
+            stallTimestampsRef.current.push(now);
+            if (stallTimestampsRef.current.length >= 3) {
+                setShowStallHint(true);
+            }
+        };
         const onPlaying = () => {
             setIsLoading(false);
             setIsPlaying(true);
@@ -1047,29 +1118,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, []);
 
-    // When the tab/window returns from background, browsers stop decoding video
-    // frames (audio continues). Force a micro-seek to restart the video decoder.
-    // Uses both visibilitychange (tab switch) and focus (window occlusion).
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        const nudgeDecoder = () => {
-            if (!video.paused && video.readyState >= 2) {
-                video.currentTime = video.currentTime;
-            }
-        };
-        const onVisibilityChange = () => {
-            if (document.visibilityState === "visible") nudgeDecoder();
-        };
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        window.addEventListener("focus", nudgeDecoder);
-        return () => {
-            document.removeEventListener("visibilitychange", onVisibilityChange);
-            window.removeEventListener("focus", nudgeDecoder);
-        };
-    }, []);
-
 
     // Keep fullscreen state in sync (native + CSS fake fullscreen)
     const [fakeFullscreen, setFakeFullscreen] = useState(false);
@@ -1092,11 +1140,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         video.playbackRate = playbackRate;
     }, [playbackRate]);
 
-    // Control bar auto-hide (3s inactivity)
+    // Control bar auto-hide (3s inactivity) — freezes while a menu/popup is open
+    const openMenuRef = useRef<string | null>(null);
     const resetControlsTimeout = useCallback(() => {
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
         setShowControls(true);
         controlsTimeoutRef.current = setTimeout(() => {
+            if (openMenuRef.current) return; // Don't hide while a menu is open
             if (videoRef.current && !videoRef.current.paused) {
                 setShowControls(false);
             }
@@ -1127,11 +1177,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const el = videoRef.current;
         if (!el) return;
         if (el.paused || el.ended) {
+            showCenterAction("play");
             void el.play();
         } else {
+            showCenterAction("pause");
             el.pause();
         }
-    }, []);
+    }, [showCenterAction]);
 
     const seekTo = useCallback((time: number) => {
         const el = videoRef.current;
@@ -1140,13 +1192,64 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         setCurrentTime(el.currentTime);
     }, []);
 
-    const handleSeekChange = useCallback(
+    const _handleSeekChange = useCallback(
         (event: React.ChangeEvent<HTMLInputElement>) => {
             const value = Number(event.target.value);
             if (Number.isFinite(value)) seekTo(value);
         },
         [seekTo]
     );
+
+    // Custom seekbar pointer handlers
+    const seekbarPctFromEvent = useCallback((e: PointerEvent | React.PointerEvent) => {
+        const bar = seekbarRef.current;
+        if (!bar) return 0;
+        const rect = bar.getBoundingClientRect();
+        return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    }, []);
+
+    const handleSeekbarPointerDown = useCallback((e: React.PointerEvent) => {
+        e.preventDefault();
+        const pct = seekbarPctFromEvent(e);
+        const video = videoRef.current;
+        if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+        wasPausedBeforeDragRef.current = video.paused;
+        video.pause();
+        setIsDraggingSeekbar(true);
+        seekTo(pct * video.duration);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    }, [seekbarPctFromEvent, seekTo]);
+
+    const handleSeekbarPointerMove = useCallback((e: React.PointerEvent) => {
+        const bar = seekbarRef.current;
+        if (!bar) return;
+        const rect = bar.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        setSeekHoverPct(pct);
+        if (isDraggingSeekbar) {
+            const video = videoRef.current;
+            if (video && Number.isFinite(video.duration) && video.duration > 0) {
+                seekTo(pct * video.duration);
+            }
+        }
+    }, [isDraggingSeekbar, seekTo]);
+
+    const handleSeekbarPointerUp = useCallback((e: React.PointerEvent) => {
+        if (!isDraggingSeekbar) return;
+        setIsDraggingSeekbar(false);
+        const pct = seekbarPctFromEvent(e);
+        const video = videoRef.current;
+        if (video && Number.isFinite(video.duration) && video.duration > 0) {
+            seekTo(pct * video.duration);
+            if (!wasPausedBeforeDragRef.current) {
+                video.play().catch(() => {});
+            }
+        }
+    }, [isDraggingSeekbar, seekbarPctFromEvent, seekTo]);
+
+    const handleSeekbarPointerLeave = useCallback(() => {
+        if (!isDraggingSeekbar) setSeekHoverPct(null);
+    }, [isDraggingSeekbar]);
 
     const toggleMute = useCallback(() => {
         const el = videoRef.current;
@@ -1195,21 +1298,28 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [fakeFullscreen]);
 
-    // Click to play/pause (250ms debounce to distinguish from double-click)
+    // Click to play/pause (instant), double-click to fullscreen (undo play/pause + toggle FS)
     const handleContainerClick = useCallback((e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        // On touch devices, handleMobileTap manages taps — skip click handler
+        if (useCompactControls) return;
         if (clickTimerRef.current) {
+            // Second click within window — this is a double-click
             clearTimeout(clickTimerRef.current);
             clickTimerRef.current = null;
+            // Undo the play/pause toggle from the first click
+            togglePlay();
+            void toggleFullscreen();
             return;
         }
+        // First click — toggle immediately
+        togglePlay();
         clickTimerRef.current = setTimeout(() => {
             clickTimerRef.current = null;
-            togglePlay();
-        }, 250);
-    }, [togglePlay]);
+        }, 300);
+    }, [togglePlay, toggleFullscreen, useCompactControls]);
 
-    // Double-click to toggle fullscreen
+    // Double-click handler kept for touch devices that fire dblclick
     const handleContainerDoubleClick = useCallback((e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
         void toggleFullscreen();
@@ -1227,15 +1337,27 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
             const delta = touch.clientX < containerWidth / 2 ? -10 : 10;
             seekTo((videoRef.current?.currentTime ?? 0) + delta);
+            triggerSeekRipple(delta < 0 ? "left" : "right");
             const dir: 1 | -1 = delta > 0 ? 1 : -1;
             if (seekAccRef.current?.direction === dir) { seekAccRef.current.total += Math.abs(delta); }
             else { seekAccRef.current = { direction: dir, total: Math.abs(delta) }; }
-            showOsd(delta < 0 ? `\u00ab ${seekAccRef.current.total}s` : `\u00bb ${seekAccRef.current.total}s`);
+            showOsd(delta < 0 ? `\u00ab ${seekAccRef.current.total}s` : `\u00bb ${seekAccRef.current.total}s`, delta < 0 ? "left" : "right");
             lastTapRef.current = null;
         } else {
             lastTapRef.current = { time: now, x: touch.clientX };
+            // Single-tap on mobile: toggle controls visibility after double-tap window
+            if (useCompactControls) {
+                if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+                clickTimerRef.current = setTimeout(() => {
+                    clickTimerRef.current = null;
+                    setShowControls((v) => {
+                        if (!v) resetControlsTimeout();
+                        return !v;
+                    });
+                }, 300);
+            }
         }
-    }, [seekTo, showOsd]);
+    }, [seekTo, showOsd, triggerSeekRipple, useCompactControls, resetControlsTimeout]);
 
     // Swipe gesture state: horizontal = seek, vertical = volume
     const touchSwipeRef = useRef<{
@@ -1243,6 +1365,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         startVolume: number; startPosition: number;
         axis: "horizontal" | "vertical" | null; swiping: boolean;
     } | null>(null);
+    const [swipeSeekPreview, setSwipeSeekPreview] = useState<{ targetTime: number } | null>(null);
+    // Long-press 2x speed boost on mobile
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const longPressActiveRef = useRef(false);
+    const longPressSavedRateRef = useRef(1);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
@@ -1254,12 +1381,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             startVolume: el.volume, startPosition: el.currentTime,
             axis: null, swiping: false,
         };
-    }, []);
+        // Long-press 2x speed boost
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+            if (!el.paused) {
+                longPressSavedRateRef.current = el.playbackRate;
+                el.playbackRate = 2;
+                longPressActiveRef.current = true;
+                showOsd("2× Speed", "center");
+            }
+        }, 500);
+    }, [showOsd]);
 
     const handleTouchMove = useCallback((e: React.TouchEvent) => {
         const state = touchSwipeRef.current;
         if (!state) return;
         if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
+        // Cancel long-press once user starts swiping
+        if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
         const t = e.touches[0];
         const dx = t.clientX - state.startX;
         const dy = t.clientY - state.startY;
@@ -1276,7 +1415,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const w = containerRef.current?.clientWidth ?? 300;
             const delta = (dx / w) * 90;
             const secs = Math.abs(Math.round(delta));
-            showOsd(delta > 0 ? `» ${secs}s` : `« ${secs}s`);
+            showOsd(delta > 0 ? `» ${secs}s` : `« ${secs}s`, delta > 0 ? "right" : "left");
+            const dur = videoRef.current?.duration ?? 0;
+            if (dur > 0) {
+                setSwipeSeekPreview({ targetTime: Math.max(0, Math.min(dur, state.startPosition + delta)) });
+            }
         } else {
             const h = containerRef.current?.clientHeight ?? 200;
             const newVol = Math.max(0, Math.min(1, state.startVolume - (dy / h)));
@@ -1284,13 +1427,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             el.muted = newVol === 0;
             setVolume(newVol);
             setIsMuted(newVol === 0);
-            showOsd(newVol === 0 ? "Muted" : `Volume ${Math.round(newVol * 100)}%`);
+            showOsd(newVol === 0 ? "Muted" : `Volume ${Math.round(newVol * 100)}%`, "center");
         }
     }, [showOsd, setVolume, setIsMuted]);
 
     const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        // Cancel long-press timer
+        if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+        // Restore playback rate if long-press was active
+        if (longPressActiveRef.current) {
+            const el = videoRef.current;
+            if (el) el.playbackRate = longPressSavedRateRef.current;
+            longPressActiveRef.current = false;
+        }
         const state = touchSwipeRef.current;
         touchSwipeRef.current = null;
+        setSwipeSeekPreview(null);
         if (!state?.swiping) { handleMobileTap(e); return; }
         if (state.axis === "horizontal") {
             const t = e.changedTouches[0];
@@ -1305,6 +1457,29 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [handleMobileTap, seekTo]);
 
     const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
+    const setOpenMenuTracked = useCallback((val: typeof openMenu) => {
+        openMenuRef.current = val;
+        setOpenMenu(val);
+        if (val) resetControlsTimeout(); // Reset timer when opening a menu
+    }, [resetControlsTimeout]);
+    const [settingsPanel, setSettingsPanel] = useState<"speed" | "subtitles" | "players" | null>(null);
+
+    // Close menus when control bar hides
+    useEffect(() => {
+        if (!showControls && openMenu) {
+            setOpenMenuTracked(null);
+            setSettingsPanel(null);
+        }
+    }, [showControls, openMenu, setOpenMenuTracked]);
+
+    // Guard against rapid episode navigation clicks
+    const navGuardRef = useRef(false);
+    const guardedNav = useCallback((fn?: () => void) => {
+        if (!fn || navGuardRef.current) return;
+        navGuardRef.current = true;
+        fn();
+        setTimeout(() => { navGuardRef.current = false; }, 1000);
+    }, []);
 
     // When subtitle selection changes, toggle textTracks modes (also disables embedded tracks).
     useEffect(() => {
@@ -1391,14 +1566,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 return;
             }
 
-            // Blur focused player controls (buttons, seekbar) so shortcuts work
+            // Prevent default on focused buttons so shortcuts work, without destroying focus
             if (
                 active &&
                 active !== document.body &&
                 (active.tagName === "BUTTON" || (active as HTMLInputElement).type === "range")
             ) {
-                (active as HTMLElement).blur();
+                event.preventDefault();
             }
+
+            // Re-show controls on any keyboard shortcut
+            resetControlsTimeout();
 
             switch (event.key) {
                 case "Escape":
@@ -1424,40 +1602,43 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "K":
                     event.preventDefault();
                     togglePlay();
-                    showOsd(videoRef.current?.paused ? "Play" : "Pause");
                     break;
                 case "ArrowLeft": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 5);
+                    triggerSeekRipple("left");
                     if (seekAccRef.current?.direction === -1) { seekAccRef.current.total += 5; }
                     else { seekAccRef.current = { direction: -1, total: 5 }; }
-                    showOsd(`« ${seekAccRef.current.total}s`);
+                    showOsd(`« ${seekAccRef.current.total}s`, "left");
                     break;
                 }
                 case "ArrowRight": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 5);
+                    triggerSeekRipple("right");
                     if (seekAccRef.current?.direction === 1) { seekAccRef.current.total += 5; }
                     else { seekAccRef.current = { direction: 1, total: 5 }; }
-                    showOsd(`» ${seekAccRef.current.total}s`);
+                    showOsd(`» ${seekAccRef.current.total}s`, "right");
                     break;
                 }
                 case "j":
                 case "J": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) - 10);
+                    triggerSeekRipple("left");
                     if (seekAccRef.current?.direction === -1) { seekAccRef.current.total += 10; }
                     else { seekAccRef.current = { direction: -1, total: 10 }; }
-                    showOsd(`« ${seekAccRef.current.total}s`);
+                    showOsd(`« ${seekAccRef.current.total}s`, "left");
                     break;
                 }
                 case "l":
                 case "L": {
                     event.preventDefault();
                     seekTo((videoRef.current?.currentTime ?? 0) + 10);
+                    triggerSeekRipple("right");
                     if (seekAccRef.current?.direction === 1) { seekAccRef.current.total += 10; }
                     else { seekAccRef.current = { direction: 1, total: 10 }; }
-                    showOsd(`» ${seekAccRef.current.total}s`);
+                    showOsd(`» ${seekAccRef.current.total}s`, "right");
                     break;
                 }
                 case ",":
@@ -1465,7 +1646,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) - 0.5);
-                        showOsd("−0.5s");
+                        showOsd("−0.5s", "left");
                     }
                     break;
                 case ".":
@@ -1473,14 +1654,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     if (videoRef.current?.paused) {
                         event.preventDefault();
                         seekTo((videoRef.current?.currentTime ?? 0) + 0.5);
-                        showOsd("+0.5s");
+                        showOsd("+0.5s", "right");
                     }
                     break;
                 case "[":
                     event.preventDefault();
                     setPlaybackRate((prev) => {
                         const next = Math.max(0.25, +(prev - 0.25).toFixed(2));
-                        showOsd(`Speed ${next}x`);
+                        showOsd(`Speed ${next}x`, "center");
                         return next;
                     });
                     break;
@@ -1488,7 +1669,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     event.preventDefault();
                     setPlaybackRate((prev) => {
                         const next = Math.min(4, +(prev + 0.25).toFixed(2));
-                        showOsd(`Speed ${next}x`);
+                        showOsd(`Speed ${next}x`, "center");
                         return next;
                     });
                     break;
@@ -1501,18 +1682,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     const next = Math.min(Math.max(el.volume + delta, 0), 1);
                     el.volume = next;
                     el.muted = next === 0;
-                    showOsd(`Volume ${Math.round(next * 100)}%`);
+                    showOsd(`Volume ${Math.round(next * 100)}%`, "center");
                     break;
                 }
                 case "m":
                 case "M":
                     event.preventDefault();
                     toggleMute();
-                    showOsd(videoRef.current?.muted ? "Muted" : "Unmuted");
+                    showOsd(videoRef.current?.muted ? "Muted" : "Unmuted", "center");
                     break;
                 case "n":
                 case "N":
-                    if (onNextRef.current) {
+                    if (event.shiftKey && onNextRef.current) {
                         event.preventDefault();
                         cancelAutoNext();
                         onNextRef.current();
@@ -1529,7 +1710,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     break;
                 case "p":
                 case "P":
-                    if (document.pictureInPictureEnabled) {
+                    if (event.shiftKey) {
+                        // Shift+P: previous episode
+                        if (onPrev) {
+                            event.preventDefault();
+                            onPrev();
+                        }
+                    } else if (document.pictureInPictureEnabled) {
                         event.preventDefault();
                         if (document.pictureInPictureElement) {
                             document.exitPictureInPicture();
@@ -1554,10 +1741,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     }
                     break;
                 }
-                case "?":
-                    event.preventDefault();
-                    setShowHelp((v) => !v);
-                    break;
+                // ? is handled by a separate capture-phase listener
                 case "f":
                 case "F":
                     event.preventDefault();
@@ -1609,14 +1793,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     event.preventDefault();
                     const pct = parseInt(event.key) / 10;
                     seekTo(pct * dur);
-                    showOsd(`${parseInt(event.key) * 10}%`);
+                    showOsd(`${parseInt(event.key) * 10}%`, "center");
                 }
             }
         };
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, fakeFullscreen, isFullscreen, showHelp, autoNextCountdown, cancelAutoNext]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, resetControlsTimeout]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -1643,20 +1827,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         useSettingsStore.getState().set("playback", {
             ...useSettingsStore.getState().settings.playback,
             subtitleSize,
-        });
-    }, [subtitleSize]);
-    useEffect(() => {
-        useSettingsStore.getState().set("playback", {
-            ...useSettingsStore.getState().settings.playback,
             subtitlePosition,
-        });
-    }, [subtitlePosition]);
-    useEffect(() => {
-        useSettingsStore.getState().set("playback", {
-            ...useSettingsStore.getState().settings.playback,
             playbackSpeed: playbackRate,
+            subtitleBackground,
+            subtitleColor,
+            subtitleFont,
         });
-    }, [playbackRate]);
+    }, [subtitleSize, subtitlePosition, playbackRate, subtitleBackground, subtitleColor, subtitleFont]);
     // Apply loop flag to the video element
     useEffect(() => {
         if (videoRef.current) videoRef.current.loop = loop;
@@ -1848,7 +2025,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             ref={containerRef}
             className={cn(
                 "relative w-full h-full flex flex-col bg-black debridui-legacy-player group",
-                fakeFullscreen && "fixed inset-0 z-[9999]"
+                `debridui-sub-bg-${subtitleBackground}`,
+                fakeFullscreen && "fixed inset-0 z-[9999]",
+                !showControls && isPlaying && "player-hide-cursor"
             )}
             onClick={handleContainerClick}
             onDoubleClick={handleContainerDoubleClick}
@@ -1899,51 +2078,105 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onError={handleError}
                     />
 
-                    {/* Unified loading overlay — subtitle prep takes priority */}
+                    {/* YouTube-style top loading bar */}
                     {(!canStartPlayback || (isLoading && !error)) && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 z-40">
-                            <Loader2 className="h-10 w-10 text-white animate-spin" />
+                        <div className="player-loading-bar absolute top-0 left-0 right-0 h-[3px] z-50 overflow-hidden" />
+                    )}
+
+                    {/* Unified loading overlay */}
+                    {(!canStartPlayback || (isLoading && !error)) && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-40">
+                            <div className="h-10 w-10 border-[2.5px] border-white/15 border-t-white rounded-full animate-spin" />
                             {!canStartPlayback && (
-                                <p className="text-xs tracking-widest uppercase text-white/50">Preparing subtitles</p>
+                                <p className="text-xs tracking-widest uppercase text-white/40">Preparing subtitles</p>
                             )}
                         </div>
                     )}
 
-                    {/* Big Center Play/Pause Overlay */}
-                    {!isLoading && (
+                    {/* YouTube-style center action icon (flash on play/pause) */}
+                    <div className="player-center-action">
                         <div
-                            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 z-25 pointer-events-none ${!isPlaying ? "opacity-100 scale-100" : "opacity-0 scale-90"}`}
+                            className="player-center-action-icon"
+                            data-visible={centerAction !== null ? "true" : "false"}
                         >
+                            {centerAction === "play" ? (
+                                <Play className="h-6 w-6 fill-current ml-0.5" />
+                            ) : (
+                                <Pause className="h-6 w-6 fill-current" />
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Big center play button when paused (idle state) */}
+                    {!isLoading && !isPlaying && !centerAction && (
+                        <div className="player-center-action">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     togglePlay();
                                 }}
-                                className="pointer-events-auto flex h-20 w-20 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-md transition-all hover:scale-110 active:scale-95 border border-white/10"
+                                className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white border border-white/10 transition-all duration-150 hover:scale-110 hover:bg-black/60 active:scale-95"
                             >
-                                {isPlaying ? (
-                                    <Pause className="h-10 w-10 fill-current" />
-                                ) : (
-                                    <Play className="h-10 w-10 fill-current ml-1" />
-                                )}
+                                <Play className="h-7 w-7 fill-current ml-0.5" />
                             </button>
                         </div>
+                    )}
+
+                    {/* Mobile center controls: skip ±10s + play/pause */}
+                    {useCompactControls && showControls && !isLoading && (
+                        <div className="absolute inset-0 z-30 flex items-center justify-center gap-10 pointer-events-none" data-player-controls>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); seekTo((videoRef.current?.currentTime ?? 0) - 10); }}
+                                className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white/80 active:scale-90 transition-transform"
+                            >
+                                <SkipBack className="size-5" />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                                className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white active:scale-90 transition-transform"
+                            >
+                                {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 fill-current ml-0.5" />}
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); seekTo((videoRef.current?.currentTime ?? 0) + 10); }}
+                                className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white/80 active:scale-90 transition-transform"
+                            >
+                                <SkipForward className="size-5" />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Seek ripple animation (double-tap) */}
+                    {seekRipple && (
+                        <div
+                            key={seekRipple.key}
+                            className="player-seek-ripple"
+                            data-dir={seekRipple.dir}
+                        />
                     )}
 
                     {/* In-player OSD for keyboard shortcut feedback */}
                     <div
                         className={cn(
-                            "absolute top-12 right-5 z-40 pointer-events-none transition-all duration-200",
-                            osdVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-2"
+                            "player-osd absolute z-40 pointer-events-none transition-all",
+                            osdPosition === "top-right" && "top-14 right-6",
+                            osdPosition === "center" && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+                            osdPosition === "left" && "top-1/2 left-12 -translate-y-1/2",
+                            osdPosition === "right" && "top-1/2 right-12 -translate-y-1/2",
+                            osdVisible
+                                ? "opacity-100 scale-100"
+                                : "opacity-0 scale-95"
                         )}
+                        style={{ transitionDuration: osdVisible ? "150ms" : "250ms", transitionTimingFunction: "cubic-bezier(0.25, 0.1, 0.25, 1)" }}
                     >
-                        <div className="rounded-sm bg-black/80 px-4 py-2 text-sm font-medium tracking-wide text-white/90 min-w-[90px]">
+                        <div className="player-osd-inner rounded-lg px-5 py-2.5 text-sm font-semibold text-white min-w-[100px] text-center"
+                            style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", letterSpacing: "0.03em" }}>
                             {osdText}
                             {/^Volume \d+%$/.test(osdText) && (
-                                <div className="mt-1.5 h-0.5 w-full rounded-full bg-white/20">
+                                <div className="player-osd-bar mt-2 h-1 w-full rounded-full bg-white/15 overflow-hidden">
                                     <div
-                                        className="h-0.5 rounded-full bg-white transition-[width] duration-75"
-                                        style={{ width: `${osdText.match(/(\d+)/)?.[1] ?? 0}%` }}
+                                        className="player-osd-bar-fill h-full rounded-full"
+                                        style={{ width: `${osdText.match(/(\d+)/)?.[1] ?? 0}%`, transition: "width 100ms ease", background: "var(--primary)" }}
                                     />
                                 </div>
                             )}
@@ -1973,13 +2206,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         ["F", "Fullscreen"],
                                         ["R", "Loop Toggle"],
                                         ["P", "Picture in Picture"],
+                                        ["Shift+P", "Previous Episode"],
                                         ["C", "Cycle Subtitles"],
                                         ["G / H", "Sub Delay \u2212/+500ms"],
                                         ["[ / ]", "Speed \u22120.25x / +0.25x"],
                                         ["0 \u2013 9", "Seek to 0% \u2013 90%"],
                                         ["Home", "Jump to Start"],
                                         ["End", "Jump to Near-End"],
-                                        ["N", "Next Episode"],
+                                        ["Shift+N", "Next Episode"],
                                         [", / .", "Frame Step \u00b10.5s (paused)"],
                                         ["?", "Show / Hide Help"],
                                     ] as [string, string][]).map(([key, desc]) => (
@@ -2000,15 +2234,35 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onOpenInPlayer={openInExternalPlayer}
                     />
 
+                    {/* Mobile swipe seek preview bar */}
+                    {swipeSeekPreview && duration > 0 && (
+                        <div className="absolute inset-x-4 top-1/2 z-40 pointer-events-none -translate-y-1/2">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs font-semibold text-white tabular-nums drop-shadow">{formatTime(swipeSeekPreview.targetTime)}</span>
+                                <div className="flex-1 h-1 rounded-full bg-white/20 overflow-hidden">
+                                    <div className="h-full rounded-full transition-all duration-75" style={{ width: `${(swipeSeekPreview.targetTime / duration) * 100}%`, background: "var(--primary)" }} />
+                                </div>
+                                <span className="text-xs text-white/50 tabular-nums drop-shadow">{formatTime(duration)}</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Manual subtitle overlay */}
                     {activeCueText && (
                         <div
-                            className="debridui-subtitle-overlay pointer-events-none absolute inset-x-0 z-15 flex justify-center px-4"
-                            style={{ bottom: `${subtitlePosition}px` }}
+                            className="debridui-subtitle-overlay pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4"
+                            style={{ bottom: `${(showControls ? subtitlePosition + 60 : subtitlePosition)}px`, transition: 'bottom 200ms ease' }}
                             aria-live="polite">
                             <span
                                 className="debridui-subtitle-text inline-block max-w-[90%] text-center px-3 py-1.5 rounded-sm"
-                                style={{ fontSize: `${subtitleSize}px` }}
+                                style={{
+                                    fontSize: `${subtitleSize}px`,
+                                    color: subtitleColor,
+                                    fontFamily: subtitleFont === 'mono' ? 'ui-monospace, monospace'
+                                        : subtitleFont === 'serif' ? 'ui-serif, Georgia, serif'
+                                        : subtitleFont === 'trebuchet' ? '"Trebuchet MS", sans-serif'
+                                        : undefined,
+                                }}
                             >
                                 {activeCueText.split("\n").map((line, i) => (
                                     <React.Fragment key={i}>{i > 0 && <br />}{line}</React.Fragment>
@@ -2017,28 +2271,62 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     )}
 
+                    {/* Top title bar */}
+                    <div
+                        className={cn(
+                            "absolute inset-x-0 top-0 z-40 pointer-events-none transition-all duration-300 ease-out",
+                            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
+                        )}
+                    >
+                        <div
+                            data-player-controls
+                            className="pointer-events-auto px-4 pb-10 pt-3"
+                            style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }}
+                        >
+                            <p className="truncate text-sm font-medium text-white drop-shadow-md">{file.name}</p>
+                        </div>
+                    </div>
+
                     {/* Floating CTA stack: keep skip/next prompts in one place to avoid overlap */}
                     {(autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
                         <div
                             data-player-controls
                             onClick={(e) => e.stopPropagation()}
                             onDoubleClick={(e) => e.stopPropagation()}
-                            className="absolute bottom-20 left-3 right-3 z-45 flex flex-col items-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 sm:bottom-24 sm:left-auto sm:right-4"
+                            className="player-cta-stack absolute bottom-20 right-4 z-[45] flex flex-col items-end gap-2"
                         >
                             {autoNextCountdown !== null && onNext && (
                                 <div className="flex flex-col items-end gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => { cancelAutoNext(); onNext(); }}
-                                        className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/80 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-primary hover:border-primary active:scale-95"
+                                    <div
+                                        className="rounded-lg border border-white/15 overflow-hidden"
+                                        style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(16px)", maxWidth: 320 }}
                                     >
-                                        <SkipForward className="size-4" />
-                                        Next Episode ({autoNextCountdown})
-                                    </button>
+                                        <div className="px-4 pt-3 pb-1">
+                                            <p className="text-[11px] uppercase tracking-wider text-white/40 font-medium">Up Next</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => { cancelAutoNext(); guardedNav(onNext); }}
+                                            className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-white/5 active:scale-[0.98]"
+                                        >
+                                            <svg width="28" height="28" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
+                                                <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5" />
+                                                <circle
+                                                    cx="20" cy="20" r="18" fill="none" stroke="var(--primary)" strokeWidth="2.5"
+                                                    strokeDasharray="113" className="player-countdown-ring"
+                                                    style={{ "--countdown-duration": `${autoNextCountdown}s` } as React.CSSProperties}
+                                                />
+                                            </svg>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="text-sm font-medium text-white truncate">Next Episode</p>
+                                            </div>
+                                            <SkipForward className="size-4 text-white/60 shrink-0" />
+                                        </button>
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={cancelAutoNext}
-                                        className="self-end rounded-sm px-3 py-1 text-xs text-white/60 transition-colors hover:text-white/90"
+                                        className="rounded px-3 py-1 text-xs text-white/50 transition-colors hover:text-white/90"
                                     >
                                         Cancel
                                     </button>
@@ -2057,7 +2345,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 setActiveSkipSegment(null);
                                             }
                                         }}
-                                        className="flex items-center gap-2 rounded-sm border border-white/30 bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95"
+                                        className="player-cta-btn inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white rounded-md border border-white/20 cursor-pointer transition-all hover:bg-primary hover:border-primary hover:text-primary-foreground active:scale-[0.96]"
+                                        style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)" }}
                                     >
                                         <SkipForward className="size-4" />
                                         {activeSkipSegment === "intro" ? "Skip Intro" : activeSkipSegment === "recap" ? "Skip Recap" : "Skip Credits"}
@@ -2069,7 +2358,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             skippedSegmentsRef.current.add(activeSkipSegment);
                                             setActiveSkipSegment(null);
                                         }}
-                                        className="flex items-center justify-center rounded-sm border border-white/30 bg-black/70 p-2 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white active:scale-95"
+                                        className="flex items-center justify-center rounded-md bg-black/60 backdrop-blur-sm p-2 text-white/50 transition-all hover:bg-white/10 hover:text-white active:scale-90"
                                     >
                                         <X className="size-3" />
                                     </button>
@@ -2080,126 +2369,149 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* Custom control bar */}
                     <div
-                        className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
-                            <div data-player-controls className="pointer-events-auto bg-gradient-to-t from-black/95 via-black/60 to-transparent px-4 pb-3 pt-12">
-                                {/* Seek bar */}
-                                <div className="group/seekbar relative flex items-center gap-3">
-                                    {/* Seekbar hover tooltip */}
-                                    {seekHoverPct !== null && duration > 0 && (
-                                        <div
-                                            className="absolute bottom-full mb-3 -translate-x-1/2 pointer-events-none z-50"
-                                            style={{ left: `${seekHoverPct * 100}%` }}
-                                        >
-                                            <div className="rounded-sm bg-black/90 px-2 py-0.5 text-xs font-medium text-white whitespace-nowrap">
-                                                {formatTime(seekHoverPct * duration)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {/* IntroDB segment markers on seekbar */}
+                        className={cn(
+                            "absolute inset-x-0 bottom-0 z-40 pointer-events-none transition-all duration-300 ease-out",
+                            showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                        )}
+                    >
+                        <div
+                            data-player-controls
+                            className="pointer-events-auto px-4 pt-16 pb-3"
+                            style={{ background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.15) 80%, transparent 100%)" }}
+                        >
+                            {/* Custom seekbar */}
+                            <div
+                                ref={seekbarRef}
+                                className="player-seekbar relative w-full cursor-pointer flex items-center touch-none"
+                                role="slider"
+                                aria-label="Seek"
+                                aria-valuenow={Math.round(currentTime)}
+                                aria-valuemin={0}
+                                aria-valuemax={Math.round(duration)}
+                                tabIndex={0}
+                                data-dragging={isDraggingSeekbar ? "true" : "false"}
+                                onPointerDown={handleSeekbarPointerDown}
+                                onPointerMove={handleSeekbarPointerMove}
+                                onPointerUp={handleSeekbarPointerUp}
+                                onPointerLeave={handleSeekbarPointerLeave}
+                            >
+                                {/* Track background + buffered + progress */}
+                                <div className="player-seekbar-track">
+                                    <div
+                                        className="player-seekbar-buffered absolute inset-y-0 left-0 bg-white/30 rounded-[inherit]"
+                                        style={{ width: `${Math.max(bufferedPercent, duration > 0 ? (currentTime / duration) * 100 : 0)}%` }}
+                                    />
+                                    <div
+                                        className="player-seekbar-progress absolute inset-y-0 left-0 rounded-[inherit]"
+                                        style={{
+                                            width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
+                                            background: "var(--primary)"
+                                        }}
+                                    />
+                                    {/* IntroDB segment markers */}
                                     {introSegments && duration > 0 && (
-                                        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                                        <>
                                             {(['intro', 'recap', 'outro'] as const).map((type) => {
                                                 const seg = introSegments[type];
                                                 if (!seg) return null;
                                                 const left = (seg.start_sec / duration) * 100;
                                                 const width = ((seg.end_sec - seg.start_sec) / duration) * 100;
-                                                const colorClass = type === 'intro' ? 'bg-primary/80' : type === 'recap' ? 'bg-primary/50' : 'bg-primary/30';
+                                                const opacity = type === 'intro' ? 0.8 : type === 'recap' ? 0.5 : 0.3;
                                                 return (
                                                     <div
                                                         key={type}
                                                         title={type === 'intro' ? 'Intro' : type === 'recap' ? 'Recap' : 'Credits'}
-                                                        className={`absolute top-1/2 -translate-y-1/2 h-2 rounded-full ${colorClass}`}
-                                                        style={{ left: `${left}%`, width: `${width}%` }}
+                                                        className="player-seekbar-marker"
+                                                        style={{
+                                                            left: `${left}%`,
+                                                            width: `${width}%`,
+                                                            background: `color-mix(in oklch, var(--primary) ${opacity * 100}%, transparent)`,
+                                                        }}
                                                     />
                                                 );
                                             })}
-                                        </div>
+                                        </>
                                     )}
-                                    <input
-                                        type="range"
-                                        min={0}
-                                        max={Number.isFinite(duration) && duration > 0 ? duration : 0}
-                                        step={0.1}
-                                        value={Number.isFinite(currentTime) ? currentTime : 0}
-                                        onChange={handleSeekChange}
-                                        onMouseMove={(e) => {
-                                            const rect = e.currentTarget.getBoundingClientRect();
-                                            setSeekHoverPct(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
-                                        }}
-                                        onMouseLeave={() => setSeekHoverPct(null)}
-                                        style={{
-                                            background: (() => {
-                                                const p = duration > 0 ? (currentTime / duration) * 100 : 0;
-                                                const b = Math.max(bufferedPercent, p);
-                                                return `linear-gradient(to right, var(--primary) ${p}%, rgba(255,255,255,0.2) ${p}%, rgba(255,255,255,0.2) ${b}%, rgba(255,255,255,0.1) ${b}%)`;
-                                            })()
-                                        }}
-                                        className="h-1 w-full cursor-pointer appearance-none rounded-full accent-primary transition-all group-hover/seekbar:h-1.5"
-                                    />
                                 </div>
-
-                                {/* Controls row */}
-                                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white sm:flex-nowrap">
-                                    <div className="flex min-w-0 items-center gap-1">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-9 w-9 text-white hover:bg-white/20"
-                                            onClick={togglePlay}
-                                            disabled={isLoading}
-                                            aria-label={isPlaying ? "Pause" : "Play"}>
-                                            {isLoading ? (
-                                                <Loader2 className="h-5 w-5 animate-spin text-white/50" />
-                                            ) : isPlaying ? (
-                                                <Pause className="h-5 w-5 fill-current" />
-                                            ) : (
-                                                <Play className="h-5 w-5 fill-current" />
-                                            )}
-                                        </Button>
-
-                                        {/* Next/Prev Buttons */}
-                                        <div className="flex items-center">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-9 w-9 text-white hover:bg-white/20 disabled:opacity-30"
-                                                onClick={(e) => { e.stopPropagation(); onPrev?.(); }}
-                                                disabled={!onPrev}
-                                                title="Previous episode">
-                                                <SkipBack className="h-5 w-5 fill-current" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-9 w-9 text-white hover:bg-white/20 disabled:opacity-30"
-                                                onClick={(e) => { e.stopPropagation(); onNext?.(); }}
-                                                disabled={!onNext}
-                                                title="Next episode">
-                                                <SkipForward className="h-5 w-5 fill-current" />
-                                            </Button>
-                                        </div>
-
-                                        <span className="text-sm font-medium tabular-nums ml-2">
-                                            {formatTime(currentTime)}{" "}
-                                            <span className="text-white/40 mx-1">/</span>
-                                            <span className="text-white/60">{formatTime(duration)}</span>
-                                        </span>
+                                {/* Thumb */}
+                                <div
+                                    className="player-seekbar-thumb"
+                                    style={{
+                                        left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`
+                                    }}
+                                />
+                                {/* Hover tooltip */}
+                                {seekHoverPct !== null && duration > 0 && (
+                                    <div
+                                        className="player-seekbar-tooltip"
+                                        style={{
+                                            left: `clamp(24px, ${seekHoverPct * 100}%, calc(100% - 24px))`
+                                        }}
+                                    >
+                                        {formatTime(seekHoverPct * duration)}
                                     </div>
+                                )}
+                            </div>
+
+                            {/* Controls row */}
+                            <div className="mt-2 flex items-center gap-1 text-white">
+                                {/* Left: Play, Prev/Next, Time */}
+                                <div className="flex items-center gap-0.5">
+                                    <button
+                                        className={PLAYER_BTN_MD}
+                                        onClick={togglePlay}
+                                        disabled={isLoading}
+                                        aria-label={isPlaying ? "Pause" : "Play"}
+                                    >
+                                        {isPlaying ? (
+                                            <Pause className="h-5 w-5 fill-current" />
+                                        ) : (
+                                            <Play className="h-5 w-5 fill-current ml-0.5" />
+                                        )}
+                                    </button>
+
+                                    <button
+                                        className={PLAYER_BTN_SM}
+                                        onClick={(e) => { e.stopPropagation(); guardedNav(onPrev); }}
+                                        disabled={!onPrev}
+                                        title="Previous episode"
+                                    >
+                                        <SkipBack className="h-4 w-4 fill-current" />
+                                    </button>
+                                    <button
+                                        className={PLAYER_BTN_SM}
+                                        onClick={(e) => { e.stopPropagation(); guardedNav(onNext); }}
+                                        disabled={!onNext}
+                                        title="Next episode"
+                                    >
+                                        <SkipForward className="h-4 w-4 fill-current" />
+                                    </button>
 
                                     {/* Volume */}
-                                    <div className="flex items-center gap-1 group/volume ml-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-9 w-9 text-white hover:bg-white/20"
+                                    <div
+                                        className="flex items-center group/volume ml-1"
+                                        onWheel={(e) => {
+                                            e.stopPropagation();
+                                            const el = videoRef.current;
+                                            if (!el) return;
+                                            const delta = e.deltaY < 0 ? 0.05 : -0.05;
+                                            const next = Math.min(Math.max(el.volume + delta, 0), 1);
+                                            el.volume = next;
+                                            el.muted = next === 0;
+                                            showOsd(next === 0 ? "Muted" : `Volume ${Math.round(next * 100)}%`, "center");
+                                        }}
+                                    >
+                                        <button
+                                            className={PLAYER_BTN_SM}
                                             onClick={toggleMute}
-                                            aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}>
+                                            aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+                                        >
                                             {isMuted || volume === 0 ? (
                                                 <VolumeX className="h-5 w-5" />
                                             ) : (
                                                 <Volume2 className="h-5 w-5" />
                                             )}
-                                        </Button>
+                                        </button>
                                         <input
                                             type="range"
                                             min={0}
@@ -2208,263 +2520,206 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             value={isMuted ? 0 : volume}
                                             onChange={handleVolumeChange}
                                             style={{
-                                                background: `linear-gradient(to right, var(--primary) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.3) ${(isMuted ? 0 : volume) * 100}%)`
+                                                background: `linear-gradient(to right, var(--primary) ${(isMuted ? 0 : volume) * 100}%, rgba(255, 255, 255, 0.25) ${(isMuted ? 0 : volume) * 100}%)`
                                             }}
                                             className={cn(
-                                                "h-1 cursor-pointer appearance-none rounded-full overflow-hidden accent-primary transition-all duration-300",
-                                                useCompactControls ? "w-16 overflow-visible" : "w-0 group-hover/volume:w-20 group-hover/volume:overflow-visible"
+                                                "h-1 cursor-pointer appearance-none rounded-full accent-primary player-volume-slider",
+                                                useCompactControls ? "w-16 ml-1 opacity-100" : "w-0 ml-0 opacity-0 group-hover/volume:w-20 group-hover/volume:ml-1 group-hover/volume:opacity-100"
                                             )}
                                         />
                                     </div>
 
-                                    <div className="ml-auto flex items-center gap-3">
-                                        {/* Audio track selector */}
-                                        {audioTrackCount > 1 && (
-                                            <DropdownMenu
-                                                open={openMenu === "audio"}
-                                                onOpenChange={(open) =>
-                                                    setOpenMenu(open ? "audio" : null)
-                                                }>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-sm border border-white/20">
-                                                        Audio
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuPortal container={containerRef.current ?? undefined}>
-                                                    <DropdownMenuContent
-                                                        data-player-controls
-                                                        align="end"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onDoubleClick={(e) => e.stopPropagation()}
-                                                        className="min-w-[180px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-1">
-                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-3 py-2">
-                                                            Audio Tracks
-                                                        </DropdownMenuLabel>
-                                                        {Array.from({ length: audioTrackCount }, (_, i) => {
-                                                            const el = videoRef.current as (HTMLVideoElement & {
-                                                                audioTracks?: {
-                                                                    length: number;
-                                                                    [i: number]: {
-                                                                        enabled: boolean;
-                                                                        label?: string;
-                                                                        language?: string;
-                                                                    };
-                                                                };
-                                                            }) | null;
-                                                            const t = el?.audioTracks?.[i];
-                                                            const langLabel = t?.language
-                                                                ? getLanguageDisplayName(t.language)
-                                                                : "";
-                                                            const base = (t?.label ?? "").trim();
-                                                            const label =
-                                                                [langLabel, base].filter(Boolean).join(" · ") ||
-                                                                `Track ${i + 1}`;
-                                                            return (
-                                                                <DropdownMenuItem
-                                                                    key={i}
-                                                                    onClick={() => { setSelectedAudioIndex(i); showOsd(`Audio: ${label}`); }}
-                                                                    className={
-                                                                        selectedAudioIndex === i
-                                                                            ? "bg-primary text-primary-foreground"
-                                                                            : "focus:bg-white/10 focus:text-white"
-                                                                    }>
-                                                                    {label}
-                                                                </DropdownMenuItem>
-                                                            );
-                                                        })}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenuPortal>
-                                            </DropdownMenu>
-                                        )}
+                                    <span
+                                        className="text-[13px] font-medium tabular-nums ml-3 select-none cursor-pointer hover:text-white/80 transition-colors"
+                                        onClick={() => setShowRemainingTime((v) => !v)}
+                                        title="Click to toggle remaining time"
+                                    >
+                                        {formatTime(currentTime)}
+                                        <span className="text-white/35 mx-1">/</span>
+                                        <span className="text-white/55">
+                                            {showRemainingTime
+                                                ? `-${formatTime(Math.max(0, duration - currentTime))}`
+                                                : formatTime(duration)
+                                            }
+                                        </span>
+                                    </span>
+                                    {playbackRate !== 1 && (
+                                        <span className="ml-2 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white/80 select-none">
+                                            {playbackRate}×
+                                        </span>
+                                    )}
+                                </div>
 
-                                        {/* Subtitles menu (track selection only) */}
-                                        {subtitles && subtitles.length > 0 && (
-                                            <DropdownMenu
-                                                open={openMenu === "subtitles"}
-                                                onOpenChange={(open) =>
-                                                    setOpenMenu(open ? "subtitles" : null)
-                                                }>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 px-3 text-xs font-medium text-white hover:bg-white/20 rounded-sm border border-white/20">
-                                                        CC
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuPortal container={containerRef.current ?? undefined}>
-                                                    <DropdownMenuContent
-                                                        data-player-controls
-                                                        align="end"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onDoubleClick={(e) => e.stopPropagation()}
-                                                        className="min-w-[160px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-1">
-                                                        <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-3 py-2">
-                                                            Subtitles
-                                                        </DropdownMenuLabel>
-                                                        <DropdownMenuItem
-                                                            onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(-1); }}
-                                                            className={
-                                                                activeSubtitleIndex === -1
-                                                                    ? "bg-primary text-primary-foreground"
-                                                                    : "focus:bg-white/10 focus:text-white"
-                                                            }>
-                                                            Off
-                                                        </DropdownMenuItem>
-                                                        {subtitles.map((sub, i) => (
-                                                            <DropdownMenuItem
-                                                                key={`${sub.lang}-${sub.url}-${i}`}
-                                                                onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); }}
-                                                                className={
-                                                                    activeSubtitleIndex === i
-                                                                        ? "bg-primary text-primary-foreground"
-                                                                        : "focus:bg-white/10 focus:text-white"
-                                                                }>
-                                                                {sub.name ?? getLanguageDisplayName(sub.lang)}
-                                                            </DropdownMenuItem>
-                                                        ))}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenuPortal>
-                                            </DropdownMenu>
-                                        )}
-
-                                        {/* Settings menu (speed, subtitle size/position) */}
+                                {/* Right: Audio, CC, Settings, Cast, Fullscreen */}
+                                <div className="ml-auto flex items-center gap-1">
+                                    {/* Audio track selector */}
+                                    {audioTrackCount > 1 && (
                                         <DropdownMenu
-                                            open={openMenu === "settings"}
-                                            onOpenChange={(open) =>
-                                                setOpenMenu(open ? "settings" : null)
-                                            }>
+                                            open={openMenu === "audio"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}
+                                        >
                                             <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-white hover:bg-white/20 rounded-sm border border-transparent hover:border-white/20">
-                                                    <Settings className="h-5 w-5" />
-                                                </Button>
+                                                <button className={cn(PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide")}>
+                                                    Audio
+                                                </button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
                                                     data-player-controls
                                                     align="end"
+                                                    side="top"
+                                                    sideOffset={4}
                                                     onClick={(e) => e.stopPropagation()}
                                                     onDoubleClick={(e) => e.stopPropagation()}
-                                                    className="min-w-[210px] rounded-sm z-50 bg-black/90 text-white border-white/20 backdrop-blur-md p-2">
-                                                    {/* Playback speed */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
-                                                        Playback Speed
-                                                    </DropdownMenuLabel>
-                                                    <div className="grid grid-cols-3 gap-1 px-1 pb-2">
-                                                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                                                    className={cn(POPUP_CLS, "min-w-[200px] max-h-[280px] overflow-y-auto z-50 p-1")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Audio Tracks</div>
+                                                    {Array.from({ length: audioTrackCount }, (_, i) => {
+                                                        const el = videoRef.current as (HTMLVideoElement & {
+                                                            audioTracks?: {
+                                                                length: number;
+                                                                [i: number]: {
+                                                                    enabled: boolean;
+                                                                    label?: string;
+                                                                    language?: string;
+                                                                };
+                                                            };
+                                                        }) | null;
+                                                        const t = el?.audioTracks?.[i];
+                                                        const langLabel = t?.language
+                                                            ? getLanguageDisplayName(t.language)
+                                                            : "";
+                                                        const base = (t?.label ?? "").trim();
+                                                        const label =
+                                                            [langLabel, base].filter(Boolean).join(" · ") ||
+                                                            `Track ${i + 1}`;
+                                                        return (
                                                             <button
-                                                                key={rate}
-                                                                onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`); }}
-                                                                className={`rounded-sm px-1 py-1.5 text-[10px] font-medium transition-colors ${playbackRate === rate ? "bg-primary text-primary-foreground" : "hover:bg-white/10"}`}
+                                                                key={i}
+                                                                onClick={() => { setSelectedAudioIndex(i); showOsd(`Audio: ${label}`); setOpenMenuTracked(null); }}
+                                                                className={POPUP_ITEM}
+                                                                data-active={selectedAudioIndex === i}
                                                             >
-                                                                {rate === 1 ? "Normal" : `${rate}x`}
+                                                                {label}
                                                             </button>
-                                                        ))}
-                                                    </div>
+                                                        );
+                                                    })}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
 
-                                                    <div className="h-px bg-white/10 my-2" />
-
-                                                    {/* Subtitle size +/− */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
-                                                        Subtitle Size
-                                                    </DropdownMenuLabel>
-                                                    <div className="flex items-center justify-between px-2 pb-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitleSize((s) => Math.max(12, s - 2))}>
-                                                            <Minus className="h-4 w-4" />
-                                                        </Button>
-                                                        <span className="text-xs font-mono">{subtitleSize}px</span>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitleSize((s) => Math.min(64, s + 2))}>
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-
-                                                    {/* Subtitle position +/− */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
-                                                        Subtitle Position
-                                                    </DropdownMenuLabel>
-                                                    <div className="flex items-center justify-between px-2 pb-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitlePosition((s) => Math.max(20, s - 4))}>
-                                                            <Minus className="h-4 w-4" />
-                                                        </Button>
-                                                        <span className="text-xs font-mono">{subtitlePosition}px</span>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitlePosition((s) => Math.min(400, s + 4))}>
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-
-                                                    {/* Subtitle delay */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
-                                                        Subtitle Delay
-                                                    </DropdownMenuLabel>
-                                                    <div className="flex items-center justify-between px-2 pb-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitleDelay((s) => s - 500)}>
-                                                            <Minus className="h-4 w-4" />
-                                                        </Button>
+                                    {/* Subtitles menu */}
+                                    {subtitles && subtitles.length > 0 && (
+                                        <DropdownMenu
+                                            open={openMenu === "subtitles"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "subtitles" : null)}
+                                        >
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    className={cn(
+                                                        PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide",
+                                                        activeSubtitleIndex >= 0 && "text-primary"
+                                                    )}
+                                                >
+                                                    CC
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                <DropdownMenuContent
+                                                    data-player-controls
+                                                    align="end"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onDoubleClick={(e) => e.stopPropagation()}
+                                                    className={cn(POPUP_CLS, "min-w-[180px] max-h-[300px] overflow-y-auto z-50 p-1")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Subtitles</div>
+                                                    <button
+                                                        onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(-1); setOpenMenuTracked(null); }}
+                                                        className={POPUP_ITEM}
+                                                        data-active={activeSubtitleIndex === -1}
+                                                    >
+                                                        Off
+                                                    </button>
+                                                    {subtitles.map((sub, i) => (
                                                         <button
-                                                            className="text-xs font-mono hover:text-primary transition-colors"
-                                                            title="Click to reset"
-                                                            onClick={() => setSubtitleDelay(0)}>
-                                                            {subtitleDelay > 0 ? "+" : ""}{subtitleDelay}ms
+                                                            key={`${sub.lang}-${sub.url}-${i}`}
+                                                            onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); setOpenMenuTracked(null); }}
+                                                            className={POPUP_ITEM}
+                                                            data-active={activeSubtitleIndex === i}
+                                                        >
+                                                            {sub.name ?? getLanguageDisplayName(sub.lang)}
                                                         </button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 rounded-full bg-white/5 hover:bg-white/10"
-                                                            onClick={() => setSubtitleDelay((s) => s + 500)}>
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
 
-                                                    <div className="h-px bg-white/10 my-2" />
-
-                                                    {/* Open in external player — platform-filtered */}
-                                                    <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/45 px-2 py-2">
-                                                        Open In
-                                                    </DropdownMenuLabel>
-                                                    <div className="space-y-0.5 px-1 pb-1">
-                                                        {Object.values(MediaPlayer)
-                                                            .filter((p) => p !== MediaPlayer.BROWSER && isSupportedPlayer(p))
-                                                            .map((player) => (
-                                                                <DropdownMenuItem
-                                                                    key={player}
-                                                                    onClick={() => openInExternalPlayer(player)}
-                                                                    className="gap-2 focus:bg-white/10 focus:text-white">
-                                                                    <ExternalLink className="size-3.5" /> {player}
-                                                                </DropdownMenuItem>
-                                                            ))}
-                                                    </div>
-
-                                                    {/* PiP */}
-                                                    {document.pictureInPictureEnabled && (
-                                                        <>
-                                                            <div className="h-px bg-white/10 my-2" />
-                                                            <DropdownMenuItem
+                                    {/* Settings menu */}
+                                    <DropdownMenu
+                                        open={openMenu === "settings"}
+                                        onOpenChange={(open) => { setOpenMenuTracked(open ? "settings" : null); if (!open) setSettingsPanel(null); }}
+                                    >
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                className={PLAYER_BTN_SM}
+                                                style={{ transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                                            >
+                                                <Settings className={cn("h-5 w-5 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]", openMenu === "settings" && "rotate-90")} />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                            <DropdownMenuContent
+                                                data-player-controls
+                                                align="end"
+                                                side="top"
+                                                sideOffset={4}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onDoubleClick={(e) => e.stopPropagation()}
+                                                className={cn(POPUP_CLS, "w-[250px] max-h-[350px] overflow-y-auto z-50")}
+                                                style={POPUP_STYLE}
+                                            >
+                                                {/* === Main settings panel === */}
+                                                {settingsPanel === null && (
+                                                    <div className="py-1">
+                                                        {/* Speed row */}
+                                                        <button
+                                                            onClick={() => setSettingsPanel("speed")}
+                                                            className={POPUP_ITEM}
+                                                        >
+                                                            <span className="flex-1">Playback speed</span>
+                                                            <span className="text-[11px] text-white/40 tabular-nums">{playbackRate === 1 ? "Normal" : `${playbackRate}x`}</span>
+                                                            <ChevronRight className="size-3.5 text-white/30" />
+                                                        </button>
+                                                        {/* Subtitles row */}
+                                                        {subtitles && subtitles.length > 0 && (
+                                                            <button
+                                                                onClick={() => setSettingsPanel("subtitles")}
+                                                                className={POPUP_ITEM}
+                                                            >
+                                                                <span className="flex-1">Subtitles</span>
+                                                                <span className="text-[11px] text-white/40 truncate max-w-[80px]">{subtitleSize}px</span>
+                                                                <ChevronRight className="size-3.5 text-white/30" />
+                                                            </button>
+                                                        )}
+                                                        {/* Open in player */}
+                                                        {Object.values(MediaPlayer).filter((p) => p !== MediaPlayer.BROWSER && isSupportedPlayer(p)).length > 0 && (
+                                                            <button
+                                                                onClick={() => setSettingsPanel("players")}
+                                                                className={POPUP_ITEM}
+                                                            >
+                                                                <span className="flex-1">Open in player</span>
+                                                                <ChevronRight className="size-3.5 text-white/30" />
+                                                            </button>
+                                                        )}
+                                                        {/* PiP — direct action */}
+                                                        {typeof document !== "undefined" && document.pictureInPictureEnabled && (
+                                                            <button
                                                                 onClick={() => {
                                                                     const video = videoRef.current;
                                                                     if (!video) return;
@@ -2475,44 +2730,245 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                         video.requestPictureInPicture().catch(() => {});
                                                                         showOsd("Picture in Picture");
                                                                     }
+                                                                    setOpenMenuTracked(null);
+                                                                    setSettingsPanel(null);
                                                                 }}
-                                                                className="gap-2 focus:bg-white/10 focus:text-white mx-1">
-                                                                <PictureInPicture2 className="size-3.5" /> Picture in Picture
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenuPortal>
-                                        </DropdownMenu>
+                                                                className={POPUP_ITEM}
+                                                            >
+                                                                <PictureInPicture2 className="size-3.5 opacity-60" /> Picture in Picture
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                                        {/* Cast to device */}
-                                        <PlayerCastButton
-                                            videoRef={videoRef}
-                                            downloadUrl={effectiveUrl}
-                                            title={file.name}
-                                            subtitles={subtitles}
-                                        />
+                                                {/* === Speed sub-panel === */}
+                                                {settingsPanel === "speed" && (
+                                                    <div
+                                                        className="py-1"
+                                                        onWheel={(e) => {
+                                                            e.stopPropagation();
+                                                            setPlaybackRate((prev) => {
+                                                                const next = e.deltaY < 0
+                                                                    ? Math.min(4, +(prev + 0.25).toFixed(2))
+                                                                    : Math.max(0.25, +(prev - 0.25).toFixed(2));
+                                                                showOsd(`Speed ${next}x`, "center");
+                                                                return next;
+                                                            });
+                                                        }}
+                                                    >
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                            <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
+                                                        </button>
+                                                        <div className={POPUP_DIVIDER} />
+                                                        {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                                                            <button
+                                                                key={rate}
+                                                                onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`, "center"); setSettingsPanel(null); }}
+                                                                className={POPUP_ITEM}
+                                                                data-active={playbackRate === rate}
+                                                            >
+                                                                {rate === 1 ? "Normal" : `${rate}x`}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
 
-                                        {/* Fullscreen */}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-9 w-9 text-white hover:bg-white/20"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleFullscreen();
-                                            }}
-                                            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
-                                            {isFullscreen ? (
-                                                <Minimize2 className="h-5 w-5" />
-                                            ) : (
-                                                <Maximize2 className="h-5 w-5" />
-                                            )}
-                                        </Button>
-                                    </div>
+                                                {/* === Subtitles sub-panel === */}
+                                                {settingsPanel === "subtitles" && (
+                                                    <div className="py-1">
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                            <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
+                                                        </button>
+                                                        <div className={POPUP_DIVIDER} />
+                                                        {/* Size */}
+                                                        <div className={POPUP_LABEL}>Size</div>
+                                                        <div
+                                                            className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
+                                                            onWheel={(e) => { e.stopPropagation(); setSubtitleSize((s) => Math.max(12, Math.min(64, s + (e.deltaY < 0 ? 2 : -2)))); }}
+                                                        >
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitleSize((s) => Math.max(12, s - 2))}
+                                                            >
+                                                                <Minus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <span className="player-stepper-value text-xs tabular-nums font-mono text-white/70">{subtitleSize}px</span>
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitleSize((s) => Math.min(64, s + 2))}
+                                                            >
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        {/* Position */}
+                                                        <div className={POPUP_LABEL}>Position</div>
+                                                        <div
+                                                            className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
+                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(20, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
+                                                        >
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitlePosition((s) => Math.max(20, s - 4))}
+                                                            >
+                                                                <Minus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <span className="player-stepper-value text-xs tabular-nums font-mono text-white/70">{subtitlePosition}px</span>
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitlePosition((s) => Math.min(400, s + 4))}
+                                                            >
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        {/* Delay */}
+                                                        <div className={POPUP_LABEL}>Delay</div>
+                                                        <div
+                                                            className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
+                                                            onWheel={(e) => { e.stopPropagation(); setSubtitleDelay((s) => s + (e.deltaY < 0 ? 500 : -500)); }}
+                                                        >
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitleDelay((s) => s - 500)}
+                                                            >
+                                                                <Minus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                className="player-stepper-value text-xs tabular-nums font-mono text-white/70 hover:text-primary transition-colors bg-transparent border-none cursor-pointer"
+                                                                title="Click to reset"
+                                                                onClick={() => setSubtitleDelay(0)}
+                                                            >
+                                                                {subtitleDelay > 0 ? "+" : ""}{subtitleDelay}ms
+                                                            </button>
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSubtitleDelay((s) => s + 500)}
+                                                            >
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        {/* Background style */}
+                                                        <div className={POPUP_LABEL}>Background</div>
+                                                        <div className="flex items-center gap-1.5 px-3.5 pt-1 pb-2">
+                                                            {([
+                                                                ["solid", "Solid"],
+                                                                ["semi", "Semi"],
+                                                                ["outline", "Outline"],
+                                                                ["none", "None"],
+                                                            ] as const).map(([id, label]) => (
+                                                                <button
+                                                                    key={id}
+                                                                    onClick={() => setSubtitleBackground(id)}
+                                                                    className={cn(
+                                                                        "flex-1 text-[10px] py-1 rounded-sm border transition-colors cursor-pointer",
+                                                                        subtitleBackground === id
+                                                                            ? "border-primary/60 bg-primary/10 text-white"
+                                                                            : "border-white/10 bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                                                                    )}
+                                                                >
+                                                                    {label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        {/* Text color */}
+                                                        <div className={POPUP_LABEL}>Color</div>
+                                                        <div className="flex items-center gap-2 px-3.5 pt-1 pb-2">
+                                                            {[
+                                                                ["#ffffff", "White"],
+                                                                ["#ffff00", "Yellow"],
+                                                                ["#00ffff", "Cyan"],
+                                                                ["#00ff00", "Green"],
+                                                            ].map(([hex, label]) => (
+                                                                <button
+                                                                    key={hex}
+                                                                    title={label}
+                                                                    onClick={() => setSubtitleColor(hex)}
+                                                                    className={cn(
+                                                                        "size-6 rounded-full border-2 transition-all cursor-pointer",
+                                                                        subtitleColor === hex
+                                                                            ? "border-primary scale-110"
+                                                                            : "border-white/20 hover:border-white/50"
+                                                                    )}
+                                                                    style={{ backgroundColor: hex }}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                        {/* Font family */}
+                                                        <div className={POPUP_LABEL}>Font</div>
+                                                        <div className="flex items-center gap-1.5 px-3.5 pt-1 pb-2">
+                                                            {([
+                                                                ["default", "Default"],
+                                                                ["mono", "Mono"],
+                                                                ["serif", "Serif"],
+                                                                ["trebuchet", "Trebuchet"],
+                                                            ] as const).map(([id, label]) => (
+                                                                <button
+                                                                    key={id}
+                                                                    onClick={() => setSubtitleFont(id)}
+                                                                    className={cn(
+                                                                        "flex-1 text-[10px] py-1 rounded-sm border transition-colors cursor-pointer",
+                                                                        subtitleFont === id
+                                                                            ? "border-primary/60 bg-primary/10 text-white"
+                                                                            : "border-white/10 bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70"
+                                                                    )}
+                                                                >
+                                                                    {label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* === Players sub-panel === */}
+                                                {settingsPanel === "players" && (
+                                                    <div className="py-1">
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                            <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
+                                                        </button>
+                                                        <div className={POPUP_DIVIDER} />
+                                                        {Object.values(MediaPlayer)
+                                                            .filter((p) => p !== MediaPlayer.BROWSER && isSupportedPlayer(p))
+                                                            .map((player) => (
+                                                                <button
+                                                                    key={player}
+                                                                    onClick={() => { openInExternalPlayer(player); setOpenMenuTracked(null); setSettingsPanel(null); }}
+                                                                    className={POPUP_ITEM}
+                                                                >
+                                                                    <ExternalLink className="size-3.5 opacity-60" /> {player}
+                                                                </button>
+                                                            ))}
+                                                    </div>
+                                                )}
+                                            </DropdownMenuContent>
+                                        </DropdownMenuPortal>
+                                    </DropdownMenu>
+
+                                    {/* Cast to device */}
+                                    <PlayerCastButton
+                                        videoRef={videoRef}
+                                        downloadUrl={effectiveUrl}
+                                        title={file.name}
+                                        subtitles={subtitles}
+                                    />
+
+                                    {/* Fullscreen */}
+                                    <button
+                                        className={PLAYER_BTN_SM}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleFullscreen();
+                                        }}
+                                        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                                    >
+                                        {isFullscreen ? (
+                                            <Minimize2 className="h-5 w-5" />
+                                        ) : (
+                                            <Maximize2 className="h-5 w-5" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
                     {/* iOS: tap-to-play overlay so playback runs in user gesture context */}
                     {ios && iosTapToPlay && (
@@ -2530,6 +2986,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 </span>
                             )}
                         </button>
+                    )}
+
+                    {/* Buffer stall hint — frequent buffering detected */}
+                    {showStallHint && !showLoadingHint && (
+                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/90 px-4 py-2.5 text-center text-xs text-white backdrop-blur-md sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
+                            <p className="text-white/70">
+                                Frequent buffering detected.{" "}
+                                {streamingLinks?.apple ? (
+                                    <button type="button" className="text-primary hover:underline" onClick={() => { setShowStallHint(false); }}>
+                                        Try a transcoded stream or external player.
+                                    </button>
+                                ) : (
+                                    <button type="button" className="text-primary hover:underline" onClick={() => setShowStallHint(false)}>
+                                        Dismiss
+                                    </button>
+                                )}
+                            </p>
+                        </div>
                     )}
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}

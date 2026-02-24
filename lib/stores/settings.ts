@@ -109,6 +109,12 @@ export interface PlaybackSettings {
     subtitleLanguage: string;
     /** Auto-skip intros/recaps/outros using IntroDB community timestamps */
     autoSkipIntro: boolean;
+    /** Subtitle background style: 'solid' | 'semi' | 'outline' | 'none' */
+    subtitleBackground: 'solid' | 'semi' | 'outline' | 'none';
+    /** Subtitle text color */
+    subtitleColor: string;
+    /** Subtitle font family */
+    subtitleFont: 'default' | 'mono' | 'serif' | 'trebuchet';
 }
 
 export function getActiveRange(settings: StreamingSettings): QualityRange {
@@ -240,6 +246,9 @@ const settingsConfig: SettingsConfig = {
             nextEpisodePromptSeconds: 30,
             subtitleLanguage: "english",
             autoSkipIntro: false,
+            subtitleBackground: 'semi' as const,
+            subtitleColor: '#ffffff',
+            subtitleFont: 'default' as const,
         },
     },
     tmdbApiKey: {

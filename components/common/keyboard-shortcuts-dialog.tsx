@@ -35,6 +35,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
             { keys: ["F"], description: "Toggle fullscreen" },
             { keys: ["C"], description: "Cycle subtitles" },
             { keys: ["<", ">"], description: "Frame step (paused)" },
+            { keys: ["⇧", "N"], description: "Next episode" },
+            { keys: ["⇧", "P"], description: "Previous episode" },
         ],
     },
     {

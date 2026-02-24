@@ -185,18 +185,32 @@ type AddonInfo = { id: string; url: string; name: string };
  * Classify addons into stream-capable and subtitle-capable using cached manifests.
  * Safe default: if manifest is unknown/failed, assume it supports streams (no regression).
  */
+const PER_ADDON_TIMEOUT = 15_000; // 15s max per addon fetch
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), ms); }),
+    ]).finally(() => clearTimeout(timer!));
+}
+
 async function classifyAddons(addons: AddonInfo[]): Promise<{ streamAddons: AddonInfo[]; subtitleAddons: AddonInfo[] }> {
     const manifests = await Promise.all(
         addons.map(async (addon): Promise<AddonManifest | null> => {
             try {
-                return await queryClient.fetchQuery({
-                    queryKey: ["addon", addon.id, "manifest"],
-                    queryFn: async () => {
-                        const client = new AddonClient({ url: addon.url });
-                        return client.fetchManifest();
-                    },
-                    staleTime: 1000 * 60 * 60 * 24, // 24 hours
-                });
+                return await withTimeout(
+                    queryClient.fetchQuery({
+                        queryKey: ["addon", addon.id, "manifest"],
+                        queryFn: async () => {
+                            const client = new AddonClient({ url: addon.url });
+                            return client.fetchManifest();
+                        },
+                        staleTime: 1000 * 60 * 60 * 24, // 24 hours
+                    }),
+                    5_000, // 5s timeout for manifest (usually cached)
+                    null
+                );
             } catch {
                 return null;
             }
@@ -205,7 +219,7 @@ async function classifyAddons(addons: AddonInfo[]): Promise<{ streamAddons: Addo
 
     const streamAddons = addons.filter((_, i) => {
         const m = manifests[i];
-        if (!m?.resources) return true; // unknown → include (safe default)
+        if (!m?.resources) return false; // unknown/failed → skip (prevents subtitle-only addons from blocking stream fetch)
         return addonSupportsStreams(m);
     });
 
@@ -501,18 +515,20 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
 
                 try {
-                    // Use fetchQuery which respects staleTime — avoids serving
-                    // stale cached data that may have fewer results
-                    return await queryClient.fetchQuery({
-                        queryKey,
-                        queryFn: async () => {
-                            const client = new AddonClient({ url: addon.url });
-                            const response = await client.fetchStreams(imdbId, type, tvParams);
-                            return parseStreams(response.streams, addon.id, addon.name);
-                        },
-                        staleTime: 3 * 60 * 1000, // 3 minutes
-                        gcTime: 10 * 60 * 1000,   // match use-addons.ts
-                    });
+                    return await withTimeout(
+                        queryClient.fetchQuery({
+                            queryKey,
+                            queryFn: async () => {
+                                const client = new AddonClient({ url: addon.url });
+                                const response = await client.fetchStreams(imdbId, type, tvParams);
+                                return parseStreams(response.streams, addon.id, addon.name);
+                            },
+                            staleTime: 3 * 60 * 1000, // 3 minutes
+                            gcTime: 10 * 60 * 1000,   // match use-addons.ts
+                        }),
+                        PER_ADDON_TIMEOUT,
+                        [] as AddonSource[]
+                    );
                 } catch {
                     return [] as AddonSource[];
                 }
@@ -521,18 +537,26 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             // Fetch subtitles in parallel from subtitle-capable addons only
             const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
                 try {
-                    const client = new AddonClient({ url: addon.url });
-                    const response = await client.fetchSubtitles(imdbId, type, tvParams);
-                    return { addonName: addon.name, subtitles: response.subtitles || [] };
+                    return await withTimeout(
+                        (async () => {
+                            const client = new AddonClient({ url: addon.url });
+                            const response = await client.fetchSubtitles(imdbId, type, tvParams);
+                            return { addonName: addon.name, subtitles: response.subtitles || [] } as SubtitleQueryResult;
+                        })(),
+                        PER_ADDON_TIMEOUT,
+                        { addonName: addon.name, subtitles: [] } as SubtitleQueryResult
+                    );
                 } catch {
                     return { addonName: addon.name, subtitles: [] };
                 }
             });
 
-            const [sourcesResults, subtitleResults] = await Promise.all([
-                Promise.all(sourcePromises),
+            const [sourcesSettled, subtitleResults] = await Promise.all([
+                Promise.allSettled(sourcePromises),
                 Promise.all(subtitlePromises),
             ]);
+
+            const sourcesResults = sourcesSettled.map((r) => r.status === "fulfilled" ? r.value : [] as AddonSource[]);
 
             // Filter out old requests
             if (requestId !== currentRequestId) return;
