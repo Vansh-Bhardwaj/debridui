@@ -37,12 +37,38 @@ export async function addUserAccount(data: CreateAccount) {
         redirect("/login");
     }
 
-    const validated = createAccountSchema.parse(data);
+    let validated;
+    try {
+        validated = createAccountSchema.parse(data);
+    } catch {
+        throw new Error("Invalid account data: type and API key are required");
+    }
     const userId = session.user.id;
 
     try {
-        // Single upsert — avoids SELECT + conditional INSERT (saves 1 DB query)
-        // Uses unique_user_account constraint on (userId, apiKey, type)
+        // Check if account already exists (SELECT works reliably via Hyperdrive cache)
+        const existing = await db
+            .select({ id: userAccounts.id })
+            .from(userAccounts)
+            .where(
+                and(
+                    eq(userAccounts.userId, userId),
+                    eq(userAccounts.apiKey, validated.apiKey),
+                    eq(userAccounts.type, validated.type)
+                )
+            );
+
+        if (existing.length > 0) {
+            // Update name for existing account
+            const [account] = await db
+                .update(userAccounts)
+                .set({ name: validated.name })
+                .where(eq(userAccounts.id, existing[0].id))
+                .returning();
+            return account;
+        }
+
+        // Insert new account
         const [account] = await db
             .insert(userAccounts)
             .values({
@@ -51,17 +77,33 @@ export async function addUserAccount(data: CreateAccount) {
                 apiKey: validated.apiKey,
                 type: validated.type,
                 name: validated.name,
-            })
-            .onConflictDoUpdate({
-                target: [userAccounts.userId, userAccounts.apiKey, userAccounts.type],
-                set: { name: validated.name },
+                createdAt: new Date(),
             })
             .returning();
 
         return account;
     } catch (error) {
-        console.error("[addUserAccount] Database error:", error);
-        throw error;
+        // Log full postgres error details (code, detail, constraint)
+        const pgErr = error as { code?: string; detail?: string; constraint_name?: string; severity?: string; where?: string };
+        console.error("[addUserAccount] Database error:", {
+            message: error instanceof Error ? error.message : String(error),
+            code: pgErr.code,
+            detail: pgErr.detail,
+            constraint: pgErr.constraint_name,
+            severity: pgErr.severity,
+            where: pgErr.where,
+        });
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes("connect") || msg.includes("ECONNREFUSED") || msg.includes("timeout")) {
+            throw new Error("Database connection failed — please try again");
+        }
+        if (msg.includes("duplicate") || msg.includes("unique") || pgErr.code === "23505") {
+            throw new Error("This account is already connected");
+        }
+        if (msg.includes("foreign key") || msg.includes("violates") || pgErr.code === "23503") {
+            throw new Error("User session expired — please log in again");
+        }
+        throw new Error(`Failed to save account: ${msg.slice(0, 200)}`);
     }
 }
 
