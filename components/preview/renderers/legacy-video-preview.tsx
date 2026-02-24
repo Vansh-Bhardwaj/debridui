@@ -1296,32 +1296,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [fakeFullscreen]);
 
-    // Click to play/pause (instant), double-click to fullscreen (undo play/pause + toggle FS)
+    // Click to play/pause (desktop only — mobile uses handleMobileTap)
     const handleContainerClick = useCallback((e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
         // On touch devices, handleMobileTap manages taps — skip click handler
         if (useCompactControls) return;
-        if (clickTimerRef.current) {
-            // Second click within window — this is a double-click
-            clearTimeout(clickTimerRef.current);
-            clickTimerRef.current = null;
-            // Undo the play/pause toggle from the first click
-            togglePlay();
-            void toggleFullscreen();
-            return;
-        }
-        // First click — toggle immediately
         togglePlay();
-        clickTimerRef.current = setTimeout(() => {
-            clickTimerRef.current = null;
-        }, 300);
-    }, [togglePlay, toggleFullscreen, useCompactControls]);
-
-    // Double-click handler kept for touch devices that fire dblclick
-    const handleContainerDoubleClick = useCallback((e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest("[data-player-controls]")) return;
-        void toggleFullscreen();
-    }, [toggleFullscreen]);
+    }, [togglePlay, useCompactControls]);
 
     // Mobile double-tap to seek \u00b110s (left half = back, right half = forward)
     const handleMobileTap = useCallback((e: React.TouchEvent) => {
@@ -2061,7 +2042,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 !showControls && isPlaying && "player-hide-cursor"
             )}
             onClick={handleContainerClick}
-            onDoubleClick={handleContainerDoubleClick}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}>
