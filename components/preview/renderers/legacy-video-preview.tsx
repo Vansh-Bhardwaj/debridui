@@ -322,6 +322,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const preferredAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
     // IntroDB: auto-skip intro/recap/outro
     const autoSkipIntro = useSettingsStore((s) => s.settings.playback.autoSkipIntro);
+    // TV mode — hide fullscreen button as it's redundant in TV mode where full-screen is the default
+    const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const { data: introSegments } = useIntroSegments(progressKey);
     // Track which segments have been auto-skipped (reset on new episode)
     const skippedSegmentsRef = useRef<Set<string>>(new Set());
@@ -1814,6 +1816,41 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, [toggleFullscreen]);
 
+    // Gamepad / external seek + volume with OSD feedback
+    useEffect(() => {
+        const seekHandler = (e: Event) => {
+            const delta = (e as CustomEvent<{ delta: number }>).detail?.delta;
+            if (typeof delta !== "number") return;
+            const cur = videoRef.current?.currentTime ?? 0;
+            seekTo(cur + delta);
+            resetControlsTimeout();
+            triggerSeekRipple(delta < 0 ? "left" : "right");
+            const dir: 1 | -1 = delta > 0 ? 1 : -1;
+            if (seekAccRef.current?.direction === dir) { seekAccRef.current.total += Math.abs(delta); }
+            else { seekAccRef.current = { direction: dir, total: Math.abs(delta) }; }
+            showOsd(delta < 0 ? `« ${seekAccRef.current.total}s` : `» ${seekAccRef.current.total}s`, delta < 0 ? "left" : "right");
+        };
+        const volHandler = (e: Event) => {
+            const delta = (e as CustomEvent<{ delta: number }>).detail?.delta;
+            if (typeof delta !== "number") return;
+            const video = videoRef.current;
+            if (!video) return;
+            resetControlsTimeout();
+            const newVol = Math.max(0, Math.min(1, video.volume + delta));
+            video.volume = newVol;
+            video.muted = newVol === 0;
+            setVolume(newVol);
+            setIsMuted(newVol === 0);
+            showOsd(newVol === 0 ? "Muted" : `Volume ${Math.round(newVol * 100)}%`, "center");
+        };
+        window.addEventListener("debridui-player-seek", seekHandler);
+        window.addEventListener("debridui-player-volume", volHandler);
+        return () => {
+            window.removeEventListener("debridui-player-seek", seekHandler);
+            window.removeEventListener("debridui-player-volume", volHandler);
+        };
+    }, [seekTo, showOsd, resetControlsTimeout, triggerSeekRipple]);
+
     // Persist player preferences to settings store so they survive reload
     useEffect(() => {
         useSettingsStore.getState().set("playback", {
@@ -2488,6 +2525,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         onClick={togglePlay}
                                         disabled={isLoading}
                                         aria-label={isPlaying ? "Pause" : "Play"}
+                                        data-tv-focusable
                                     >
                                         {isPlaying ? (
                                             <Pause className="h-5 w-5 fill-current" />
@@ -2501,6 +2539,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         onClick={(e) => { e.stopPropagation(); guardedNav(onPrev); }}
                                         disabled={!onPrev}
                                         title="Previous episode"
+                                        data-tv-focusable
                                     >
                                         <SkipBack className="h-4 w-4 fill-current" />
                                     </button>
@@ -2509,6 +2548,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         onClick={(e) => { e.stopPropagation(); guardedNav(onNext); }}
                                         disabled={!onNext}
                                         title="Next episode"
+                                        data-tv-focusable
                                     >
                                         <SkipForward className="h-4 w-4 fill-current" />
                                     </button>
@@ -2531,6 +2571,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             className={PLAYER_BTN_SM}
                                             onClick={toggleMute}
                                             aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"}
+                                            data-tv-focusable
                                         >
                                             {isMuted || volume === 0 ? (
                                                 <VolumeX className="h-5 w-5" />
@@ -2585,7 +2626,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}
                                         >
                                             <DropdownMenuTrigger asChild>
-                                                <button className={cn(PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide")}>
+                                                <button className={cn(PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide")} data-tv-focusable>
                                                     Audio
                                                 </button>
                                             </DropdownMenuTrigger>
@@ -2648,6 +2689,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide",
                                                         activeSubtitleIndex >= 0 && "text-primary"
                                                     )}
+                                                    data-tv-focusable
                                                 >
                                                     CC
                                                 </button>
@@ -2695,6 +2737,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             <button
                                                 className={PLAYER_BTN_SM}
                                                 style={{ transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                                                data-tv-focusable
                                             >
                                                 <Settings className={cn("h-5 w-5 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]", openMenu === "settings" && "rotate-90")} />
                                             </button>
@@ -2717,6 +2760,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <button
                                                             onClick={() => setSettingsPanel("speed")}
                                                             className={POPUP_ITEM}
+                                                            data-tv-focusable
                                                         >
                                                             <span className="flex-1">Playback speed</span>
                                                             <span className="text-[11px] text-white/40 tabular-nums">{playbackRate === 1 ? "Normal" : `${playbackRate}x`}</span>
@@ -2727,6 +2771,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             <button
                                                                 onClick={() => setSettingsPanel("subtitles")}
                                                                 className={POPUP_ITEM}
+                                                                data-tv-focusable
                                                             >
                                                                 <span className="flex-1">Subtitles</span>
                                                                 <span className="text-[11px] text-white/40 truncate max-w-[80px]">{subtitleSize}px</span>
@@ -2738,6 +2783,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             <button
                                                                 onClick={() => setSettingsPanel("players")}
                                                                 className={POPUP_ITEM}
+                                                                data-tv-focusable
                                                             >
                                                                 <span className="flex-1">Open in player</span>
                                                                 <ChevronRight className="size-3.5 text-white/30" />
@@ -2760,6 +2806,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                     setSettingsPanel(null);
                                                                 }}
                                                                 className={POPUP_ITEM}
+                                                                data-tv-focusable
                                                             >
                                                                 <PictureInPicture2 className="size-3.5 opacity-60" /> Picture in Picture
                                                             </button>
@@ -2782,7 +2829,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             });
                                                         }}
                                                     >
-                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")} data-tv-focusable>
                                                             <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
                                                         </button>
                                                         <div className={POPUP_DIVIDER} />
@@ -2792,6 +2839,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                 onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`, "center"); setSettingsPanel(null); }}
                                                                 className={POPUP_ITEM}
                                                                 data-active={playbackRate === rate}
+                                                                data-tv-focusable
                                                             >
                                                                 {rate === 1 ? "Normal" : `${rate}x`}
                                                             </button>
@@ -2802,7 +2850,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 {/* === Subtitles sub-panel === */}
                                                 {settingsPanel === "subtitles" && (
                                                     <div className="py-1">
-                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")} data-tv-focusable>
                                                             <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
                                                         </button>
                                                         <div className={POPUP_DIVIDER} />
@@ -2947,7 +2995,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 {/* === Players sub-panel === */}
                                                 {settingsPanel === "players" && (
                                                     <div className="py-1">
-                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")}>
+                                                        <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")} data-tv-focusable>
                                                             <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
                                                         </button>
                                                         <div className={POPUP_DIVIDER} />
@@ -2958,6 +3006,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                     key={player}
                                                                     onClick={() => { openInExternalPlayer(player); setOpenMenuTracked(null); setSettingsPanel(null); }}
                                                                     className={POPUP_ITEM}
+                                                                    data-tv-focusable
                                                                 >
                                                                     <ExternalLink className="size-3.5 opacity-60" /> {player}
                                                                 </button>
@@ -2976,21 +3025,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         subtitles={subtitles}
                                     />
 
-                                    {/* Fullscreen */}
-                                    <button
-                                        className={PLAYER_BTN_SM}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleFullscreen();
-                                        }}
-                                        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                                    >
-                                        {isFullscreen ? (
-                                            <Minimize2 className="h-5 w-5" />
-                                        ) : (
-                                            <Maximize2 className="h-5 w-5" />
-                                        )}
-                                    </button>
+                                    {/* Fullscreen — hidden in TV mode where fullscreen is the default */}
+                                    {!tvMode && (
+                                        <button
+                                            className={PLAYER_BTN_SM}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleFullscreen();
+                                            }}
+                                            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                                            data-tv-focusable
+                                        >
+                                            {isFullscreen ? (
+                                                <Minimize2 className="h-5 w-5" />
+                                            ) : (
+                                                <Maximize2 className="h-5 w-5" />
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -46,7 +46,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
             {/* Desktop Layout */}
             <div className={cn(
                 "hidden md:block relative w-full overflow-hidden",
-                tvMode ? "h-[calc(100vh-4rem)]" : "aspect-[2/1]"
+                tvMode ? "h-[60vh]" : "aspect-[2/1]"
             )}>
                 {/* Shimmer skeleton while image loads */}
                 <div className="absolute inset-0 bg-muted animate-pulse" />
@@ -69,7 +69,12 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
 
                 {/* Cinematic gradient overlays */}
                 <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/30" />
+                <div className={cn(
+                    "absolute inset-0 bg-gradient-to-t to-transparent",
+                    tvMode
+                        ? "from-background via-background/80 [mask-image:linear-gradient(to_top,black_40%,transparent_100%)]"
+                        : "from-background via-transparent"
+                )} />
                 <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-transparent" />
 
                 {/* Film grain texture overlay */}
@@ -81,7 +86,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                 />
 
                 {/* Content */}
-                <div className="absolute inset-0 flex items-center">
+                <div className={cn("absolute inset-0 flex", tvMode ? "items-end pb-14" : "items-center")}>
                     <div className="w-full max-w-7xl mx-auto px-8 lg:px-12 xl:px-16">
                         <div
                             className={cn(
@@ -403,6 +408,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     size="icon"
                     onClick={scrollPrev}
                     aria-label="Previous slide"
+                    data-tv-focusable
                     className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 -translate-x-2 group-hover/hero:translate-x-0">
                     <ChevronLeft className="size-5" />
                 </Button>
@@ -413,6 +419,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     size="icon"
                     onClick={scrollNext}
                     aria-label="Next slide"
+                    data-tv-focusable
                     className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 translate-x-2 group-hover/hero:translate-x-0">
                     <ChevronRight className="size-5" />
                 </Button>
@@ -426,6 +433,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                             key={index}
                             onClick={() => scrollTo(index)}
                             aria-label={`Go to slide ${index + 1}`}
+                            data-tv-focusable
                             className={cn(
                                 "h-1 rounded-full transition-all duration-500 cursor-pointer",
                                 index === current ? "w-6 bg-primary" : "w-1.5 bg-foreground/30 hover:bg-foreground/50"

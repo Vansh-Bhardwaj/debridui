@@ -47,7 +47,7 @@ const HeroCarousel = dynamic(
 // Welcome hero section with editorial minimalism
 const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearchClick: () => void }) {
     return (
-        <section className="relative py-12 lg:py-20 lg:px-6">
+        <section className="relative py-12 lg:py-20 lg:px-6" data-tv-section>
             <div className="max-w-5xl mx-auto space-y-8">
                 {/* Top row: Editorial label + social links */}
                 <div className="flex items-center justify-between gap-4">
@@ -123,6 +123,7 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                     style={{ animationDuration: "600ms", animationDelay: "300ms", animationFillMode: "backwards" }}>
                     <button
                         onClick={onSearchClick}
+                        data-tv-focusable
                         className="group w-full flex items-center gap-3 h-11 px-4 text-sm text-muted-foreground bg-transparent hover:bg-muted/30 border border-border/50 hover:border-border rounded-sm transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
                         <SearchIcon className="size-4 text-muted-foreground/60 group-hover:text-foreground transition-colors duration-300" />
                         <span className="flex-1 text-left">Search movies, shows, files...</span>
@@ -364,7 +365,7 @@ const DashboardPage = memo(function DashboardPage() {
             <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
             {/* Continue Watching */}
-            <div className="lg:px-6 mb-8">
+            <div className={`lg:px-6 mb-8${tvMode ? " -mt-8" : ""}`}>
                 <SectionErrorBoundary section="Continue Watching">
                     <ContinueWatching />
                 </SectionErrorBoundary>

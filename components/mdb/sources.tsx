@@ -105,6 +105,7 @@ export function AddSourceButton({ magnet }: { magnet: string }) {
                 <Button
                     variant="outline"
                     size="sm"
+                    data-tv-focusable
                     onClick={() => {
                         if (torrentId) {
                             router.push(`/files?q=id:${torrentId}`);
@@ -116,6 +117,7 @@ export function AddSourceButton({ magnet }: { magnet: string }) {
                 <Button
                     variant="ghost"
                     size="icon-sm"
+                    data-tv-focusable
                     className="group/delete hover:!bg-destructive/10"
                     onClick={() => handleRemove()}>
                     <Trash2Icon className="size-4 text-destructive/70 group-hover/delete:text-destructive" />
@@ -134,6 +136,7 @@ export function AddSourceButton({ magnet }: { magnet: string }) {
                 <Button
                     variant="ghost"
                     size="icon-sm"
+                    data-tv-focusable
                     className="group/delete hover:!bg-destructive/10"
                     onClick={() => handleRemove()}>
                     <Trash2Icon className="size-4 text-destructive/70 group-hover/delete:text-destructive" />
@@ -143,7 +146,7 @@ export function AddSourceButton({ magnet }: { magnet: string }) {
     }
 
     return (
-        <Button variant="outline" size="sm" onClick={() => handleAdd()} disabled={status === "loading"}>
+        <Button variant="outline" size="sm" onClick={() => handleAdd()} disabled={status === "loading"} data-tv-focusable>
             {status === "loading" ? (
                 <>
                     <Loader2 className="size-4 animate-spin" />
@@ -236,6 +239,7 @@ export const SourceRow = memo(function SourceRow({
                         {source.url && (
                             <Button
                                 size="sm"
+                                data-tv-focusable
                                 onClick={handlePlay}>
                                 <PlayIcon className="size-4 fill-current" />
                                 Play
@@ -299,7 +303,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
     return (
         <div className="space-y-2">
             {/* Filter bar — resolution + addon filters */}
-            <div className="flex items-center justify-between gap-2 pt-2">
+            <div className="flex items-center justify-between gap-2 pt-2" data-tv-section>
                 {/* Resolution filter tabs */}
                 <div className="flex items-center gap-0.5 bg-muted/30 rounded-sm p-0.5" role="radiogroup" aria-label="Resolution filter">
                     {FILTER_OPTIONS.map((opt) => {
@@ -311,6 +315,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                                 role="radio"
                                 aria-checked={resolutionFilter === opt.value}
                                 onClick={() => setResolutionFilter(opt.value)}
+                                data-tv-focusable
                                 className={cn(
                                     "px-2.5 py-1 text-xs rounded-sm transition-colors",
                                     resolutionFilter === opt.value
@@ -330,7 +335,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                 <div className="flex items-center gap-1.5">
                     {addonNames.length > 1 && (
                         <Select value={addonFilter} onValueChange={setAddonFilter}>
-                            <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm">
+                            <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm" data-tv-focusable>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

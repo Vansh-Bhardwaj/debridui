@@ -107,7 +107,7 @@ export function AddAccountForm() {
                                     <FormLabel className="text-xs text-muted-foreground">Account Type</FormLabel>
                                     <FormControl>
                                         <Select onValueChange={field.onChange} value={field.value}>
-                                            <SelectTrigger>
+                                            <SelectTrigger data-tv-focusable tabIndex={0}>
                                                 <SelectValue placeholder="Select an account type" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -131,7 +131,7 @@ export function AddAccountForm() {
                                 <FormItem>
                                     <FormLabel className="text-xs text-muted-foreground">API Key</FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="Enter your API key" />
+                                        <Input {...field} placeholder="Enter your API key" data-tv-focusable tabIndex={0} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -141,6 +141,8 @@ export function AddAccountForm() {
                         <Button
                             type="submit"
                             className="w-full"
+                            data-tv-focusable
+                            tabIndex={0}
                             disabled={form.formState.isSubmitting || addAccount.isPending || !!isLoadingOAuth}>
                             {form.formState.isSubmitting || addAccount.isPending ? "Adding account..." : "Add Account"}
                         </Button>
@@ -152,6 +154,8 @@ export function AddAccountForm() {
                                 variant="outline"
                                 type="button"
                                 className="w-full"
+                                data-tv-focusable
+                                tabIndex={0}
                                 onClick={handleRealDebridLogin}
                                 disabled={!!isLoadingOAuth || addAccount.isPending}>
                                 {isLoadingOAuth === "realdebrid" ? (
@@ -164,6 +168,8 @@ export function AddAccountForm() {
                                 variant="outline"
                                 type="button"
                                 className="w-full"
+                                data-tv-focusable
+                                tabIndex={0}
                                 onClick={handleTorBoxLogin}
                                 disabled={!!isLoadingOAuth || addAccount.isPending}>
                                 {isLoadingOAuth === "torbox" ? <Loader2 className="size-4 animate-spin" /> : "TorBox"}
@@ -172,6 +178,8 @@ export function AddAccountForm() {
                                 variant="outline"
                                 type="button"
                                 className="w-full"
+                                data-tv-focusable
+                                tabIndex={0}
                                 onClick={handleAllDebridLogin}
                                 disabled={!!isLoadingOAuth || addAccount.isPending}>
                                 {isLoadingOAuth === "alldebrid" ? (
@@ -184,6 +192,8 @@ export function AddAccountForm() {
                                 variant="outline"
                                 type="button"
                                 className="w-full"
+                                data-tv-focusable
+                                tabIndex={0}
                                 onClick={handlePremiumizeLogin}
                                 disabled={!!isLoadingOAuth || addAccount.isPending}>
                                 {isLoadingOAuth === "premiumize" ? (

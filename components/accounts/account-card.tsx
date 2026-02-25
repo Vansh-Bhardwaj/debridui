@@ -91,6 +91,8 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleSwitch}
+                                data-tv-focusable
+                                tabIndex={0}
                                 className="text-muted-foreground hover:text-foreground">
                                 <ArrowRightLeft className="size-4" />
                                 Switch
@@ -101,6 +103,8 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                             size="icon"
                             className="size-8 text-muted-foreground hover:text-destructive"
                             onClick={() => setRemoveDialogOpen(true)}
+                            data-tv-focusable
+                            tabIndex={0}
                             aria-label="Remove account">
                             <Trash2 className="size-4" />
                         </Button>
@@ -157,7 +161,7 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                 {/* Mobile actions - bottom row */}
                 <div className="flex sm:hidden items-center gap-2 mt-3 pt-3 border-t border-border/50">
                     {!isCurrentAccount && (
-                        <Button variant="outline" size="sm" onClick={handleSwitch} className="flex-1">
+                        <Button variant="outline" size="sm" onClick={handleSwitch} data-tv-focusable tabIndex={0} className="flex-1">
                             <ArrowRightLeft className="size-4" />
                             Switch
                         </Button>
@@ -169,6 +173,8 @@ export const AccountCard = React.memo(function AccountCard({ account, isCurrentA
                             "text-muted-foreground hover:text-destructive hover:border-destructive",
                             isCurrentAccount && "flex-1"
                         )}
+                        data-tv-focusable
+                        tabIndex={0}
                         onClick={() => setRemoveDialogOpen(true)}>
                         <Trash2 className="size-4" />
                         Remove

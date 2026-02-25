@@ -3,7 +3,7 @@
 // Minimal service worker for PWA installability and offline app shell caching.
 // Caches the app shell on install, serves from cache first, falls back to network.
 
-const CACHE_NAME = "debridui-v1";
+const CACHE_NAME = "debridui-v2";
 const APP_SHELL = ["/dashboard", "/icon.svg", "/logo.svg"];
 
 self.addEventListener("install", (event) => {

@@ -378,6 +378,8 @@ export default function SettingsPage() {
                             value={tmdbApiKey}
                             onChange={(e) => handleTmdbKeyChange(e.target.value)}
                             className="max-w-md"
+                            data-tv-focusable
+                            tabIndex={0}
                         />
                     </div>
                 </div>
@@ -510,7 +512,7 @@ export default function SettingsPage() {
                         <Select
                             value={String(playback.playbackSpeed)}
                             onValueChange={(v) => updatePlayback({ playbackSpeed: parseFloat(v) })}>
-                            <SelectTrigger className="w-24">
+                            <SelectTrigger className="w-24" data-tv-focusable tabIndex={0}>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -594,7 +596,7 @@ export default function SettingsPage() {
                         <Select
                             value={String(playback.subtitleSize)}
                             onValueChange={(v) => updatePlayback({ subtitleSize: parseInt(v) })}>
-                            <SelectTrigger className="w-24">
+                            <SelectTrigger className="w-24" data-tv-focusable tabIndex={0}>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -621,7 +623,7 @@ export default function SettingsPage() {
                         <Select
                             value={String(playback.subtitlePosition)}
                             onValueChange={(v) => updatePlayback({ subtitlePosition: parseInt(v) })}>
-                            <SelectTrigger className="w-28">
+                            <SelectTrigger className="w-28" data-tv-focusable tabIndex={0}>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -648,7 +650,7 @@ export default function SettingsPage() {
                         <Select
                             value={String(playback.nextEpisodePromptSeconds)}
                             onValueChange={(v) => updatePlayback({ nextEpisodePromptSeconds: parseInt(v) })}>
-                            <SelectTrigger className="w-20">
+                            <SelectTrigger className="w-20" data-tv-focusable tabIndex={0}>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

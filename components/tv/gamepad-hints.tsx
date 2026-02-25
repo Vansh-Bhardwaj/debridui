@@ -13,16 +13,18 @@ interface HintItem {
 const NAV_HINTS: HintItem[] = [
     { label: "A", action: "Select" },
     { label: "B", action: "Back" },
+    { label: "R-Stick", action: "Cursor" },
     { label: "LB/RB", action: "Section" },
 ];
 
 const VIDEO_HINTS: HintItem[] = [
-    { label: "A", action: "Play/Pause" },
-    { label: "B", action: "Back" },
+    { label: "A", action: "Select" },
     { label: "X", action: "Play/Pause" },
     { label: "Y", action: "Fullscreen" },
-    { label: "LB/RB", action: "Prev/Next" },
+    { label: "B", action: "Back" },
+    { label: "LB/RB", action: "Episode" },
     { label: "LT/RT", action: "Seek ±30s" },
+    { label: "R-Stick", action: "Cursor" },
 ];
 
 export function GamepadHints() {
@@ -93,13 +95,13 @@ export function GamepadHints() {
         return () => cancelAnimationFrame(rafId);
     }, [tvMode, gamepadConnected]);
 
-    if (!tvMode || !gamepadConnected) return null;
+    if (!tvMode || !gamepadConnected || hasVideo) return null;
 
     const hints = hasVideo ? VIDEO_HINTS : NAV_HINTS;
 
     return (
         <div
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-opacity duration-500"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] pointer-events-none transition-opacity duration-500"
             style={{ opacity: visible ? 1 : 0 }}
         >
             <div className="flex items-center gap-4 rounded-sm bg-background/80 backdrop-blur-sm border border-border/30 px-5 py-2.5">

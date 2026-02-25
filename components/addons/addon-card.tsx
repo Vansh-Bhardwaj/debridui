@@ -67,9 +67,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
             className={cn(
                 "rounded-sm border border-border/50 p-4 transition-all duration-300 space-y-3",
                 addon.enabled ? "bg-card" : "bg-muted/30 opacity-75"
-            )}
-            data-tv-focusable="list"
-            tabIndex={0}>
+            )}>
             {/* Row 1: Icon + Name/Version */}
             <div className="flex gap-3 items-start">
                 {/* Column 1: Icon */}
@@ -114,7 +112,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/50 flex-wrap">
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                        <Switch id={`toggle-${addon.id}`} checked={addon.enabled} onCheckedChange={() => onToggle(addon)} />
+                        <Switch id={`toggle-${addon.id}`} checked={addon.enabled} onCheckedChange={() => onToggle(addon)} data-tv-focusable tabIndex={0} />
                         <Label
                             htmlFor={`toggle-${addon.id}`}
                             className="text-xs cursor-pointer whitespace-nowrap text-muted-foreground">
@@ -128,6 +126,8 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                                 checked={addon.showCatalogs}
                                 onCheckedChange={() => onToggleCatalogs(addon)}
                                 disabled={!addon.enabled}
+                                data-tv-focusable
+                                tabIndex={0}
                             />
                             <Label
                                 htmlFor={`catalogs-${addon.id}`}
@@ -149,7 +149,9 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                             onClick={() => onMoveUp(addon)}
                             disabled={isFirst}
                             aria-label={`Move ${addon.name} up`}
-                            title="Move up">
+                            title="Move up"
+                            data-tv-focusable
+                            tabIndex={0}>
                             <ArrowUp className="size-4" />
                         </Button>
                     )}
@@ -160,7 +162,9 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                             onClick={() => onMoveDown(addon)}
                             disabled={isLast}
                             aria-label={`Move ${addon.name} down`}
-                            title="Move down">
+                            title="Move down"
+                            data-tv-focusable
+                            tabIndex={0}>
                             <ArrowDown className="size-4" />
                         </Button>
                     )}
@@ -172,7 +176,9 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                             toast.success("Addon URL copied to clipboard");
                         }}
                         aria-label={`Copy ${addon.name} URL`}
-                        title="Copy addon URL">
+                        title="Copy addon URL"
+                        data-tv-focusable
+                        tabIndex={0}>
                         <Share2 className="size-4" />
                     </Button>
                     <Button
@@ -181,7 +187,9 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                         onClick={() => onRemove(addon)}
                         className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         aria-label={`Remove ${addon.name}`}
-                        title="Remove addon">
+                        title="Remove addon"
+                        data-tv-focusable
+                        tabIndex={0}>
                         <Trash2 className="size-4" />
                     </Button>
                 </div>

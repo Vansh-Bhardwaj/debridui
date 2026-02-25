@@ -181,7 +181,7 @@ export default function AddonsPage() {
                 title="Stremio Addons"
                 description="Manage your Stremio addons to fetch sources from multiple providers"
                 action={
-                    <Button onClick={handleRefresh} disabled={isRefreshing || isLoading} variant="outline">
+                    <Button onClick={handleRefresh} disabled={isRefreshing || isLoading} variant="outline" data-tv-focusable tabIndex={0}>
                         <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
                         Refresh
                     </Button>
@@ -204,6 +204,8 @@ export default function AddonsPage() {
                                 onKeyDown={(e) => e.key === "Enter" && newAddonUrl.trim() && handleAddAddon()}
                                 disabled={validating}
                                 className="font-mono text-sm pr-9"
+                                data-tv-focusable
+                                tabIndex={0}
                             />
                             <button
                                 type="button"
@@ -220,11 +222,13 @@ export default function AddonsPage() {
                                           }
                                 }
                                 disabled={validating}
+                                data-tv-focusable
+                                tabIndex={0}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
                                 {newAddonUrl ? <X className="size-4" /> : <ClipboardPaste className="size-4" />}
                             </button>
                         </div>
-                        <Button onClick={() => handleAddAddon()} disabled={validating || !newAddonUrl.trim()}>
+                        <Button onClick={() => handleAddAddon()} disabled={validating || !newAddonUrl.trim()} data-tv-focusable tabIndex={0}>
                             {validating && !newAddonUrl.trim() ? (
                                 <Loader2 className="size-4 animate-spin" />
                             ) : validating ? (
@@ -251,7 +255,9 @@ export default function AddonsPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleAddAddon(preset.url)}
-                                    disabled={validating}>
+                                    disabled={validating}
+                                    data-tv-focusable
+                                    tabIndex={0}>
                                     {validating && !newAddonUrl.trim() ? (
                                         <Loader2 className="size-4 animate-spin" />
                                     ) : (
@@ -275,6 +281,8 @@ export default function AddonsPage() {
                                     href={addon.configureUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    data-tv-focusable
+                                    tabIndex={0}
                                     className="group flex flex-col gap-1 rounded-sm border border-border/50 px-3 py-2.5 hover:border-border hover:bg-muted/30 transition-colors">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium">{addon.name}</span>

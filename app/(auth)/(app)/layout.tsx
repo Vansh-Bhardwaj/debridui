@@ -24,6 +24,7 @@ import { RouteTransition } from "@/components/common/route-transition";
 import { Keyboard } from "lucide-react";
 import { TVNavigationBar } from "@/components/tv/tv-navigation";
 import { GamepadHints } from "@/components/tv/gamepad-hints";
+import { TVCursor } from "@/components/tv/tv-cursor";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import { useTVFocus } from "@/hooks/use-tv-focus";
 
@@ -70,7 +71,7 @@ function StandardLayout({ children }: { children: React.ReactNode }) {
 
 // TV mode layout — no sidebar, top nav bar
 function TVLayout({ children }: { children: React.ReactNode }) {
-    useTVFocus();
+    const { cursor } = useTVFocus();
 
     return (
         <div className="min-h-screen bg-background">
@@ -84,6 +85,7 @@ function TVLayout({ children }: { children: React.ReactNode }) {
                 </RouteTransition>
             </main>
             <GamepadHints />
+            <TVCursor x={cursor.x} y={cursor.y} visible={cursor.visible} hovering={cursor.hovering} targetRect={cursor.targetRect} />
         </div>
     );
 }
