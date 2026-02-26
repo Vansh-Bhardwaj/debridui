@@ -111,10 +111,12 @@ export function NavUser() {
                                         Status
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => { setDropdownOpen(false); toggleTV(); }}>
-                                    <Tv />
-                                    TV Mode
-                                </DropdownMenuItem>
+                                {!isMobile && (
+                                    <DropdownMenuItem onClick={() => { setDropdownOpen(false); toggleTV(); }}>
+                                        <Tv />
+                                        TV Mode
+                                    </DropdownMenuItem>
+                                )}
                             </DropdownMenuGroup>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
