@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
         formats: ["image/avif", "image/webp"],
     },
     experimental: {
-        optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+        optimizePackageImports: ["lucide-react", "@radix-ui/react-icons", "date-fns", "zod", "drizzle-orm", "react-hook-form", "@tanstack/react-query", "uuid"],
     },
     env: {
         NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
@@ -77,6 +77,12 @@ const nextConfig: NextConfig = {
                     { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
                 ],
             },
+        ];
+    },
+    async redirects() {
+        return [
+            { source: "/discover", destination: "/dashboard", permanent: false },
+            { source: "/discover/addon", destination: "/dashboard", permanent: false },
         ];
     },
 };

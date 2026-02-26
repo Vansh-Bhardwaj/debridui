@@ -128,18 +128,6 @@ function createDbInstance(): { db: DbType; source: string; viaHyperdrive: boolea
         max: 1,
     });
 
-    if (process.env.NODE_ENV === "production") {
-        try {
-            const u = new URL(url);
-            console.log(`[db] Connected via ${source}${viaHyperdrive ? " (hyperdrive)" : " (direct)"}`, {
-                host: u.hostname,
-                port: u.port || "5432",
-            });
-        } catch {
-            console.log(`[db] Connected via ${source}${viaHyperdrive ? " (hyperdrive)" : " (direct)"}`);
-        }
-    }
-
     return { db: drizzlePg(sql, drizzleConfig), source, viaHyperdrive };
 }
 

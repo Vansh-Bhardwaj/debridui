@@ -30,9 +30,11 @@ import { Badge } from "@/components/ui/badge";
 import { Gallery } from "@/components/common/gallery";
 import { DISCORD_URL, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ICONS } from "@/lib/constants";
 import { AccountType } from "@/lib/types";
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { LandingStickyNav } from "@/components/common/landing-sticky-nav";
+import { AuthRedirect } from "@/components/common/auth-redirect";
+
+// Force static generation — zero CPU cost on Cloudflare Workers
+export const dynamic = "force-static";
 
 const screenshots = [
     {
@@ -128,13 +130,11 @@ const steps = [
     { num: "03", title: "Watch", desc: "Browse, stream and pick up where you left off" },
 ];
 
-export default async function Home() {
-    // Auto-redirect logged-in users to dashboard
-    const { data: session } = await auth.getSession();
-    if (session?.user) redirect("/dashboard");
-
+export default function Home() {
     return (
         <div className="min-h-screen">
+            {/* Client-side auth check — redirects logged-in users to dashboard */}
+            <AuthRedirect />
             {/* Sticky navigation — appears after scrolling past hero */}
             <LandingStickyNav />
 
@@ -426,7 +426,7 @@ export default async function Home() {
                                 width={80}
                                 height={26}
                             />
-                            <span className="text-xs text-muted-foreground">© {new Date().getFullYear()} DebridUI</span>
+                            <span className="text-xs text-muted-foreground">© 2026 DebridUI</span>
                         </div>
 
                         <nav className="flex items-center gap-6 text-sm">

@@ -1,13 +1,21 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 import SignupForm from "./signup-form";
 
-export default async function SignupPage() {
-    const { data: session } = await auth.getSession();
+export default function SignupPage() {
+    const router = useRouter();
+    const { data: session, isPending } = authClient.useSession();
 
-    if (session) {
-        redirect("/dashboard");
-    }
+    useEffect(() => {
+        if (!isPending && session) {
+            router.replace("/dashboard");
+        }
+    }, [session, isPending, router]);
+
+    if (isPending || session) return null;
 
     return <SignupForm />;
 }

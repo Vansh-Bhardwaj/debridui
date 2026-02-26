@@ -59,8 +59,8 @@ export async function GET(req: Request) {
                 });
             }
 
-            const data = await response.text();
-            return new NextResponse(data, {
+            // Stream the response body directly instead of buffering — saves CPU time
+            return new NextResponse(response.body, {
                 status: 200,
                 headers: {
                     "content-type": response.headers.get("content-type") ?? "application/json",

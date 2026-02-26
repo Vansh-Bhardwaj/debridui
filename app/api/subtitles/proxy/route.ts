@@ -100,6 +100,13 @@ export async function GET(req: Request) {
         );
     }
 
+    // Reject excessively large subtitle files to stay within CPU time limits
+    const contentLength = parseInt(upstream.headers.get("content-length") ?? "0");
+    if (contentLength > 2 * 1024 * 1024) {
+        try { upstream.body?.cancel(); } catch { /* no-op */ }
+        return NextResponse.json({ error: "Subtitle file too large" }, { status: 413 });
+    }
+
     // Raw mode: return upstream content as-is (for VLC and other external players)
     if (raw) {
         const buf = await upstream.arrayBuffer();

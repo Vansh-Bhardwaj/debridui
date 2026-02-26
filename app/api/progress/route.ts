@@ -221,13 +221,97 @@ export async function POST(request: NextRequest) {
                 safeEpisode ?? NaN
             );
 
+            const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${eventType ?? "play_complete"}:${Math.floor(Date.now() / 1000)}`;
+            // All three operations are independent — run in parallel (3→1 round-trip)
             await Promise.all([
                 db.delete(userProgress).where(and(...conditions)),
                 db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
+                db.insert(watchEvents).values({
+                    userId: session.user.id,
+                    imdbId,
+                    type: normalizedType,
+                    season: safeSeason,
+                    episode: safeEpisode,
+                    sessionId: sessionId ?? null,
+                    eventType: normalizedEventType,
+                    idempotencyKey: dedupe,
+                    progressSeconds: safeProgressSeconds,
+                    durationSeconds: safeDurationSeconds,
+                    progressPercent: Math.min(100, Math.max(0, Math.round(progressPercent))),
+                    player: player ?? null,
+                    reason: reason ?? null,
+                    createdAt: new Date(),
+                }).onConflictDoNothing({ target: watchEvents.idempotencyKey }),
             ]);
 
-            const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${eventType ?? "play_complete"}:${Math.floor(Date.now() / 1000)}`;
-            await db.insert(watchEvents).values({
+            return NextResponse.json({ success: true, completed: true });
+        }
+
+        // If user resumed playback, bring hidden entries back into the shelf.
+        // Run hidden delete + dedup check in parallel (2→1 round-trip)
+        const hiddenConditions = buildHiddenConditions(
+            session.user.id,
+            imdbId,
+            normalizedType,
+            safeSeason ?? NaN,
+            safeEpisode ?? NaN
+        );
+
+        const progressConditions = buildProgressConditions(
+            session.user.id,
+            imdbId,
+            normalizedType,
+            safeSeason ?? NaN,
+            safeEpisode ?? NaN
+        );
+
+        const [, existingRows] = await Promise.all([
+            db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
+            normalizedEventType === "play_progress"
+                ? db
+                    .select({ progressSeconds: userProgress.progressSeconds, durationSeconds: userProgress.durationSeconds, updatedAt: userProgress.updatedAt })
+                    .from(userProgress)
+                    .where(and(...progressConditions))
+                    .limit(1)
+                : Promise.resolve([]),
+        ]);
+
+        // Skip redundant heartbeat writes when the position hasn't meaningfully changed.
+        if (normalizedEventType === "play_progress" && existingRows.length > 0) {
+            const previous = existingRows[0];
+            const progressDelta = Math.abs((previous.progressSeconds ?? 0) - safeProgressSeconds);
+            const durationDelta = Math.abs((previous.durationSeconds ?? 0) - safeDurationSeconds);
+            const ageMs = Date.now() - new Date(previous.updatedAt).getTime();
+
+            if (progressDelta <= 2 && durationDelta <= 2 && ageMs < 10_000) {
+                return NextResponse.json({ success: true, deduped: true });
+            }
+        }
+
+        const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${normalizedEventType}:${Math.floor(Date.now() / 5_000)}`;
+        // Upsert progress + insert event in parallel (2→1 round-trip)
+        await Promise.all([
+            db
+                .insert(userProgress)
+                .values({
+                    userId: session.user.id,
+                    imdbId,
+                    type: normalizedType,
+                    season: safeSeason,
+                    episode: safeEpisode,
+                    progressSeconds: safeProgressSeconds,
+                    durationSeconds: safeDurationSeconds,
+                    updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                    target: [userProgress.userId, userProgress.imdbId, userProgress.season, userProgress.episode],
+                    set: {
+                        progressSeconds: safeProgressSeconds,
+                        durationSeconds: safeDurationSeconds,
+                        updatedAt: new Date(),
+                    },
+                }),
+            db.insert(watchEvents).values({
                 userId: session.user.id,
                 imdbId,
                 type: normalizedType,
@@ -242,86 +326,8 @@ export async function POST(request: NextRequest) {
                 player: player ?? null,
                 reason: reason ?? null,
                 createdAt: new Date(),
-            }).onConflictDoNothing({ target: watchEvents.idempotencyKey });
-
-            return NextResponse.json({ success: true, completed: true });
-        }
-
-        // If user resumed playback, bring hidden entries back into the shelf.
-        const hiddenConditions = buildHiddenConditions(
-            session.user.id,
-            imdbId,
-            normalizedType,
-            safeSeason ?? NaN,
-            safeEpisode ?? NaN
-        );
-        await db.delete(hiddenContinueWatching).where(and(...hiddenConditions));
-
-        // Skip redundant heartbeat writes when the position hasn't meaningfully changed.
-        if (normalizedEventType === "play_progress") {
-            const existing = await db
-                .select({ progressSeconds: userProgress.progressSeconds, durationSeconds: userProgress.durationSeconds, updatedAt: userProgress.updatedAt })
-                .from(userProgress)
-                .where(and(...buildProgressConditions(
-                    session.user.id,
-                    imdbId,
-                    normalizedType,
-                    safeSeason ?? NaN,
-                    safeEpisode ?? NaN
-                )))
-                .limit(1);
-
-            const previous = existing[0];
-            if (previous) {
-                const progressDelta = Math.abs((previous.progressSeconds ?? 0) - safeProgressSeconds);
-                const durationDelta = Math.abs((previous.durationSeconds ?? 0) - safeDurationSeconds);
-                const ageMs = Date.now() - new Date(previous.updatedAt).getTime();
-
-                if (progressDelta <= 2 && durationDelta <= 2 && ageMs < 10_000) {
-                    return NextResponse.json({ success: true, deduped: true });
-                }
-            }
-        }
-
-        // Upsert using ON CONFLICT - single efficient query
-        await db
-            .insert(userProgress)
-            .values({
-                userId: session.user.id,
-                imdbId,
-                type: normalizedType,
-                season: safeSeason,
-                episode: safeEpisode,
-                progressSeconds: safeProgressSeconds,
-                durationSeconds: safeDurationSeconds,
-                updatedAt: new Date(),
-            })
-            .onConflictDoUpdate({
-                target: [userProgress.userId, userProgress.imdbId, userProgress.season, userProgress.episode],
-                set: {
-                    progressSeconds: safeProgressSeconds,
-                    durationSeconds: safeDurationSeconds,
-                    updatedAt: new Date(),
-                },
-            });
-
-        const dedupe = idempotencyKey ?? `${session.user.id}:${imdbId}:${normalizedType}:${safeSeason ?? "_"}:${safeEpisode ?? "_"}:${normalizedEventType}:${Math.floor(Date.now() / 5_000)}`;
-        await db.insert(watchEvents).values({
-            userId: session.user.id,
-            imdbId,
-            type: normalizedType,
-            season: safeSeason,
-            episode: safeEpisode,
-            sessionId: sessionId ?? null,
-            eventType: normalizedEventType,
-            idempotencyKey: dedupe,
-            progressSeconds: safeProgressSeconds,
-            durationSeconds: safeDurationSeconds,
-            progressPercent: Math.min(100, Math.max(0, Math.round(progressPercent))),
-            player: player ?? null,
-            reason: reason ?? null,
-            createdAt: new Date(),
-        }).onConflictDoNothing({ target: watchEvents.idempotencyKey });
+            }).onConflictDoNothing({ target: watchEvents.idempotencyKey }),
+        ]);
 
         return NextResponse.json({ success: true });
     } catch (error) {

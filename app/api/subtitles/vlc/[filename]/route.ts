@@ -87,13 +87,33 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
         return NextResponse.json({ error: "Blocked destination" }, { status: 403 });
     }
 
-    const upstream = await fetch(url, {
-        headers: {
-            accept: "text/plain, text/vtt, application/x-subrip, */*",
-            "user-agent": "DebridUI",
-        },
-        redirect: "follow",
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let upstream: Response;
+    try {
+        upstream = await fetch(url, {
+            headers: {
+                accept: "text/plain, text/vtt, application/x-subrip, */*",
+                "user-agent": "DebridUI",
+            },
+            redirect: "follow",
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+            return NextResponse.json({ error: "Upstream timeout" }, { status: 504 });
+        }
+        return NextResponse.json({ error: "Subtitle proxy unavailable" }, { status: 502 });
+    } finally {
+        clearTimeout(timeout);
+    }
+
+    // Reject excessively large subtitle files to stay within CPU time limits
+    const contentLength = parseInt(upstream.headers.get("content-length") ?? "0");
+    if (contentLength > 2 * 1024 * 1024) {
+        try { upstream.body?.cancel(); } catch { /* no-op */ }
+        return NextResponse.json({ error: "Subtitle file too large" }, { status: 413 });
+    }
 
     if (!upstream.ok) {
         return NextResponse.json(
