@@ -122,8 +122,10 @@ function createDbInstance(): { db: DbType; source: string; viaHyperdrive: boolea
     const sql = postgres(url, {
         // Hyperdrive doesn't support prepared statements (PostgreSQL extended protocol)
         prepare: false,
-        // Idle timeout — Workers are short-lived, close connections promptly
-        idle_timeout: 20,
+        // Close connection immediately after queries — prevents waitUntil() timeouts on CF Workers
+        idle_timeout: 0,
+        // Fail fast if DB is unreachable
+        connect_timeout: 5,
         // Max connections per Worker instance
         max: 1,
     });
