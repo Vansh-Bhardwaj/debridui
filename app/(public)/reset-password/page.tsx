@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { useState, Suspense } from "react";
 import { authClient } from "@/lib/auth-client";

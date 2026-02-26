@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import Image from "next/image";
 import { Button } from "@/components/ui/button";

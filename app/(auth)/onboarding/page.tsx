@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { AddAccountForm } from "@/components/accounts/add-account-form";
 import Image from "next/image";

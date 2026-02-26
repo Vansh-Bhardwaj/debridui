@@ -102,6 +102,21 @@ describe("source: authenticated pages should be client components", () => {
     }
 });
 
+describe("source: authenticated pages should be force-static", () => {
+    const staticPages = [
+        "accounts", "addons", "dashboard", "discover", "files",
+        "help", "history", "links", "search", "settings", "status", "watchlist",
+    ];
+    for (const page of staticPages) {
+        const pagePath = `app/(auth)/(app)/${page}/page.tsx`;
+        test(`${pagePath} exports force-static`, () => {
+            if (!sourceExists(pagePath)) return;
+            const src = readSource(pagePath);
+            expect(src).toContain('export const dynamic = "force-static"');
+        });
+    }
+});
+
 describe("source: API routes should stream when possible", () => {
     test("addon proxy streams response body", () => {
         const src = readSource("app/api/addon/proxy/route.ts");

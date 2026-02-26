@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { useParams } from "next/navigation";

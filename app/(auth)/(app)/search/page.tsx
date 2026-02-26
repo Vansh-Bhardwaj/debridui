@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { SearchContent } from "@/components/mdb/search-content";
 import { useSettingsStore } from "@/lib/stores/settings";

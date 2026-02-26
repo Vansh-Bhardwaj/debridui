@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { useState, useCallback, memo, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

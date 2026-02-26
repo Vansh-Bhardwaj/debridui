@@ -1,7 +1,8 @@
 "use client";
+export const dynamic = "force-static";
 
 import Image from "next/image";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
 import { memo, useState, useCallback, useEffect, useRef } from "react";
@@ -31,12 +32,12 @@ import { MediaSection } from "@/components/mdb/media-section";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { useSettingsStore } from "@/lib/stores/settings";
 
-const ContinueWatching = dynamic(
+const ContinueWatching = nextDynamic(
     () => import("@/components/mdb/continue-watching").then((m) => ({ default: m.ContinueWatching })),
     { ssr: false }
 );
 
-const HeroCarousel = dynamic(
+const HeroCarousel = nextDynamic(
     () => import("@/components/mdb/hero-carousel").then((m) => ({ default: m.HeroCarousel })),
     {
         loading: () => <HeroCarouselSkeleton />,

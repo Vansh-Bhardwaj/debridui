@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { useParams } from "next/navigation";
 import { memo, useState, useMemo } from "react";

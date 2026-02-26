@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";

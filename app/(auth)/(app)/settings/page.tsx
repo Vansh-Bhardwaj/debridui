@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-static";
 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
