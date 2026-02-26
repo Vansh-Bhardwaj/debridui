@@ -6,7 +6,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { getPosterUrl } from "@/lib/utils/media";
-import { Star } from "lucide-react";
+import { Star, CircleCheck } from "lucide-react";
 import { fetchPosterFromAPIs } from "@/lib/utils/poster-fallback";
 
 /** Construct RPDB poster URL (free public key). Returns null if no IMDB ID. */
@@ -26,10 +26,11 @@ interface MediaCardProps {
     type: "movie" | "show";
     rank?: number;
     watchers?: number;
+    watched?: boolean;
     className?: string;
 }
 
-export const MediaCard = memo(function MediaCard({ media, type, rank, className }: MediaCardProps) {
+export const MediaCard = memo(function MediaCard({ media, type, rank, watched, className }: MediaCardProps) {
     const slug = media.ids?.slug || media.ids?.imdb;
     const linkHref = slug ? `/${type}s/${slug}` : "#";
     const primaryPoster = getPosterUrl(media.images);
@@ -106,6 +107,15 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, className 
                         <div className="absolute top-2 left-2 z-10">
                             <span className="text-xs font-medium tracking-wider text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
                                 {String(rank).padStart(2, "0")}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Watched badge */}
+                    {watched && (
+                        <div className="absolute top-2 right-2 z-10">
+                            <span className="flex items-center justify-center bg-black/60 backdrop-blur-sm p-1 rounded-sm">
+                                <CircleCheck className="size-3.5 text-green-400" />
                             </span>
                         </div>
                     )}

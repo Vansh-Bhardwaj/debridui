@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { getPosterUrl } from "@/lib/utils/media";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
+import { useWatchedIds } from "@/hooks/use-progress";
 
 // ── Watchlist Filters ──────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ const CalendarSection = memo(function CalendarSection({
     emptyMessage: string;
 }) {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const watchedIds = useWatchedIds();
     const grouped = useMemo(() => (items ? groupByDate(items) : {}), [items]);
     const sortedDates = useMemo(() => Object.keys(grouped).sort(), [grouped]);
 
@@ -155,7 +157,7 @@ const CalendarSection = memo(function CalendarSection({
                                     key={`${type}-${media.ids?.trakt || i}`}
                                     className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
                                     style={{ animationDelay: `${Math.min(i * 30, 200)}ms`, animationDuration: "400ms", animationFillMode: "backwards" }}>
-                                    <MediaCard media={media} type={type as "movie" | "show"} />
+                                    <MediaCard media={media} type={type as "movie" | "show"} watched={!!media.ids?.imdb && watchedIds.has(media.ids.imdb)} />
                                     {item.episode && (
                                         <p className="text-xs text-muted-foreground mt-1.5 truncate">
                                             S{item.episode.season}E{item.episode.number} — {item.episode.title}

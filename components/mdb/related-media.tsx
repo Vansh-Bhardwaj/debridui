@@ -6,6 +6,7 @@ import { MediaCard } from "@/components/mdb/media-card";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useWatchedIds } from "@/hooks/use-progress";
 
 interface RelatedMediaProps {
     mediaId: string;
@@ -15,6 +16,7 @@ interface RelatedMediaProps {
 export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: RelatedMediaProps) {
     const { data, isLoading } = useTraktRelated(mediaId, type);
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const watchedIds = useWatchedIds();
 
     if (!isLoading && (!data || data.length === 0)) return null;
 
@@ -41,7 +43,7 @@ export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: Relate
                                 animationDuration: "400ms",
                                 animationFillMode: "backwards",
                             }}>
-                            <MediaCard media={media} type={type} />
+                            <MediaCard media={media} type={type} watched={!!media.ids?.imdb && watchedIds.has(media.ids.imdb)} />
                         </div>
                     ))}
                 </div>

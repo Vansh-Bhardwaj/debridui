@@ -9,6 +9,7 @@ import { memo, useMemo } from "react";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useWatchedIds } from "@/hooks/use-progress";
 
 interface MediaSectionProps {
     title: string;
@@ -48,8 +49,9 @@ export const MediaSection = memo(function MediaSection({
     onRetry,
 }: MediaSectionProps) {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const watchedIds = useWatchedIds();
     const effectiveRows = tvMode ? 1 : rows;
-    const maxItems = effectiveRows === 1 ? 10 : 20;
+    const maxItems = 20;
     const filteredItems = useMemo(() => items?.slice(0, maxItems).filter((item) => item.movie || item.show) ?? [], [items, maxItems]);
     const gridRows = effectiveRows === 1 ? "grid-rows-1" : "grid-rows-2";
 
@@ -119,6 +121,7 @@ export const MediaSection = memo(function MediaSection({
                                         type={type}
                                         rank={showRank ? index + 1 : undefined}
                                         watchers={item.watchers}
+                                        watched={!!media!.ids?.imdb && watchedIds.has(media!.ids.imdb)}
                                     />
                                 </div>
                             );

@@ -149,8 +149,8 @@ export function useTraktRecommendations(enabled = true) {
         queryKey: ["trakt", "recommendations"],
         queryFn: async () => {
             const [movies, shows] = await Promise.all([
-                traktClient.getRecommendations("movies", 5),
-                traktClient.getRecommendations("shows", 5),
+                traktClient.getRecommendations("movies", 20),
+                traktClient.getRecommendations("shows", 20),
             ]);
             // Interleave movies and shows for variety
             const mixed: TraktMediaItem[] = [];
@@ -159,7 +159,7 @@ export function useTraktRecommendations(enabled = true) {
                 if (movies[i]) mixed.push(movies[i]);
                 if (shows[i]) mixed.push(shows[i]);
             }
-            const items = mixed.slice(0, 8);
+            const items = mixed;
             // Fall back to trending if no recommendations yet (insufficient watch history)
             if (items.length === 0) {
                 const trending = await traktClient.getTrendingMixed(8);

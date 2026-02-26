@@ -7,6 +7,7 @@ import { ArrowLeft, Film, Tv } from "lucide-react";
 import { parseCatalogSlug, useAddonCatalogDef, useAddonCatalog } from "@/hooks/use-addons";
 import { MediaCard } from "@/components/mdb/media-card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
+import { useWatchedIds } from "@/hooks/use-progress";
 
 const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
     const parsed = useMemo(() => parseCatalogSlug(slug), [slug]);
@@ -18,6 +19,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
     );
 
     const { data: items, isLoading: itemsLoading, error } = useAddonCatalog(catalog, !!catalog);
+    const watchedIds = useWatchedIds();
 
     const Icon = catalog?.type === "movie" ? Film : Tv;
 
@@ -108,7 +110,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                                     animationFillMode: "backwards",
                                 }}
                             >
-                                <MediaCard media={media} type={type} />
+                                <MediaCard media={media} type={type} watched={!!media.ids?.imdb && watchedIds.has(media.ids.imdb)} />
                             </div>
                         );
                     })}

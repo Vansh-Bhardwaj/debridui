@@ -300,7 +300,7 @@ const ForYouSection = memo(function ForYouSection({ visible }: { visible: boolea
     const { data } = useTraktRecommendations(isTraktConnected && visible);
     if (!data?.isPersonalized || !data.items.length) return null;
     return (
-        <MediaSection title="Movies & Shows" items={data.items} rows={1} />
+        <MediaSection title="Movies & Shows" items={data.items} rows={1} viewAllHref="/discover/for-you" />
     );
 });
 
@@ -373,15 +373,15 @@ const DashboardPage = memo(function DashboardPage() {
 
             {/* Content Sections with lazy loading */}
             <div className="lg:px-6 space-y-16">
-                {/* Addon Catalogs — lazy-loaded per-row */}
-                <SectionErrorBoundary section="Addon Catalogs">
-                    <AddonCatalogs />
-                </SectionErrorBoundary>
-
                 {/* For You — personalized recommendations (only shown when Trakt connected + has watch history) */}
                 <LazyTraktSection label="For You" icon={ICON_HEART} delay={0}>
                     {(visible) => <ForYouSection visible={visible} />}
                 </LazyTraktSection>
+
+                {/* Addon Catalogs — lazy-loaded per-row */}
+                <SectionErrorBoundary section="Addon Catalogs">
+                    <AddonCatalogs />
+                </SectionErrorBoundary>
 
                 {/* Trending */}
                 <ContentSection label="Trending Now" icon={ICON_TRENDING} delay={0}>

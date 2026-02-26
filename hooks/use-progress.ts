@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";
@@ -512,4 +512,42 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
         seen.add(dedupeKey);
         return true;
     });
+}
+
+const WATCHED_THRESHOLD = 85;
+
+function scanWatchedIds(): string[] {
+    if (typeof window === "undefined") return [];
+    const watched: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith("progress:")) continue;
+        try {
+            const data: ProgressData = JSON.parse(localStorage.getItem(key) || "");
+            if (data.durationSeconds > 0) {
+                const percent = (data.progressSeconds / data.durationSeconds) * 100;
+                if (percent >= WATCHED_THRESHOLD) {
+                    const imdbId = key.replace("progress:", "").split(":")[0];
+                    watched.push(imdbId);
+                }
+            }
+        } catch { /* ignore malformed entries */ }
+    }
+    return watched;
+}
+
+/**
+ * Returns a Set of IMDB IDs the user has watched (>= 85% progress).
+ * For shows, any completed episode marks the show's IMDB ID as watched.
+ * Cached via React Query — shared across all components.
+ */
+export function useWatchedIds(): Set<string> {
+    const { data } = useQuery({
+        queryKey: ["watched-ids", "v2"],
+        queryFn: scanWatchedIds,
+        staleTime: 60_000,
+        gcTime: 5 * 60_000,
+        refetchOnWindowFocus: true,
+    });
+    return useMemo(() => new Set(Array.isArray(data) ? data : []), [data]);
 }

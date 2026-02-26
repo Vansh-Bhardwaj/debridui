@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/common/page-header";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -8,7 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-
 import { Button } from "@/components/ui/button";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
-import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar } from "lucide-react";
+import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar, ChevronDown } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -51,12 +51,50 @@ function groupByDate(entries: HistoryEntry[]): Record<string, HistoryEntry[]> {
     return groups;
 }
 
+interface HistoryTitleGroup {
+    key: string;
+    entries: HistoryEntry[];
+    /** Entry with highest progress % (shown as primary) */
+    primary: HistoryEntry;
+    totalWatchTime: number;
+}
+
+/** Sub-group entries within a date by imdbId + episode to collapse duplicates */
+function groupByTitle(entries: HistoryEntry[]): HistoryTitleGroup[] {
+    const map = new Map<string, HistoryEntry[]>();
+    for (const entry of entries) {
+        const key = entry.type === "show" && entry.season != null && entry.episode != null
+            ? `${entry.imdbId}:s${entry.season}e${entry.episode}`
+            : entry.imdbId;
+        const group = map.get(key);
+        if (group) group.push(entry);
+        else map.set(key, [entry]);
+    }
+    const result: HistoryTitleGroup[] = [];
+    for (const [key, group] of map) {
+        const primary = group.reduce((best, e) =>
+            e.durationSeconds > 0 && (e.progressSeconds / e.durationSeconds) > (best.durationSeconds > 0 ? best.progressSeconds / best.durationSeconds : 0) ? e : best
+        , group[0]);
+        result.push({
+            key,
+            entries: group,
+            primary,
+            totalWatchTime: group.reduce((sum, e) => sum + e.progressSeconds, 0),
+        });
+    }
+    return result;
+}
+
 interface HistoryItemProps {
     entry: HistoryEntry;
     onDelete: (id: string) => void;
+    /** Session count badge for grouped entries */
+    sessionCount?: number;
+    sessionExpanded?: boolean;
+    onToggleSessions?: () => void;
 }
 
-const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemProps) {
+const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, sessionExpanded, onToggleSessions }: HistoryItemProps) {
     const { data: media } = useTraktMedia(entry.imdbId, entry.type);
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const progressPercent = entry.durationSeconds > 0
@@ -144,6 +182,16 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
                 "shrink-0 flex items-center gap-2 transition-opacity",
                 tvMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             )}>
+                {sessionCount && sessionCount > 1 && onToggleSessions && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleSessions(); }}
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground rounded-sm hover:bg-muted/30 transition-colors"
+                        aria-expanded={sessionExpanded}
+                    >
+                        <ChevronDown className={cn("size-3 transition-transform duration-200", sessionExpanded && "rotate-180")} />
+                        <span className="whitespace-nowrap">{sessionCount} sessions</span>
+                    </button>
+                )}
                 <Link href={mediaHref}>
                     <Button variant="ghost" size="icon" className={tvMode ? "size-9" : "size-7"}>
                         <Play className={tvMode ? "size-4" : "size-3.5"} />
@@ -159,6 +207,45 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete }: HistoryItemPr
                     <X className={tvMode ? "size-4" : "size-3.5"} />
                 </Button>
             </div>
+        </div>
+    );
+});
+
+/** Grouped history row: shows primary entry with collapse/expand for multiple sessions */
+const HistoryGroupRow = memo(function HistoryGroupRow({
+    group,
+    onDelete,
+}: {
+    group: HistoryTitleGroup;
+    onDelete: (id: string) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const hasMultiple = group.entries.length > 1;
+
+    if (!hasMultiple) {
+        return <HistoryItem entry={group.primary} onDelete={onDelete} />;
+    }
+
+    return (
+        <div className="space-y-1.5">
+            <HistoryItem
+                entry={group.primary}
+                onDelete={onDelete}
+                sessionCount={group.entries.length}
+                sessionExpanded={expanded}
+                onToggleSessions={() => setExpanded((v) => !v)}
+            />
+
+            {/* Expanded sub-entries (excluding primary) */}
+            {expanded && (
+                <div className="ml-6 sm:ml-8 border-l border-border/30 pl-3 space-y-1.5">
+                    {group.entries
+                        .filter((e) => e.id !== group.primary.id)
+                        .map((entry) => (
+                            <HistoryItem key={entry.id} entry={entry} onDelete={onDelete} />
+                        ))}
+                </div>
+            )}
         </div>
     );
 });
@@ -203,6 +290,13 @@ export default function HistoryPage() {
     const total = data?.total ?? 0;
     const groups = groupByDate(entries);
     const dateKeys = Object.keys(groups);
+    const titleGroupsByDate = useMemo(() => {
+        const result: Record<string, HistoryTitleGroup[]> = {};
+        for (const [date, dateEntries] of Object.entries(groups)) {
+            result[date] = groupByTitle(dateEntries);
+        }
+        return result;
+    }, [groups]);
 
     const handleDelete = useCallback(async (id: string) => {
         try {
@@ -320,13 +414,13 @@ export default function HistoryPage() {
                                 <div className="h-px flex-1 bg-border/50" />
                             </div>
                             <div className="space-y-2" data-tv-stagger>
-                                {groups[dateKey].map((entry, i) => (
+                                {(titleGroupsByDate[dateKey] ?? []).map((group, i) => (
                                     <div
-                                        key={entry.id}
+                                        key={group.key}
                                         className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
                                         style={{ animationDelay: `${Math.min(i * 50, 300)}ms`, animationFillMode: "backwards" }}
                                     >
-                                        <HistoryItem entry={entry} onDelete={handleDelete} />
+                                        <HistoryGroupRow group={group} onDelete={handleDelete} />
                                     </div>
                                 ))}
                             </div>
