@@ -149,7 +149,7 @@
 
 /* ── Performance optimizations for animations ── */
 [class*="animate"],
-[data-state]:not([data-state="closed"]),
+[data-state]:not([data-state="closed"]):not([data-slot="sidebar"]):not([data-slot="sidebar-container"]),
 .route-enter,
 .tv-cursor-blob,
 .player-ripple,
