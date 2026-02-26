@@ -8,6 +8,7 @@
  * Run: bun test tests/cf-cpu-limits.test.ts
  */
 
+import { describe, test, expect } from "bun:test";
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
 

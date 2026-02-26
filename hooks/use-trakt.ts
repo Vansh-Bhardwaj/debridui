@@ -149,8 +149,8 @@ export function useTraktRecommendations(enabled = true) {
         queryKey: ["trakt", "recommendations"],
         queryFn: async () => {
             const [movies, shows] = await Promise.all([
-                traktClient.getRecommendations("movies", 20),
-                traktClient.getRecommendations("shows", 20),
+                traktClient.getRecommendations("movies", 5),
+                traktClient.getRecommendations("shows", 5),
             ]);
             // Interleave movies and shows for variety
             const mixed: TraktMediaItem[] = [];
