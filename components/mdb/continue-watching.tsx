@@ -65,7 +65,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
         gcTime: 24 * 60 * 60 * 1000,
         enabled: item.type === "show" && !!item.season && !!item.episode,
     });
-    const episodeTitle = episodes?.find((e) => e.number === item.episode)?.title;
+    const _episodeTitle = episodes?.find((e) => e.number === item.episode)?.title;
 
     const progressPercent = item.durationSeconds > 0
         ? Math.min(Math.round((item.progressSeconds / item.durationSeconds) * 100), 100)

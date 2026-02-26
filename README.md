@@ -32,6 +32,17 @@ Installable as a PWA. Edge-deployed on Cloudflare Workers for fast, global acces
 
 ---
 
+## 🆕 What's New (February 2026)
+
+**Latest Update: February 26, 2026**
+
+- ⚡ **Node.js v25.7.0** — Latest runtime with performance improvements
+- 🎨 **Tailwind CSS 4.2.1** — Faster builds and improved performance
+- 📦 **Updated dependencies** — React Dropzone v15, latest Wrangler, and more
+- 🚀 **ES2022 target** — Better code optimization and smaller bundles
+
+---
+
 ## 🎬 About
 
 DebridUI is an open-source web client for managing debrid service files and streaming media. This fork builds on the excellent foundation by [@viperadnan](https://github.com/viperadnan-git/debridui) — whose continuous work on the original project made this possible — and adds a set of features focused on playback, performance, and edge deployment.
@@ -133,7 +144,7 @@ This fork extends the original with several additions:
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) 1.2+ (or Node.js 20+)
+- [Bun](https://bun.sh) 1.3+ (or Node.js 22+ LTS / 25+ Current)
 - [Neon](https://neon.tech) PostgreSQL database
 - [Cloudflare](https://cloudflare.com) account (for production)
 - A debrid account — Real-Debrid, TorBox, AllDebrid, or Premiumize

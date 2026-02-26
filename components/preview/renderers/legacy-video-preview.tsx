@@ -1794,7 +1794,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, resetControlsTimeout]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, resetControlsTimeout, showHelp]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {

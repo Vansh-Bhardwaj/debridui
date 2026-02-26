@@ -21,8 +21,13 @@ const nextConfig: NextConfig = {
     output: "standalone",
     reactStrictMode: true,
     poweredByHeader: false,
+    compress: true,
     images: {
         unoptimized: disableImageOptimization,
+        formats: ["image/avif", "image/webp"],
+    },
+    experimental: {
+        optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
     },
     env: {
         NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
@@ -43,15 +48,33 @@ const nextConfig: NextConfig = {
                 ],
             },
             {
+                source: "/icon.svg",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+                ],
+            },
+            {
                 source: "/manifest.json",
                 headers: [
-                    { key: "Cache-Control", value: "public, max-age=86400" },
+                    { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
                 ],
             },
             {
                 source: "/sw.js",
                 headers: [
                     { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+                ],
+            },
+            {
+                source: "/robots.txt",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/sitemap.xml",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
                 ],
             },
         ];

@@ -147,6 +147,24 @@
     background: color-mix(in oklch, var(--foreground) 25%, transparent);
 }
 
+/* ── Performance optimizations for animations ── */
+[class*="animate"],
+[data-state]:not([data-state="closed"]),
+.route-enter,
+.tv-cursor-blob,
+.player-ripple,
+[data-animating="true"] {
+    will-change: transform, opacity;
+}
+
+/* Force GPU compositing for critical animated elements */
+.tv-cursor-blob,
+.player-ripple,
+[data-overlay="true"] {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
 @theme inline {
     /* Override letter-spacing scale for editorial design */
     --letter-spacing-wide: 0.1em;

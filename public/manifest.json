@@ -2,18 +2,40 @@
   "name": "DebridUI",
   "short_name": "DebridUI",
   "description": "A modern debrid client with built-in playback, media discovery, and streaming.",
-  "start_url": "/dashboard",
+  "start_url": "/dashboard?utm_source=pwa",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",
   "orientation": "any",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["entertainment", "utilities"]
+  "categories": ["entertainment", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Files",
+      "short_name": "Files",
+      "description": "Browse your files",
+      "url": "/files?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "description": "Search media",
+      "url": "/search?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ],
+  "screenshots": [],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }
