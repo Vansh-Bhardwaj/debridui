@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 /**
  * TV mode state + branded curtain transition.
@@ -14,8 +15,16 @@ import { useSettingsStore } from "@/lib/stores/settings";
 export function useTVMode() {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const set = useSettingsStore((s) => s.set);
+    const isMobile = useIsMobile();
     const prevRef = useRef(tvMode);
     const animatingRef = useRef(false);
+
+    // Auto-disable TV mode on mobile devices
+    useEffect(() => {
+        if (isMobile && tvMode) {
+            set("tvMode", false);
+        }
+    }, [isMobile, tvMode, set]);
 
     useEffect(() => {
         const root = document.getElementById("tv-mode-root");

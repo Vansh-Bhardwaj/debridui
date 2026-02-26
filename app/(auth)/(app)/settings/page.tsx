@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { useUserSettings, useSaveUserSettings, useDisconnectTrakt, hydrateSettingsFromServer } from "@/hooks/use-user-settings";
 import { useEffect, useCallback, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function TraktOAuthFeedback() {
     const searchParams = useSearchParams();
@@ -115,6 +116,7 @@ export default function SettingsPage() {
     const tmdbApiKey = get("tmdbApiKey");
     const deviceSync = get("deviceSync");
     const tvMode = get("tvMode");
+    const isMobile = useIsMobile();
 
     // Server-side settings sync
     const { data: serverSettings } = useUserSettings();
@@ -407,7 +409,10 @@ export default function SettingsPage() {
                 </div>
 
                 {/* TV Mode */}
-                <div className="flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200" data-tv-focusable="list" tabIndex={0}>
+                <div className={cn(
+                    "flex items-center justify-between gap-4 rounded-sm border border-border/50 p-4 transition-colors duration-200",
+                    isMobile && "opacity-50"
+                )} data-tv-focusable="list" tabIndex={0}>
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10">
                             <Tv className="size-5 text-primary" />
@@ -415,7 +420,9 @@ export default function SettingsPage() {
                         <div className="space-y-0.5 min-w-0">
                             <Label htmlFor="tv-mode" className="text-sm font-medium">TV Mode</Label>
                             <p className="text-xs text-muted-foreground">
-                                10-foot UI with large cards, arrow key &amp; gamepad navigation
+                                {isMobile
+                                    ? "TV mode requires a larger screen"
+                                    : "10-foot UI with large cards, arrow key & gamepad navigation"}
                             </p>
                         </div>
                     </div>
@@ -424,6 +431,7 @@ export default function SettingsPage() {
                         className="shrink-0"
                         data-tv-focusable="list"
                         checked={tvMode}
+                        disabled={isMobile}
                         onCheckedChange={(checked) => set("tvMode", checked)}
                     />
                 </div>
