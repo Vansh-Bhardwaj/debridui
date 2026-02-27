@@ -420,7 +420,7 @@ export function useAddToHistory() {
             return traktClient.addToHistory({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
         },
     });
 }
@@ -458,16 +458,26 @@ export function useMarkEpisodeWatched() {
             if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
             toast.error("Failed to mark as watched", { description: "Check your Trakt connection in Settings" });
         },
-        onSuccess: (_data, params) => {
+        onSuccess: async (_data, params) => {
             toast.success(
                 params.episodes.length === 1
                     ? `S${params.season}E${params.episodes[0]} marked as watched`
                     : `${params.episodes.length} episodes marked as watched`
             );
+
+            // Trakt auto-removes shows from watchlist when episodes are added to history.
+            // Re-add the show to the watchlist to counteract this side-effect.
+            try {
+                await traktClient.addToWatchlist({ shows: [{ ids: { trakt: params.showTraktId } }] });
+            } catch {
+                // Silently ignore — watchlist restoration is best-effort
+            }
+
             // Delay invalidation slightly — Trakt needs a moment to process
             // The optimistic update already shows the correct state instantly
             setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+                queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
             }, 2000);
         },
         onSettled: () => {

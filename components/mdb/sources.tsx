@@ -168,12 +168,14 @@ export const SourceRow = memo(function SourceRow({
     subtitles,
     tvParams,
     imdbId,
+    mediaType,
 }: {
     source: AddonSource;
     mediaTitle: string;
     subtitles?: { url: string; lang: string; name?: string }[];
     tvParams?: TvSearchParams;
     imdbId?: string;
+    mediaType?: "movie" | "show";
 }) {
     // Build metadata string with editorial separators
     const metaParts: string[] = [];
@@ -199,7 +201,17 @@ export const SourceRow = memo(function SourceRow({
                 });
             }
         }
-        useStreamingStore.getState().playSource(source, title, { subtitles });
+
+        // Build progressKey for tracking (progress, scrobble, history)
+        const progressKey = imdbId && mediaType
+            ? {
+                imdbId,
+                type: mediaType,
+                ...(tvParams ? { season: tvParams.season, episode: tvParams.episode } : {}),
+            }
+            : undefined;
+
+        useStreamingStore.getState().playSource(source, title, { subtitles, progressKey });
     };
 
     return (
@@ -405,6 +417,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                         subtitles={subtitles}
                         tvParams={tvParams}
                         imdbId={imdbId}
+                        mediaType={mediaType}
                     />
                 ))}
 

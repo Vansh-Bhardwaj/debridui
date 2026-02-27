@@ -12,6 +12,7 @@ import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings, type Playba
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
+import { cacheSource } from "@/lib/utils/source-cache";
 
 export interface StreamingRequest {
     imdbId: string;
@@ -431,13 +432,14 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         }
 
         if (mediaPlayer === MediaPlayer.BROWSER) {
-            // Preview is already open in loading state — just update the URL
-            // Also pass the redirect chain so streaming links can be resolved
-            // from intermediate debrid provider URLs (e.g. TorBox API with torrent_id)
             const previewStore = usePreviewStore.getState();
             previewStore.setDirectUrl(playUrl);
             if (resolved.chain?.length) {
                 previewStore.setRedirectChain(resolved.chain);
+            }
+            // Cache resolved URL for quick resume from Continue Watching
+            if (options?.progressKey) {
+                cacheSource(options.progressKey, playUrl, title);
             }
         } else {
             openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });

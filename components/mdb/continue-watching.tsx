@@ -2,7 +2,7 @@
 
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { WatchButton } from "@/components/common/watch-button";
-import { X, SkipForward } from "lucide-react";
+import { X, SkipForward, Play } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +13,10 @@ import { type TvSearchParams } from "@/lib/addons/types";
 import Image from "next/image";
 import Link from "next/link";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
+import { getCachedSource } from "@/lib/utils/source-cache";
+import { useStreamingStore } from "@/lib/stores/streaming";
+import { useUserAddons } from "@/hooks/use-addons";
+import { type Addon } from "@/lib/addons/types";
 
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
@@ -85,6 +89,46 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
         e.stopPropagation();
         onRemove(item);
     }, [item, onRemove]);
+
+    const { data: addons = [] } = useUserAddons();
+    const play = useStreamingStore((s) => s.play);
+
+    const handleResume = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const cached = getCachedSource(item);
+        const progressKey = {
+            imdbId: item.imdbId,
+            type: item.type,
+            ...(item.season !== undefined && item.episode !== undefined
+                ? { season: item.season, episode: item.episode }
+                : {}),
+        };
+
+        if (cached) {
+            // Instant resume — use cached URL directly
+            const addonSource = { url: cached.url, title: cached.title, addonId: "cache", addonName: "Cache" } as import("@/lib/addons/types").AddonSource;
+            useStreamingStore.getState().playSource(addonSource, cached.title, { progressKey });
+        } else {
+            // No cache — fall back to Watch Now flow
+            const enabledAddons = addons
+                .filter((a: Addon) => a.enabled)
+                .sort((a: Addon, b: Addon) => a.order - b.order)
+                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+
+            const title = media?.title || "Unknown";
+            const tvParams = item.type === "show" && item.season !== undefined && item.episode !== undefined
+                ? { season: item.season, episode: item.episode }
+                : undefined;
+
+            play(
+                { imdbId: item.imdbId, type: item.type, title, tvParams },
+                enabledAddons,
+                { forceAutoPlay: true },
+            );
+        }
+    }, [item, addons, play, media]);
 
     const nextEpisode = useNextEpisode(item.imdbId, item.type, item.season, item.episode);
     // Poster fallback chain: primary → metahub → RPDB → API-based → CSS placeholder
@@ -196,6 +240,18 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 <X className="size-3.5" />
             </button>
 
+            {/* Resume play button */}
+            <button
+                type="button"
+                onClick={handleResume}
+                className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/30 transition-all z-10"
+                aria-label={`Resume ${title}`}
+            >
+                <div className="h-12 w-12 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-lg transition-transform hover:scale-110">
+                    <Play className="size-5 fill-current text-primary-foreground ml-0.5" />
+                </div>
+            </button>
+
             {/* Next episode button */}
             {nextEpisode && (
                 <WatchButton
@@ -261,7 +317,7 @@ export function ContinueWatching() {
     const handleScrollKeyDown = useCallback((e: React.KeyboardEvent) => {
         // Prevent jitter from key repeat
         if (scrollingRef.current) return;
-        
+
         const viewport = scrollRef.current?.parentElement;
         if (!viewport) return;
         const scrollAmount = 200;
@@ -284,11 +340,11 @@ export function ContinueWatching() {
 
                     <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
                         <div className="flex snap-x snap-mandatory gap-4 pb-2">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="flex-shrink-0 snap-start w-40 sm:w-48 xl:w-52 2xl:w-56">
-                                <Skeleton className="aspect-2/3 rounded-sm" />
-                            </div>
-                        ))}
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className="flex-shrink-0 snap-start w-40 sm:w-48 xl:w-52 2xl:w-56">
+                                    <Skeleton className="aspect-2/3 rounded-sm" />
+                                </div>
+                            ))}
                         </div>
                     </ScrollCarousel>
                 </div>
