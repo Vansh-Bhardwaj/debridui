@@ -338,6 +338,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const skippedSegmentsRef = useRef<Set<string>>(new Set());
     // Active skip-prompt segment: null | 'intro' | 'recap' | 'outro'
     const [activeSkipSegment, setActiveSkipSegment] = useState<'intro' | 'recap' | 'outro' | null>(null);
+    const activeSkipSegmentRef = useRef(activeSkipSegment);
+    useEffect(() => { activeSkipSegmentRef.current = activeSkipSegment; }, [activeSkipSegment]);
     // Grace-period timer: keep skip button visible 5s after exiting a segment
     const skipGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -355,6 +357,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const seekAccRef = useRef<{ direction: 1 | -1; total: number } | null>(null);
     // Auto-next episode countdown
     const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+    const autoNextCountdownRef = useRef(autoNextCountdown);
+    useEffect(() => { autoNextCountdownRef.current = autoNextCountdown; }, [autoNextCountdown]);
     const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const onNextRef = useRef(onNext);
@@ -1001,7 +1005,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (
                 onNextRef.current && autoNextEpisode &&
                 Number.isFinite(dur) && dur > 0 &&
-                autoNextCountdown === null && countdownTimerRef.current === null
+                autoNextCountdownRef.current === null && countdownTimerRef.current === null
             ) {
                 const outroStart = introSegments?.outro?.start_sec;
                 // Use outro start as the trigger point if IntroDB provides it
@@ -1159,7 +1163,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, autoNextCountdown, introSegments, emitHistory]);
+    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
@@ -1580,7 +1584,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onLoadStart = () => {
             if (loadingTimeoutRef.current) return;
             loadingTimeoutRef.current = setTimeout(() => {
-                if (!loadingHintDismissedRef.current) setShowLoadingHint(true);
+                if (!loadingHintDismissedRef.current) {
+                    setShowLoadingHint(true);
+                    loadingHintDismissedRef.current = true;
+                    if (typeof window !== "undefined") {
+                        sessionStorage.setItem("debridui-loading-hint-dismissed", "true");
+                    }
+                }
             }, LOADING_HINT_AFTER_MS);
         };
 

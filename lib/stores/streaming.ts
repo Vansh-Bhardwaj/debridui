@@ -33,6 +33,7 @@ export interface EpisodeContext {
 
 export interface PreloadedData {
     source: AddonSource;
+    allFetchedSources?: AddonSource[];
     subtitles: AddonSubtitle[];
     title: string;
     season: number;
@@ -831,6 +832,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 set({
                     preloadedData: {
                         source: result.source,
+                        allFetchedSources: allSources,
                         subtitles: subtitles,
                         title: targetTitle,
                         season: targetSeason,
@@ -880,6 +882,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         episode: preloadedData.episode,
                         title: cleanShowTitle(preloadedData.title),
                     },
+                    allFetchedSources: preloadedData.allFetchedSources || [preloadedData.source],
                     preloadedData: null
                 });
 
