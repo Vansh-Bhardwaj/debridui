@@ -10,6 +10,7 @@ import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useStreamingStore } from "@/lib/stores/streaming";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -101,7 +102,7 @@ interface AudioTrackInfo {
 }
 
 function pickPreferredAudioTrackIndex(
-    tracks: { length: number; [i: number]: AudioTrackInfo },
+    tracks: { length: number;[i: number]: AudioTrackInfo },
     preferredAudioLang?: string | null,
     originalLanguageCode?: string | null
 ): number {
@@ -285,12 +286,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const videoRef = useRef<HTMLVideoElement>(null);
     const hasPreloaded = useRef(false);
     const [error, setError] = useState(false);
-    const [showCodecWarning, setShowCodecWarning] = useState(true);
+    // Session-gated: only show codec warning and loading hint once per browser session
+    const [showCodecWarning, setShowCodecWarning] = useState(
+        () => typeof sessionStorage !== 'undefined' ? !sessionStorage.getItem('codec-warning-dismissed') : true
+    );
     const [showHelp, setShowHelp] = useState(false);
     const [showRemainingTime, setShowRemainingTime] = useState(false);
     const ios = isIOS();
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
     const [showLoadingHint, setShowLoadingHint] = useState(false);
+    const loadingHintDismissedRef = useRef(
+        typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('loading-hint-dismissed')
+    );
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [canStartPlayback, setCanStartPlayback] = useState(false);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
@@ -322,6 +329,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const preferredAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
     // IntroDB: auto-skip intro/recap/outro
     const autoSkipIntro = useSettingsStore((s) => s.settings.playback.autoSkipIntro);
+    const autoNextEpisode = useSettingsStore((s) => s.settings.playback.autoNextEpisode);
+    const nextEpisodePromptSeconds = useSettingsStore((s) => s.settings.playback.nextEpisodePromptSeconds);
     // TV mode — hide fullscreen button as it's redundant in TV mode where full-screen is the default
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
     const { data: introSegments } = useIntroSegments(progressKey);
@@ -447,7 +456,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             videoRef.current?.pause();
             openInPlayer({ url: downloadUrl, fileName: file.name, player });
             setShowCodecWarning(false);
+            try { sessionStorage.setItem('codec-warning-dismissed', '1'); } catch { }
             setShowLoadingHint(false);
+            try { sessionStorage.setItem('loading-hint-dismissed', '1'); } catch { }
         },
         [downloadUrl, file.name]
     );
@@ -689,12 +700,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             loadingTimeoutRef.current = null;
         }
         setShowLoadingHint(false);
-        
+
         // If we haven't tried transcoded stream yet and one is available, try it
         if (!triedTranscodeFallback && streamingLinks && Object.keys(streamingLinks).length > 0 && !isUsingTranscodedStream) {
             setTriedTranscodeFallback(true);
             setIsLoading(true);
-            
+
             // Force use of a transcoded stream
             const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM || streamingLinks.dash;
             if (transcodedUrl && transcodedUrl !== effectiveUrl) {
@@ -704,12 +715,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 if (video) {
                     video.src = transcodedUrl;
                     video.load();
-                    video.play().catch(() => {});
+                    video.play().catch(() => { });
                 }
                 return;
             }
         }
-        
+
         // For addon streams (no transcoded links): try resolving URL server-side.
         // Many addons return proxy/redirect URLs that fail in the browser's <video> element.
         if (!triedUrlResolveRef.current && (!streamingLinks || Object.keys(streamingLinks).length === 0)) {
@@ -725,11 +736,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         if (video) {
                             video.src = resolvedUrl;
                             video.load();
-                            video.play().catch(() => {});
+                            video.play().catch(() => { });
                         }
                         return;
                     }
-                    // Resolution didn't produce a different URL — show error
+                    // Try falling back to the next best stream based on codec health
+                    const streamingStore = useStreamingStore.getState();
+                    if (streamingStore.playNextBestSource()) {
+                        showOsd("Playback failed. Trying next source...");
+                        setIsLoading(true);
+                        return;
+                    }
+
+                    // Resolution didn't produce a different URL and no sources left — show error
                     setError(true);
                     setIsLoading(false);
                     showLoadErrorToast("The video could not be loaded. Try an external player like VLC.");
@@ -794,11 +813,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
         }) | null;
         if (!el?.audioTracks || el.audioTracks.length <= 1 || selectedAudioIndex !== 0) return;
-        
+
         // Only run if we're still on default (index 0) and tracks are now available
         const tracks = el.audioTracks;
         let originalIndex = 0;
-        
+
         // Check if any track is already enabled (browser default)
         for (let i = 0; i < tracks.length; i++) {
             if (tracks[i]?.enabled) {
@@ -806,7 +825,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 break;
             }
         }
-        
+
         // If no enabled track found, look for "original" or "default" in label
         if (!tracks[originalIndex]?.enabled) {
             const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
@@ -820,7 +839,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 }
             }
         }
-        
+
         // Only update if different from current selection
         if (originalIndex !== 0) {
             setSelectedAudioIndex(originalIndex);
@@ -976,6 +995,34 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     emitHistory("complete", true);
                 }
             }
+
+            // Show next-episode popup before end.
+            // Priority: IntroDB outro start time > user's nextEpisodePromptSeconds setting.
+            if (
+                onNextRef.current && autoNextEpisode &&
+                Number.isFinite(dur) && dur > 0 &&
+                autoNextCountdown === null && countdownTimerRef.current === null
+            ) {
+                const outroStart = introSegments?.outro?.start_sec;
+                // Use outro start as the trigger point if IntroDB provides it
+                const triggerAt = outroStart != null ? dur - outroStart : nextEpisodePromptSeconds;
+                const remaining = dur - time;
+                if (remaining > 0 && remaining <= triggerAt) {
+                    const secs = Math.ceil(remaining);
+                    setAutoNextCountdown(secs);
+                    let left = secs;
+                    countdownTimerRef.current = setInterval(() => {
+                        left--;
+                        if (left <= 0) {
+                            clearInterval(countdownTimerRef.current!);
+                            countdownTimerRef.current = null;
+                            setAutoNextCountdown(null);
+                        } else {
+                            setAutoNextCountdown(left);
+                        }
+                    }, 1000);
+                }
+            }
         };
         const onWaiting = () => {
             setIsLoading(true);
@@ -1032,22 +1079,32 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 forceSync("play_complete", "ended");
                 emitHistory("complete", true);
             }
-            // Auto-next if available — with 5-second countdown
-            if (onNext) {
+            // Auto-next: if countdown was already shown pre-end, advance now.
+            // Otherwise start a short countdown.
+            if (onNext && autoNextEpisode) {
                 const cb = onNext;
-                setAutoNextCountdown(5);
-                let remaining = 5;
-                countdownTimerRef.current = setInterval(() => {
-                    remaining--;
-                    if (remaining <= 0) {
-                        clearInterval(countdownTimerRef.current!);
-                        countdownTimerRef.current = null;
-                        setAutoNextCountdown(null);
-                        cb();
-                    } else {
-                        setAutoNextCountdown(remaining);
-                    }
-                }, 1000);
+                if (countdownTimerRef.current) {
+                    // Countdown was running (triggered during timeupdate) — advance immediately
+                    clearInterval(countdownTimerRef.current);
+                    countdownTimerRef.current = null;
+                    setAutoNextCountdown(null);
+                    cb();
+                } else {
+                    // Fallback: video ended without pre-end popup (short video or setting = 0)
+                    setAutoNextCountdown(5);
+                    let remaining = 5;
+                    countdownTimerRef.current = setInterval(() => {
+                        remaining--;
+                        if (remaining <= 0) {
+                            clearInterval(countdownTimerRef.current!);
+                            countdownTimerRef.current = null;
+                            setAutoNextCountdown(null);
+                            cb();
+                        } else {
+                            setAutoNextCountdown(remaining);
+                        }
+                    }, 1000);
+                }
             }
         };
 
@@ -1102,7 +1159,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, introSegments, emitHistory]);
+    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, autoNextCountdown, introSegments, emitHistory]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
@@ -1255,7 +1312,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (video && Number.isFinite(video.duration) && video.duration > 0) {
             seekTo(pct * video.duration);
             if (!wasPausedBeforeDragRef.current) {
-                video.play().catch(() => {});
+                video.play().catch(() => { });
             }
         }
     }, [isDraggingSeekbar, seekbarPctFromEvent, seekTo]);
@@ -1523,7 +1580,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onLoadStart = () => {
             if (loadingTimeoutRef.current) return;
             loadingTimeoutRef.current = setTimeout(() => {
-                setShowLoadingHint(true);
+                if (!loadingHintDismissedRef.current) setShowLoadingHint(true);
             }, LOADING_HINT_AFTER_MS);
         };
 
@@ -1589,6 +1646,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         event.preventDefault();
                         setFakeFullscreen(false);
                         setIsFullscreen(false);
+                    }
+                    break;
+                case "Tab":
+                    // Quick-action: click the visible skip/next button
+                    if (autoNextCountdown !== null && onNext) {
+                        event.preventDefault();
+                        cancelAutoNext();
+                        guardedNav(onNext);
+                    } else if (activeSkipSegment && !autoSkipIntro) {
+                        event.preventDefault();
+                        const seg = introSegments?.[activeSkipSegment];
+                        if (seg && videoRef.current) {
+                            skippedSegmentsRef.current.add(activeSkipSegment);
+                            videoRef.current.currentTime = seg.end_sec;
+                            setActiveSkipSegment(null);
+                        }
                     }
                     break;
                 case " ":
@@ -1716,7 +1789,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             document.exitPictureInPicture();
                             showOsd("Exit Picture in Picture");
                         } else {
-                            videoRef.current?.requestPictureInPicture().catch(() => {});
+                            videoRef.current?.requestPictureInPicture().catch(() => { });
                             showOsd("Picture in Picture");
                         }
                     }
@@ -1794,7 +1867,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, resetControlsTimeout, showHelp]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -2114,7 +2187,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 if (transcodedUrl && videoRef.current) {
                                     videoRef.current.src = transcodedUrl;
                                     videoRef.current.load();
-                                    videoRef.current.play().catch(() => {});
+                                    videoRef.current.play().catch(() => { });
                                 }
                             }}
                         >
@@ -2293,7 +2366,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <VideoCodecWarning
                         show={shouldShowWarning && showCodecWarning}
                         isPlaying={isPlaying}
-                        onClose={() => setShowCodecWarning(false)}
+                        onClose={() => { setShowCodecWarning(false); try { sessionStorage.setItem('codec-warning-dismissed', '1'); } catch { } }}
                         onOpenInPlayer={openInExternalPlayer}
                     />
 
@@ -2323,8 +2396,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     color: subtitleColor,
                                     fontFamily: subtitleFont === 'mono' ? 'ui-monospace, monospace'
                                         : subtitleFont === 'serif' ? 'ui-serif, Georgia, serif'
-                                        : subtitleFont === 'trebuchet' ? '"Trebuchet MS", sans-serif'
-                                        : undefined,
+                                            : subtitleFont === 'trebuchet' ? '"Trebuchet MS", sans-serif'
+                                                : undefined,
                                 }}
                             >
                                 {activeCueText.split("\n").map((line, i) => (
@@ -2799,7 +2872,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                         document.exitPictureInPicture();
                                                                         showOsd("Exit Picture in Picture");
                                                                     } else {
-                                                                        video.requestPictureInPicture().catch(() => {});
+                                                                        video.requestPictureInPicture().catch(() => { });
                                                                         showOsd("Picture in Picture");
                                                                     }
                                                                     setOpenMenuTracked(null);
@@ -3073,7 +3146,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/90 px-4 py-3 text-center text-xs text-white backdrop-blur-md sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">
-                                {hasCodecIssue 
+                                {hasCodecIssue
                                     ? "This video format (MKV/AC3/DTS) may not be supported by your browser."
                                     : "The stream may not be compatible with your browser."}
                             </p>

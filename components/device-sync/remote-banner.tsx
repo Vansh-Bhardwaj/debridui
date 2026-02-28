@@ -140,14 +140,21 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
         });
     }, [allFetchedSources, nowPlaying?.title]);
 
-    // Auto-expand when playback starts — subscribe to store changes outside render
+    // Auto-expand when playback starts — subscribe to store changes outside render.
+    // Also checks initial state so late-connecting devices expand immediately
+    // if another device is already playing.
     useEffect(() => {
-        let prev = false;
-        const unsub = useDeviceSyncStore.subscribe((s) => {
+        const check = (s: ReturnType<typeof useDeviceSyncStore.getState>) => {
             const target = s.activeTarget
                 ? s.devices.find((d) => d.id === s.activeTarget)
                 : s.devices.find((d) => d.isPlaying && d.nowPlaying);
-            const active = !!(target?.nowPlaying || s.transferPending);
+            return !!(target?.nowPlaying || s.transferPending);
+        };
+        let prev = check(useDeviceSyncStore.getState());
+        // Deferred so it's not a direct setState in the effect body
+        if (prev) queueMicrotask(() => setCollapsed(false));
+        const unsub = useDeviceSyncStore.subscribe((s) => {
+            const active = check(s);
             if (active && !prev) setCollapsed(false);
             prev = active;
         });
@@ -172,303 +179,303 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const displaySources = hasRemoteSources
         ? remoteSources
         : allFetchedSources.length > 0
-        ? allFetchedSources.map((s, i): SourceSummary => ({
-            index: i,
-            title: s.title,
-            resolution: s.resolution,
-            quality: s.quality,
-            size: s.size,
-            isCached: s.isCached,
-            addonName: s.addonName,
-        }))
-        : undefined;
+            ? allFetchedSources.map((s, i): SourceSummary => ({
+                index: i,
+                title: s.title,
+                resolution: s.resolution,
+                quality: s.quality,
+                size: s.size,
+                isCached: s.isCached,
+                addonName: s.addonName,
+            }))
+            : undefined;
 
     return (
         <div role="region" aria-label="Remote player" className="pointer-events-auto w-[min(32rem,calc(100dvw-1.5rem))] mx-auto pb-3 sm:pb-4">
             <div className="rounded-sm border border-border/50 bg-card/95 backdrop-blur-md shadow-xl overflow-hidden w-full">
-                    {/* Collapse toggle — title bar */}
-                    <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setCollapsed((c) => !c)}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
-                        aria-expanded={!collapsed}
-                        aria-label={collapsed ? "Expand remote player" : "Collapse remote player"}
-                        className="flex w-full items-center gap-1.5 px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors border-b border-border/30 cursor-pointer select-none"
-                    >
-                        <DeviceTypeIcon type={targetDevice.deviceType} className="size-3.5 text-primary" />
-                        <span className="flex-1 text-left truncate font-medium">
-                            {nowPlaying ? nowPlaying.title : targetDevice.name}
-                        </span>
-                        <span className="text-muted-foreground/60 text-[9px] mr-1 hidden sm:inline">
-                            {nowPlaying ? targetDevice.name : "Connected"}
-                        </span>
-                        {!nowPlaying && !transferPending && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setActiveTarget(null); }}
-                                className="p-0.5 rounded-sm hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                                aria-label="Disconnect"
-                                title="Disconnect"
-                            >
-                                <X className="size-3" />
-                            </button>
-                        )}
-                        {collapsed ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                    </div>
-
-                    {/* ── Expanded: Full Remote ─────────────────────────── */}
-                    {!collapsed && nowPlaying && (
-                        <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-2 sm:pt-3 space-y-3 sm:space-y-4 max-h-[55vh] overflow-y-auto">
-                            {/* Title + metadata */}
-                            <div className="space-y-0.5">
-                                <p className="text-sm font-medium truncate">{nowPlaying.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                    {targetDevice.name}
-                                    {nowPlaying.type === "show" && nowPlaying.season && nowPlaying.episode && (
-                                        <> <span className="text-border">·</span> S{String(nowPlaying.season).padStart(2, "0")}E{String(nowPlaying.episode).padStart(2, "0")}</>
-                                    )}
-                                </p>
-                            </div>
-
-                            {/* Seek bar */}
-                            <div className="space-y-1">
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={duration > 0 ? duration : 0}
-                                    step={1}
-                                    value={displayTime}
-                                    aria-label="Seek"
-                                    aria-valuetext={`${formatTime(displayTime)} of ${formatTime(duration)}`}
-                                    onChange={(e) => {
-                                        setSeekActive(true);
-                                        setSeekValue(Number(e.target.value));
-                                    }}
-                                    onMouseUp={() => commitSeek(seekValue)}
-                                    onTouchEnd={() => commitSeek(seekValue)}
-                                    className="w-full h-1.5 cursor-pointer appearance-none rounded-full accent-primary"
-                                    style={{
-                                        background: `linear-gradient(to right, var(--primary) ${progress}%, var(--muted) ${progress}%)`,
-                                    }}
-                                />
-                                <div className="flex justify-between">
-                                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                                        {formatTime(displayTime)}
-                                    </span>
-                                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                                        {formatTime(duration)}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Transport controls — centered, responsive */}
-                            <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.max(0, interpolatedTime - 10) })}
-                                    title="Rewind 10s"
-                                    aria-label="Rewind 10 seconds"
-                                >
-                                    -10
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-7 sm:size-8"
-                                    onClick={() => cmd("previous")}
-                                    title="Previous"
-                                    aria-label="Previous"
-                                >
-                                    <SkipBack className="size-3.5 sm:size-4 fill-current" />
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="size-10 sm:size-11 rounded-full"
-                                    onClick={() => cmd("toggle-pause")}
-                                    title={isPlaying ? "Pause" : "Play"}
-                                    aria-label={isPlaying ? "Pause" : "Play"}
-                                >
-                                    {isPlaying ? (
-                                        <Pause className="size-4 sm:size-5 fill-current" />
-                                    ) : (
-                                        <Play className="size-4 sm:size-5 fill-current ml-0.5" />
-                                    )}
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-7 sm:size-8"
-                                    onClick={() => cmd("next")}
-                                    title="Next"
-                                    aria-label="Next"
-                                >
-                                    <SkipForward className="size-3.5 sm:size-4 fill-current" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
-                                    onClick={() => cmd("seek", { position: Math.min(duration, interpolatedTime + 10) })}
-                                    title="Forward 10s"
-                                    aria-label="Forward 10 seconds"
-                                >
-                                    +10
-                                </Button>
-                            </div>
-
-                            {/* Volume — always visible slider */}
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 shrink-0"
-                                    onClick={() => cmd("volume", { level: isMuted ? 1 : 0 })}
-                                    title={isMuted ? "Unmute" : "Mute"}
-                                    aria-label={isMuted ? "Unmute" : "Mute"}
-                                >
-                                    {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-                                </Button>
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    value={volume}
-                                    aria-label="Volume"
-                                    onChange={(e) => cmd("volume", { level: Number(e.target.value) / 100 })}
-                                    className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
-                                    style={{
-                                        background: `linear-gradient(to right, var(--primary) ${volume}%, var(--muted) ${volume}%)`,
-                                    }}
-                                />
-                            </div>
-
-                            {/* Playback queue */}
-                            <PlaybackQueue compact />
-
-                            {/* Sources (alternative streams) — uses target-reported or controller-cached */}
-                            {displaySources && displaySources.length > 0 && (
-                                <BannerSourcesSection
-                                    sources={displaySources}
-                                    onCommand={hasRemoteSources ? cmd : undefined}
-                                    onPlayLocalSource={!hasRemoteSources ? handleLocalSourcePlay : undefined}
-                                />
-                            )}
-
-                            {/* Bottom row: track selectors + fullscreen + stop */}
-                            <div className="flex items-center justify-between border-t border-border/30 pt-2 sm:pt-3 flex-wrap gap-y-1">
-                                <div className="flex items-center gap-1">
-                                    {/* Audio tracks */}
-                                    {audioTracks.length > 0 && (
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Audio Track" aria-label="Audio Track">
-                                                    <AudioLines className="size-3.5" />
-                                                    <span className="hidden sm:inline">Audio</span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuPortal>
-                                                <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
-                                                    {audioTracks.map((t) => (
-                                                        <DropdownMenuItem
-                                                            key={t.id}
-                                                            onClick={() => cmd("set-audio-track", { trackId: t.id })}
-                                                            className={cn(t.active && "text-primary font-medium")}
-                                                        >
-                                                            {t.name}
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                </DropdownMenuContent>
-                                            </DropdownMenuPortal>
-                                        </DropdownMenu>
-                                    )}
-
-                                    {/* Subtitle tracks */}
-                                    {subtitleTracks.length > 0 && (
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Subtitles" aria-label="Subtitles">
-                                                    <Subtitles className="size-3.5" />
-                                                    <span className="hidden sm:inline">Subtitles</span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuPortal>
-                                                <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
-                                                    <DropdownMenuItem
-                                                        onClick={() => cmd("set-subtitle-track", { trackId: -1 })}
-                                                        className={cn(!subtitleTracks.some((t) => t.active) && "text-primary font-medium")}
-                                                    >
-                                                        Off
-                                                    </DropdownMenuItem>
-                                                    {subtitleTracks.map((t) => (
-                                                        <DropdownMenuItem
-                                                            key={t.id}
-                                                            onClick={() => cmd("set-subtitle-track", { trackId: t.id })}
-                                                            className={cn(t.active && "text-primary font-medium")}
-                                                        >
-                                                            {t.name}
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                </DropdownMenuContent>
-                                            </DropdownMenuPortal>
-                                        </DropdownMenu>
-                                    )}
-
-                                    {/* Fullscreen */}
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="size-8"
-                                        onClick={() => cmd("fullscreen")}
-                                        title="Fullscreen"
-                                        aria-label="Toggle fullscreen"
-                                    >
-                                        <Maximize2 className="size-3.5" />
-                                    </Button>
-                                </div>
-
-                                {/* Stop & disconnect */}
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 text-xs text-muted-foreground hover:text-destructive gap-1.5 shrink-0"
-                                    onClick={() => {
-                                        cmd("stop");
-                                        setActiveTarget(null);
-                                    }}
-                                    title="Stop & Disconnect"
-                                    aria-label="Stop and disconnect"
-                                >
-                                    <X className="size-3.5" />
-                                    Disconnect
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Loading state (transfer pending, nothing playing yet) */}
-                    {!collapsed && !nowPlaying && transferPending && (
-                        <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
-                            <Loader2 className="size-4 animate-spin text-primary shrink-0" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium truncate">{transferPending}</p>
-                                <p className="text-[10px] text-muted-foreground">Loading on {targetDevice.name}…</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Idle state (selected but nothing playing) — always mounted to preserve file browser state */}
+                {/* Collapse toggle — title bar */}
+                <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setCollapsed((c) => !c)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
+                    aria-expanded={!collapsed}
+                    aria-label={collapsed ? "Expand remote player" : "Collapse remote player"}
+                    className="flex w-full items-center gap-1.5 px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground hover:text-foreground transition-colors border-b border-border/30 cursor-pointer select-none"
+                >
+                    <DeviceTypeIcon type={targetDevice.deviceType} className="size-3.5 text-primary" />
+                    <span className="flex-1 text-left truncate font-medium">
+                        {nowPlaying ? nowPlaying.title : targetDevice.name}
+                    </span>
+                    <span className="text-muted-foreground/60 text-[9px] mr-1 hidden sm:inline">
+                        {nowPlaying ? targetDevice.name : "Connected"}
+                    </span>
                     {!nowPlaying && !transferPending && (
-                        <div className={cn("px-3 sm:px-4 pb-3 pt-2 max-h-[45vh] overflow-y-auto overflow-x-hidden", collapsed && "hidden")}>
-                            <RemoteFileBrowser targetDeviceId={targetDevice.id} compact />
-                            <PlaybackQueue compact />
-                        </div>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setActiveTarget(null); }}
+                            className="p-0.5 rounded-sm hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label="Disconnect"
+                            title="Disconnect"
+                        >
+                            <X className="size-3" />
+                        </button>
                     )}
+                    {collapsed ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                 </div>
+
+                {/* ── Expanded: Full Remote ─────────────────────────── */}
+                {!collapsed && nowPlaying && (
+                    <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-2 sm:pt-3 space-y-3 sm:space-y-4 max-h-[55vh] overflow-y-auto">
+                        {/* Title + metadata */}
+                        <div className="space-y-0.5">
+                            <p className="text-sm font-medium truncate">{nowPlaying.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                                {targetDevice.name}
+                                {nowPlaying.type === "show" && nowPlaying.season && nowPlaying.episode && (
+                                    <> <span className="text-border">·</span> S{String(nowPlaying.season).padStart(2, "0")}E{String(nowPlaying.episode).padStart(2, "0")}</>
+                                )}
+                            </p>
+                        </div>
+
+                        {/* Seek bar */}
+                        <div className="space-y-1">
+                            <input
+                                type="range"
+                                min={0}
+                                max={duration > 0 ? duration : 0}
+                                step={1}
+                                value={displayTime}
+                                aria-label="Seek"
+                                aria-valuetext={`${formatTime(displayTime)} of ${formatTime(duration)}`}
+                                onChange={(e) => {
+                                    setSeekActive(true);
+                                    setSeekValue(Number(e.target.value));
+                                }}
+                                onMouseUp={() => commitSeek(seekValue)}
+                                onTouchEnd={() => commitSeek(seekValue)}
+                                className="w-full h-1.5 cursor-pointer appearance-none rounded-full accent-primary"
+                                style={{
+                                    background: `linear-gradient(to right, var(--primary) ${progress}%, var(--muted) ${progress}%)`,
+                                }}
+                            />
+                            <div className="flex justify-between">
+                                <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {formatTime(displayTime)}
+                                </span>
+                                <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {formatTime(duration)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Transport controls — centered, responsive */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-2">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
+                                onClick={() => cmd("seek", { position: Math.max(0, interpolatedTime - 10) })}
+                                title="Rewind 10s"
+                                aria-label="Rewind 10 seconds"
+                            >
+                                -10
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 sm:size-8"
+                                onClick={() => cmd("previous")}
+                                title="Previous"
+                                aria-label="Previous"
+                            >
+                                <SkipBack className="size-3.5 sm:size-4 fill-current" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="size-10 sm:size-11 rounded-full"
+                                onClick={() => cmd("toggle-pause")}
+                                title={isPlaying ? "Pause" : "Play"}
+                                aria-label={isPlaying ? "Pause" : "Play"}
+                            >
+                                {isPlaying ? (
+                                    <Pause className="size-4 sm:size-5 fill-current" />
+                                ) : (
+                                    <Play className="size-4 sm:size-5 fill-current ml-0.5" />
+                                )}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 sm:size-8"
+                                onClick={() => cmd("next")}
+                                title="Next"
+                                aria-label="Next"
+                            >
+                                <SkipForward className="size-3.5 sm:size-4 fill-current" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 sm:size-9 text-[10px] sm:text-xs tabular-nums font-medium"
+                                onClick={() => cmd("seek", { position: Math.min(duration, interpolatedTime + 10) })}
+                                title="Forward 10s"
+                                aria-label="Forward 10 seconds"
+                            >
+                                +10
+                            </Button>
+                        </div>
+
+                        {/* Volume — always visible slider */}
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 shrink-0"
+                                onClick={() => cmd("volume", { level: isMuted ? 1 : 0 })}
+                                title={isMuted ? "Unmute" : "Mute"}
+                                aria-label={isMuted ? "Unmute" : "Mute"}
+                            >
+                                {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                            </Button>
+                            <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={volume}
+                                aria-label="Volume"
+                                onChange={(e) => cmd("volume", { level: Number(e.target.value) / 100 })}
+                                className="flex-1 h-1 cursor-pointer appearance-none rounded-full accent-primary"
+                                style={{
+                                    background: `linear-gradient(to right, var(--primary) ${volume}%, var(--muted) ${volume}%)`,
+                                }}
+                            />
+                        </div>
+
+                        {/* Playback queue */}
+                        <PlaybackQueue compact />
+
+                        {/* Sources (alternative streams) — uses target-reported or controller-cached */}
+                        {displaySources && displaySources.length > 0 && (
+                            <BannerSourcesSection
+                                sources={displaySources}
+                                onCommand={hasRemoteSources ? cmd : undefined}
+                                onPlayLocalSource={!hasRemoteSources ? handleLocalSourcePlay : undefined}
+                            />
+                        )}
+
+                        {/* Bottom row: track selectors + fullscreen + stop */}
+                        <div className="flex items-center justify-between border-t border-border/30 pt-2 sm:pt-3 flex-wrap gap-y-1">
+                            <div className="flex items-center gap-1">
+                                {/* Audio tracks */}
+                                {audioTracks.length > 0 && (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Audio Track" aria-label="Audio Track">
+                                                <AudioLines className="size-3.5" />
+                                                <span className="hidden sm:inline">Audio</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuPortal>
+                                            <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
+                                                {audioTracks.map((t) => (
+                                                    <DropdownMenuItem
+                                                        key={t.id}
+                                                        onClick={() => cmd("set-audio-track", { trackId: t.id })}
+                                                        className={cn(t.active && "text-primary font-medium")}
+                                                    >
+                                                        {t.name}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenuPortal>
+                                    </DropdownMenu>
+                                )}
+
+                                {/* Subtitle tracks */}
+                                {subtitleTracks.length > 0 && (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Subtitles" aria-label="Subtitles">
+                                                <Subtitles className="size-3.5" />
+                                                <span className="hidden sm:inline">Subtitles</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuPortal>
+                                            <DropdownMenuContent align="start" side="top" className="max-h-48 overflow-y-auto">
+                                                <DropdownMenuItem
+                                                    onClick={() => cmd("set-subtitle-track", { trackId: -1 })}
+                                                    className={cn(!subtitleTracks.some((t) => t.active) && "text-primary font-medium")}
+                                                >
+                                                    Off
+                                                </DropdownMenuItem>
+                                                {subtitleTracks.map((t) => (
+                                                    <DropdownMenuItem
+                                                        key={t.id}
+                                                        onClick={() => cmd("set-subtitle-track", { trackId: t.id })}
+                                                        className={cn(t.active && "text-primary font-medium")}
+                                                    >
+                                                        {t.name}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenuPortal>
+                                    </DropdownMenu>
+                                )}
+
+                                {/* Fullscreen */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    onClick={() => cmd("fullscreen")}
+                                    title="Fullscreen"
+                                    aria-label="Toggle fullscreen"
+                                >
+                                    <Maximize2 className="size-3.5" />
+                                </Button>
+                            </div>
+
+                            {/* Stop & disconnect */}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs text-muted-foreground hover:text-destructive gap-1.5 shrink-0"
+                                onClick={() => {
+                                    cmd("stop");
+                                    setActiveTarget(null);
+                                }}
+                                title="Stop & Disconnect"
+                                aria-label="Stop and disconnect"
+                            >
+                                <X className="size-3.5" />
+                                Disconnect
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Loading state (transfer pending, nothing playing yet) */}
+                {!collapsed && !nowPlaying && transferPending && (
+                    <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
+                        <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{transferPending}</p>
+                            <p className="text-[10px] text-muted-foreground">Loading on {targetDevice.name}…</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Idle state (selected but nothing playing) — always mounted to preserve file browser state */}
+                {!nowPlaying && !transferPending && (
+                    <div className={cn("px-3 sm:px-4 pb-3 pt-2 max-h-[45vh] overflow-y-auto overflow-x-hidden", collapsed && "hidden")}>
+                        <RemoteFileBrowser targetDeviceId={targetDevice.id} compact />
+                        <PlaybackQueue compact />
+                    </div>
+                )}
             </div>
+        </div>
     );
 });
 

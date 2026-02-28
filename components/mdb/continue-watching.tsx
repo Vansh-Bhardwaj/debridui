@@ -240,16 +240,14 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 <X className="size-3.5" />
             </button>
 
-            {/* Resume play button */}
+            {/* Resume play button — always visible on mobile, hover-only on desktop */}
             <button
                 type="button"
                 onClick={handleResume}
-                className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/30 transition-all z-10"
+                className="absolute bottom-3 right-2 z-10 h-9 w-9 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-lg transition-all sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110 active:scale-95"
                 aria-label={`Resume ${title}`}
             >
-                <div className="h-12 w-12 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-lg transition-transform hover:scale-110">
-                    <Play className="size-5 fill-current text-primary-foreground ml-0.5" />
-                </div>
+                <Play className="size-4 fill-current text-primary-foreground ml-0.5" />
             </button>
 
             {/* Next episode button */}

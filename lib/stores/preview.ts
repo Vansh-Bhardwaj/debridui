@@ -43,6 +43,8 @@ interface PreviewState {
     setDirectUrl: (url: string) => void;
     /** Update streaming links for a single-mode preview */
     setDirectStreamingLinks: (links: Record<string, string>) => void;
+    /** Update subtitle tracks (e.g. when auto-fetched after preview opens) */
+    setDirectSubtitles: (subtitles: AddonSubtitle[]) => void;
     /** Set the redirect chain from URL resolution */
     setRedirectChain: (chain: string[]) => void;
     closePreview: () => void;
@@ -109,6 +111,7 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
 
     setDirectUrl: (url) => set({ directUrl: url }),
     setDirectStreamingLinks: (links) => set({ directStreamingLinks: links }),
+    setDirectSubtitles: (subtitles) => set({ directSubtitles: subtitles }),
     setRedirectChain: (chain) => set({ redirectChain: chain }),
 
     closePreview: () => set(initialState),

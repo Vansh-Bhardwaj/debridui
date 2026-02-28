@@ -59,6 +59,9 @@ export function DeviceSyncReporter() {
 
     const lastReportRef = useRef(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Debounce timer for video-removal null reports so source switching
+    // doesn't briefly clear remote now-playing state
+    const removalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Use refs for values consumed inside buildNowPlaying so the main effect
     // doesn't tear down on every metadata/subtitle change.
@@ -93,7 +96,7 @@ export function DeviceSyncReporter() {
 
             // Try to read audio tracks (Safari supports HTMLMediaElement.audioTracks)
             const audioTracks: TrackInfo[] = [];
-            const audioTrackList = (video as unknown as { audioTracks?: { length: number; [index: number]: { label?: string; language?: string; enabled?: boolean } } }).audioTracks;
+            const audioTrackList = (video as unknown as { audioTracks?: { length: number;[index: number]: { label?: string; language?: string; enabled?: boolean } } }).audioTracks;
             if (audioTrackList?.length) {
                 for (let i = 0; i < audioTrackList.length; i++) {
                     const t = audioTrackList[i];
@@ -170,25 +173,51 @@ export function DeviceSyncReporter() {
         videos.forEach(attachToVideo);
 
         // Watch for new video elements being added/removed
+        // Debounced null reporter — when a video is removed, wait briefly
+        // before clearing now-playing. If a new video appears (source switch),
+        // the timer is cancelled and the new video's state replaces it.
+        const scheduleNullReport = () => {
+            if (removalTimerRef.current) clearTimeout(removalTimerRef.current);
+            removalTimerRef.current = setTimeout(() => {
+                removalTimerRef.current = null;
+                // Only clear if no video element exists now
+                const current = document.querySelector("video");
+                if (!current || (!current.src && !current.currentSrc)) {
+                    reportNowPlaying(null);
+                }
+            }, 600);
+        };
+
         const observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
-                    if (node instanceof HTMLVideoElement) attachToVideo(node);
+                    if (node instanceof HTMLVideoElement) {
+                        // Cancel pending null report — new video is replacing old
+                        if (removalTimerRef.current) {
+                            clearTimeout(removalTimerRef.current);
+                            removalTimerRef.current = null;
+                        }
+                        attachToVideo(node);
+                    }
                     if (node instanceof HTMLElement) {
-                        node.querySelectorAll("video").forEach(attachToVideo);
+                        const nested = node.querySelectorAll("video");
+                        if (nested.length && removalTimerRef.current) {
+                            clearTimeout(removalTimerRef.current);
+                            removalTimerRef.current = null;
+                        }
+                        nested.forEach(attachToVideo);
                     }
                 }
                 for (const node of mutation.removedNodes) {
                     if (node instanceof HTMLVideoElement) {
                         detachFromVideo(node);
-                        reportNowPlaying(null);
+                        scheduleNullReport();
                     } else if (node instanceof HTMLElement) {
-                        // Detach from any nested video elements to prevent listener leaks
                         node.querySelectorAll("video").forEach((v) => {
                             detachFromVideo(v);
                         });
                         if (node.querySelector("video")) {
-                            reportNowPlaying(null);
+                            scheduleNullReport();
                         }
                     }
                 }
@@ -243,6 +272,7 @@ export function DeviceSyncReporter() {
         return () => {
             observer.disconnect();
             if (intervalRef.current) clearInterval(intervalRef.current);
+            if (removalTimerRef.current) clearTimeout(removalTimerRef.current);
             document.querySelectorAll("video").forEach(detachFromVideo);
         };
     }, [enabled, reportNowPlaying]);

@@ -5,6 +5,7 @@ import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
 import { selectBestSource } from "@/lib/streaming/source-selector";
 import { queryClient } from "@/lib/query-client";
+import { detectCodecSupport } from "@/lib/utils/codec-support";
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
@@ -51,6 +52,7 @@ interface StreamingState {
     openSourcePicker: () => void;
     closeSourcePicker: () => void;
     playAlternativeSource: (source: AddonSource) => void;
+    playNextBestSource: () => boolean;
 
     // Preloading
     preloadedData: PreloadedData | null;
@@ -157,6 +159,57 @@ function combineSubtitles(results: SubtitleQueryResult[]): AddonSubtitle[] {
     }
 
     return Array.from(byKey.values());
+}
+
+/**
+ * Fetch subtitles for a given media item from all subtitle-capable addons.
+ * Leverages the same React Query cache as useAddonSubtitles, so if subtitles
+ * were already fetched (e.g. from the Sources component), they're instant.
+ * Non-blocking: returns empty array on failure so playback is never delayed.
+ */
+async function fetchSubtitlesForMedia(
+    imdbId: string,
+    type: "movie" | "show",
+    tvParams?: TvSearchParams,
+): Promise<AddonSubtitle[]> {
+    try {
+        const addons = queryClient.getQueryData<{ id: string; url: string; name: string; enabled: boolean; order: number }[]>(["user-addons"]) ?? [];
+        const enabled = addons
+            .filter((a) => a.enabled)
+            .sort((a, b) => a.order - b.order)
+            .map((a) => ({ id: a.id, url: a.url, name: a.name }));
+
+        if (enabled.length === 0) return [];
+
+        const { subtitleAddons } = await classifyAddons(enabled);
+        if (subtitleAddons.length === 0) return [];
+
+        const results = await Promise.all(
+            subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
+                try {
+                    return await withTimeout(
+                        queryClient.fetchQuery({
+                            queryKey: ["addon", addon.id, "subtitles", imdbId, type, tvParams] as const,
+                            queryFn: async () => {
+                                const client = new AddonClient({ url: addon.url });
+                                const res = await client.fetchSubtitles(imdbId, type, tvParams);
+                                return { addonName: addon.name, subtitles: res.subtitles || [] } as SubtitleQueryResult;
+                            },
+                            staleTime: 5 * 60 * 1000,
+                        }),
+                        PER_ADDON_TIMEOUT,
+                        { addonName: addon.name, subtitles: [] } as SubtitleQueryResult,
+                    );
+                } catch {
+                    return { addonName: addon.name, subtitles: [] };
+                }
+            }),
+        );
+
+        return combineSubtitles(results);
+    } catch {
+        return [];
+    }
 }
 
 // Helper to extract clean show title
@@ -355,6 +408,34 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             progressKey: pendingPlayContext.progressKey ?? undefined,
         });
     },
+    playNextBestSource: () => {
+        const { allFetchedSources, selectedSource, playAlternativeSource } = get();
+        if (!selectedSource || allFetchedSources.length === 0) return false;
+
+        const currentIndex = allFetchedSources.findIndex((s) => s.url === selectedSource.url);
+        if (currentIndex === -1 || currentIndex >= allFetchedSources.length - 1) return false;
+
+        const support = detectCodecSupport();
+
+        // 1. Try to find the next best source that matches our codec health
+        for (let i = currentIndex + 1; i < allFetchedSources.length; i++) {
+            const candidate = allFetchedSources[i];
+            const text = (candidate.title || candidate.description || "").toLowerCase();
+
+            let isSupported = true;
+            if (!support.hevc && (text.includes("hevc") || text.includes("h265") || text.includes("x265"))) isSupported = false;
+            if (!support.ac3 && !support.eac3 && !support.dts && (text.includes("ac3") || text.includes("eac3") || text.includes("dd5.1") || text.includes("dd+") || text.includes("dts"))) isSupported = false;
+
+            if (isSupported) {
+                playAlternativeSource(candidate);
+                return true;
+            }
+        }
+
+        // 2. Fallback to the immediate next one if no strictly supported source is identifiable
+        playAlternativeSource(allFetchedSources[currentIndex + 1]);
+        return true;
+    },
 
     setEpisodeContext: (context) => {
         if (context) {
@@ -393,6 +474,23 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
         const fileName = meta ? `${title} [${meta}]` : title;
 
+        // ── Auto-fetch subtitles when none provided ────────────────────
+        // Ensures every play path (continue watching, source picker, etc.)
+        // gets subtitles for the media, not just paths that pass them explicitly.
+        const subtitles = options?.subtitles;
+        if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
+            const pk = options.progressKey;
+            const tvParams = pk.season != null && pk.episode != null
+                ? { season: pk.season, episode: pk.episode }
+                : undefined;
+            // Non-blocking: fetch in background, populate preview store when ready
+            fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams).then((fetched) => {
+                if (fetched.length > 0) {
+                    usePreviewStore.getState().setDirectSubtitles(fetched);
+                }
+            });
+        }
+
         // ── Device Sync interception ───────────────────────────────────
         // If a remote device is selected as the playback target, send
         // the content there instead of playing locally.
@@ -408,7 +506,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 url: "", // Empty → shows loading spinner in dialog
                 title: fileName,
                 fileType: FileType.VIDEO,
-                subtitles: options?.subtitles,
+                subtitles,
                 progressKey: options?.progressKey,
             });
         }
