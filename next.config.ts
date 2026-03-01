@@ -77,6 +77,58 @@ const nextConfig: NextConfig = {
                     { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
                 ],
             },
+            // Content detail pages — static shells (client-rendered), safe to cache aggressively.
+            // s-maxage controls CDN (Cloudflare edge) cache; max-age controls browser cache.
+            // Requires a Cloudflare Cache Rule with "Eligible for cache" for these paths to take effect.
+            {
+                source: "/movies/:slug*",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/shows/:slug*",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/people/:slug*",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400" },
+                ],
+            },
+            // App shell pages — also static, but shorter CDN TTL since they're entry points
+            {
+                source: "/dashboard",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/discover/:path*",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/search",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/watchlist",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400" },
+                ],
+            },
+            {
+                source: "/files",
+                headers: [
+                    { key: "Cache-Control", value: "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400" },
+                ],
+            },
         ];
     },
     async redirects() {
