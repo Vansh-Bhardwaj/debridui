@@ -125,17 +125,18 @@ export async function GET(request: NextRequest) {
         const limitRaw = parseInt(searchParams.get("limit") ?? "200");
         const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, limitRaw)) : 200;
 
-        const progress = await db
-            .select()
-            .from(userProgress)
-            .where(eq(userProgress.userId, session.user.id))
-            .orderBy(desc(userProgress.updatedAt))
-            .limit(limit);
-
-        const hidden = await db
-            .select({ id: hiddenContinueWatching.id, imdbId: hiddenContinueWatching.imdbId, type: hiddenContinueWatching.type, season: hiddenContinueWatching.season, episode: hiddenContinueWatching.episode })
-            .from(hiddenContinueWatching)
-            .where(eq(hiddenContinueWatching.userId, session.user.id));
+        const [progress, hidden] = await Promise.all([
+            db
+                .select()
+                .from(userProgress)
+                .where(eq(userProgress.userId, session.user.id))
+                .orderBy(desc(userProgress.updatedAt))
+                .limit(limit),
+            db
+                .select({ id: hiddenContinueWatching.id, imdbId: hiddenContinueWatching.imdbId, type: hiddenContinueWatching.type, season: hiddenContinueWatching.season, episode: hiddenContinueWatching.episode })
+                .from(hiddenContinueWatching)
+                .where(eq(hiddenContinueWatching.userId, session.user.id)),
+        ]);
 
         const hiddenKeys = new Set(hidden.map((item) => `${item.imdbId}:${item.type}:${item.season ?? "_"}:${item.episode ?? "_"}`));
 

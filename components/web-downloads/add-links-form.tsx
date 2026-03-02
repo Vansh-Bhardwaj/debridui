@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useWebDownloads } from "./web-downloads-provider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Link2, Save, ClipboardPaste, X } from "lucide-react";
 import { getTextFromClipboard } from "@/lib/utils";
+import { useOGMetadata } from "@/hooks/use-og-metadata";
 
 function parseLinks(text: string): string[] {
     return text
@@ -79,7 +80,9 @@ export function AddLinksForm() {
 
     const isBusy = isAdding || isSaving;
     const isDisabled = isBusy || !linksText.trim();
-    const linkCount = parseLinks(linksText).length;
+    const parsedLinks = useMemo(() => parseLinks(linksText), [linksText]);
+    const linkCount = parsedLinks.length;
+    const ogResults = useOGMetadata(parsedLinks);
 
     return (
         <div className="rounded-sm border border-border/50 overflow-hidden">
@@ -135,6 +138,49 @@ export function AddLinksForm() {
                         Enter URLs from supported hosters. Each link will be processed.
                     </p>
                 </div>
+
+                {/* Link Previews */}
+                {parsedLinks.length > 0 && (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {parsedLinks.slice(0, 8).map((link, i) => {
+                            const og = ogResults[i]?.data;
+                            const hostname = (() => {
+                                try { return new URL(link).hostname; } catch { return null; }
+                            })();
+                            const safeFavicon = og?.favicon && /^https?:\/\//i.test(og.favicon) ? og.favicon : null;
+                            return (
+                                <div
+                                    key={`${i}-${link}`}
+                                    className="flex items-center gap-2.5 py-1.5 px-2 rounded-sm bg-muted/20 text-xs"
+                                >
+                                    {safeFavicon && (
+                                        <img
+                                            src={safeFavicon}
+                                            alt=""
+                                            className="size-4 shrink-0 rounded-sm"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                        />
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                        {og?.title ? (
+                                            <p className="truncate text-foreground/80">{og.title}</p>
+                                        ) : (
+                                            <p className="truncate text-muted-foreground">{hostname || link}</p>
+                                        )}
+                                    </div>
+                                    {og?.siteName && (
+                                        <span className="shrink-0 text-muted-foreground">{og.siteName}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        {parsedLinks.length > 8 && (
+                            <p className="text-[11px] text-muted-foreground px-2">
+                                +{parsedLinks.length - 8} more link{parsedLinks.length - 8 !== 1 ? "s" : ""}
+                            </p>
+                        )}
+                    </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={handleUnlock} disabled={isDisabled} className="flex-1 sm:flex-none" data-tv-focusable>
                         {isAdding ? (

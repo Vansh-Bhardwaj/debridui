@@ -59,7 +59,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const pathname = usePathname();
     const { data: session, isPending: isSessionPending, error: sessionError } = authClient.useSession();
     // Only fetch accounts when session exists
-    const { data: userAccounts = [], isLoading: isAccountsLoading, refetch } = useUserAccounts(!!session);
+    const { data: userAccounts = [], isLoading: isAccountsLoading, isError: isAccountsError, error: accountsError, refetch } = useUserAccounts(!!session);
 
     const accountsLength = userAccounts.length;
 
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Centralized redirect logic - single source of truth for all auth redirects
     // Added resilience: don't redirect on transient errors, only when definitively no session
     useEffect(() => {
-        if (isSessionPending || isAccountsLoading) return;
+        if (isSessionPending || isAccountsLoading || isAccountsError) return;
 
         // Don't redirect to login if there's a session error - show error screen instead
         // This prevents logouts from transient network issues
@@ -137,7 +137,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!hasAccounts && !isOnboarding) {
             router.push("/onboarding");
         }
-    }, [session, sessionError, isSessionPending, isAccountsLoading, userAccounts.length, pathname, router]);
+    }, [session, sessionError, isSessionPending, isAccountsLoading, isAccountsError, userAccounts.length, pathname, router]);
 
     // Sync currentAccountId to localStorage when it changes
     useEffect(() => {
@@ -228,6 +228,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 ? "Loading accounts..."
                 : "Connecting to service...";
         return <SplashScreen stage={stage} />;
+    }
+
+    // Show error screen when accounts query fails (prevents false redirect to onboarding)
+    if (isAccountsError && session) {
+        return (
+            <SplashErrorScreen
+                title="Failed to Load Accounts"
+                error={accountsError instanceof Error ? accountsError : new Error("Could not fetch your accounts")}
+                onRetry={refetch}
+                onLogout={logout}
+            />
+        );
     }
 
     // Show error screen when account fetch fails

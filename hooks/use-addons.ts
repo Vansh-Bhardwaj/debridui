@@ -140,7 +140,10 @@ export function useToggleAddon() {
                     queryClient.setQueryData(USER_ADDONS_KEY, context.previousAddons);
                 }
             },
-            onSettled: () => queryClient.invalidateQueries({ queryKey: USER_ADDONS_KEY }),
+            onSettled: (_, __, { addonId }) => {
+                queryClient.invalidateQueries({ queryKey: ["addon", addonId] });
+                queryClient.invalidateQueries({ queryKey: USER_ADDONS_KEY });
+            },
         }
     );
 }
@@ -175,7 +178,10 @@ export function useToggleAddonCatalogs() {
                     queryClient.setQueryData(USER_ADDONS_KEY, context.previousAddons);
                 }
             },
-            onSettled: () => queryClient.invalidateQueries({ queryKey: USER_ADDONS_KEY }),
+            onSettled: (_, __, { addonId }) => {
+                queryClient.invalidateQueries({ queryKey: ["addon", addonId] });
+                queryClient.invalidateQueries({ queryKey: USER_ADDONS_KEY });
+            },
         }
     );
 }

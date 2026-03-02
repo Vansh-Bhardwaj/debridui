@@ -4,7 +4,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { getFindTorrentsCacheKey } from "@/lib/utils/cache-keys";
 import { type DebridFile, AccountType } from "@/lib/types";
-import { traktClient } from "@/lib/trakt";
+import { traktClient, type TraktSearchResult } from "@/lib/trakt";
+import { searchTVMaze } from "@/lib/tvmaze";
 import type TorBoxClient from "@/lib/clients/torbox";
 import type { TorBoxSearchResult } from "@/lib/clients/torbox";
 
@@ -19,10 +20,69 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
     const minQueryLength = 3;
     const shouldSearch = enabled && trimmedQuery.length >= minQueryLength;
 
-    // Trakt search for movies and TV shows
+    // Trakt search for movies and TV shows, supplemented by TVMaze for better TV coverage
     const { data: traktResults, isLoading: isTraktSearching } = useQuery({
         queryKey: ["trakt", "search", currentAccount.id, trimmedQuery],
-        queryFn: () => traktClient.search(trimmedQuery, ["movie", "show"]),
+        queryFn: async (): Promise<TraktSearchResult[]> => {
+            const traktData = await traktClient.search(trimmedQuery, ["movie", "show"]);
+
+            // If Trakt returned few show results, supplement with TVMaze
+            const showCount = traktData.filter((r) => r.show).length;
+            if (showCount < 3) {
+                try {
+                    const tvmazeResults = await searchTVMaze(trimmedQuery);
+                    // Collect existing IMDb IDs to avoid duplicates
+                    const existingImdb = new Set(
+                        traktData
+                            .map((r) => r.show?.ids?.imdb || r.movie?.ids?.imdb)
+                            .filter(Boolean)
+                    );
+
+                    for (const result of tvmazeResults) {
+                        if (!result.show) continue;
+                        const imdb = result.show.externals?.imdb;
+                        // Only include shows with IMDb IDs — needed for navigation
+                        if (!imdb) continue;
+                        if (existingImdb.has(imdb)) continue;
+                        existingImdb.add(imdb);
+
+                        traktData.push({
+                            type: "show",
+                            score: result.score * 100,
+                            show: {
+                                title: result.show.name || "Unknown",
+                                year: result.show.premiered ? parseInt(result.show.premiered.slice(0, 4), 10) || 0 : 0,
+                                ids: {
+                                    trakt: 0,
+                                    slug: imdb,
+                                    tmdb: 0,
+                                    imdb,
+                                    tvdb: result.show.externals?.thetvdb ?? undefined,
+                                },
+                                images: {
+                                    poster: result.show.image?.original ? [result.show.image.original] : [],
+                                    fanart: [],
+                                    logo: [],
+                                    clearart: [],
+                                    banner: [],
+                                    thumb: [],
+                                    headshot: [],
+                                    screenshot: [],
+                                },
+                                overview: result.show.summary?.replace(/<[^>]+>/g, "") ?? undefined,
+                                rating: result.show.rating?.average ?? undefined,
+                                genres: result.show.genres,
+                                status: result.show.status?.toLowerCase(),
+                            },
+                        });
+                    }
+                } catch {
+                    // TVMaze supplementation failed — use Trakt results as-is
+                }
+            }
+
+            return traktData;
+        },
         placeholderData: keepPreviousData,
         enabled: shouldSearch,
         staleTime: 5 * 60 * 1000,

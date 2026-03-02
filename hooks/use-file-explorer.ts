@@ -18,7 +18,7 @@ export function useFileExplorer() {
     const limit = PAGE_SIZE;
 
     const { data, isLoading } = useQuery({
-        queryKey: [currentAccount.id, "getTorrentList", currentPage, sortBy, sortOrder],
+        queryKey: [currentAccount.id, "getTorrentList", currentPage],
         queryFn: () => client.getTorrentList({ offset, limit }),
         placeholderData: keepPreviousData,
         staleTime: 0, // Always revalidate on mount — refetchInterval manages freshness while mounted

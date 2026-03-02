@@ -18,6 +18,7 @@ import {
     useTraktBoxOfficeMovies,
     useTraktRecommendations,
 } from "@/hooks/use-trakt";
+import { useTVMazeAiringToday } from "@/hooks/use-tvmaze";
 import { traktClient } from "@/lib/trakt";
 import {
     useAddonCatalogDefs,
@@ -25,7 +26,7 @@ import {
     catalogSlug,
     type AddonCatalogDef,
 } from "@/hooks/use-addons";
-import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle, Heart } from "lucide-react";
+import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle, Heart, Radio } from "lucide-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
@@ -146,6 +147,7 @@ const ICON_TICKET = <Ticket className="size-3.5" />;
 const ICON_FILM = <Film className="size-3.5" />;
 const ICON_CALENDAR = <Calendar className="size-3.5" />;
 const ICON_HEART = <Heart className="size-3.5" />;
+const ICON_RADIO = <Radio className="size-3.5" />;
 
 // Content section with modern divider
 interface ContentSectionProps {
@@ -342,6 +344,12 @@ const AnticipatedSection = memo(function AnticipatedSection({ visible }: { visib
     );
 });
 
+const AiringTodaySection = memo(function AiringTodaySection({ visible }: { visible: boolean }) {
+    const { data, isLoading, error } = useTVMazeAiringToday("US", visible);
+    if (!visible) return null;
+    return <MediaSection title="On Air Today" items={data} isLoading={isLoading} error={error} rows={1} />;
+});
+
 const DashboardPage = memo(function DashboardPage() {
     const [searchOpen, setSearchOpen] = useState(false);
     const handleSearchClick = useCallback(() => setSearchOpen(true), []);
@@ -383,6 +391,11 @@ const DashboardPage = memo(function DashboardPage() {
                 <SectionErrorBoundary section="Addon Catalogs">
                     <AddonCatalogs />
                 </SectionErrorBoundary>
+
+                {/* Airing Today — TVMaze schedule, no auth needed */}
+                <LazyTraktSection label="Airing Today" icon={ICON_RADIO} delay={0}>
+                    {(visible) => <AiringTodaySection visible={visible} />}
+                </LazyTraktSection>
 
                 {/* Trending */}
                 <ContentSection label="Trending Now" icon={ICON_TRENDING} delay={0}>

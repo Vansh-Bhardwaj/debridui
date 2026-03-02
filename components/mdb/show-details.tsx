@@ -15,10 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
-import { CalendarDays, Tv, Eye, EyeOff, Loader2 } from "lucide-react";
+import { CalendarDays, Tv, Eye, EyeOff, Loader2, Globe, Radio } from "lucide-react";
 import { traktClient } from "@/lib/trakt";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useTVMazeShow } from "@/hooks/use-tvmaze";
 
 function tmdbEpisodeToTrakt(ep: TMDBEpisodeGroupEpisode): TraktEpisode {
     return {
@@ -363,9 +364,40 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     const hasEpisodeGroups = episodeGroupsData?.results && episodeGroupsData.results.length > 0;
     const isGroupView = !!selectedGroup;
 
+    const { data: tvmaze } = useTVMazeShow(media.ids?.imdb, media.ids?.tvdb);
+
     return (
         <div className="space-y-12">
             <MediaHeader media={media} mediaId={mediaId} type="show" />
+
+            {tvmaze && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                    {(tvmaze.network || tvmaze.webChannel) && (
+                        <span className="inline-flex items-center gap-1.5">
+                            <Radio className="size-3.5" />
+                            {tvmaze.network?.name || tvmaze.webChannel?.name}
+                        </span>
+                    )}
+                    {tvmaze.schedule && tvmaze.schedule.days.length > 0 && (
+                        <span className="inline-flex items-center gap-1.5">
+                            <CalendarDays className="size-3.5" />
+                            {tvmaze.schedule.days.join(", ")}
+                            {tvmaze.schedule.time && ` at ${tvmaze.schedule.time}`}
+                        </span>
+                    )}
+                    {tvmaze.officialSite && /^https?:\/\//i.test(tvmaze.officialSite) && (
+                        <a
+                            href={tvmaze.officialSite}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+                        >
+                            <Globe className="size-3.5" />
+                            Official Site
+                        </a>
+                    )}
+                </div>
+            )}
 
             <NextEpisodeBanner media={media} />
 

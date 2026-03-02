@@ -66,8 +66,8 @@ const ForYouPage = memo(function ForYouPage() {
     const [movieLimit, setMovieLimit] = useState(INITIAL_LIMIT);
     const [showLimit, setShowLimit] = useState(INITIAL_LIMIT);
 
-    const { data: movies, isLoading: moviesLoading, isFetching: moviesFetching } = useRecommendationsByType("movies", movieLimit);
-    const { data: shows, isLoading: showsLoading, isFetching: showsFetching } = useRecommendationsByType("shows", showLimit);
+    const { data: movies, isLoading: moviesLoading, isFetching: moviesFetching, isError: moviesError } = useRecommendationsByType("movies", movieLimit);
+    const { data: shows, isLoading: showsLoading, isFetching: showsFetching, isError: showsError } = useRecommendationsByType("shows", showLimit);
     const watchedIds = useWatchedIds();
 
     const movieItems = useMemo(() => movies ?? [], [movies]);
@@ -80,6 +80,7 @@ const ForYouPage = memo(function ForYouPage() {
 
     const isLoading = moviesLoading && showsLoading && movieItems.length === 0 && showItems.length === 0;
     const isEmpty = !moviesLoading && !showsLoading && movieItems.length === 0 && showItems.length === 0;
+    const isError = isEmpty && (moviesError || showsError);
 
     return (
         <div className="space-y-8 py-6 lg:px-6">
@@ -105,6 +106,12 @@ const ForYouPage = memo(function ForYouPage() {
 
             {isLoading ? (
                 <LoadingState label="Loading recommendations..." className="py-24" />
+            ) : isError ? (
+                <EmptyState
+                    title="Failed to load recommendations"
+                    description="Could not reach Trakt. Check your connection and try again."
+                    className="py-14"
+                />
             ) : isEmpty ? (
                 <EmptyState
                     title="No recommendations yet"

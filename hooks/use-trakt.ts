@@ -4,6 +4,7 @@ import { useUserSettings } from "./use-user-settings";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { createTMDBClient, tmdbToTraktMedia } from "@/lib/tmdb";
 import { fetchCinemetaMeta, cinemetaToTraktMedia } from "@/lib/cinemeta";
+import { fetchKitsuByTitle, kitsuToTraktMedia } from "@/lib/kitsu";
 import { toast } from "sonner";
 
 // Cache duration constants
@@ -199,9 +200,20 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
                         }
                     }
 
-                    // Always try Cinemeta as final fallback (free, no key needed)
+                    // Always try Cinemeta as next fallback (free, no key needed)
                     const meta = await fetchCinemetaMeta(slug, type);
                     if (meta) return cinemetaToTraktMedia(meta, type);
+
+                    // Try Kitsu as anime-specific fallback (free, no key needed)
+                    // Only useful with readable slugs — IMDb IDs can't be title-searched
+                    if (!isImdbId) {
+                        try {
+                            const kitsu = await fetchKitsuByTitle(slug.replace(/-/g, " "));
+                            if (kitsu) return kitsuToTraktMedia(kitsu, type, slug);
+                        } catch {
+                            // Kitsu failed — continue to throw
+                        }
+                    }
                 }
 
                 throw error;
