@@ -72,3 +72,43 @@ if (fsRequirePattern.test(fastSetImmediate)) {
 } else {
     console.log("[patch-next-node-env] fast-set-immediate already clean.");
 }
+
+// Patch Next's ImageResponse shim so @vercel/og (and its WASM files) are never
+// imported in Worker bundles. This project does not use ImageResponse/next/og.
+const imageResponsePath = path.join(
+        process.cwd(),
+        "node_modules",
+        "next",
+        "dist",
+        "server",
+        "og",
+        "image-response.js"
+);
+
+if (!fs.existsSync(imageResponsePath)) {
+        console.log("[patch-next-node-env] Skipped image-response patch (file missing).");
+        process.exit(0);
+}
+
+const imageResponseStub = `"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+Object.defineProperty(exports, "ImageResponse", {
+    enumerable: true,
+    get: function() {
+        return ImageResponse;
+    }
+});
+class ImageResponse extends Response {
+    constructor() {
+        throw new Error("ImageResponse is disabled in this deployment to keep Worker bundle size under Cloudflare free plan limits.");
+    }
+}
+`;
+
+const currentImageResponse = fs.readFileSync(imageResponsePath, "utf8");
+if (currentImageResponse !== imageResponseStub) {
+        fs.writeFileSync(imageResponsePath, imageResponseStub);
+        console.log("[patch-next-node-env] Patched image-response to disable @vercel/og bundling.");
+} else {
+        console.log("[patch-next-node-env] image-response already patched.");
+}
