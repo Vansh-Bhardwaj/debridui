@@ -9,7 +9,7 @@ import { detectCodecSupport } from "@/lib/utils/codec-support";
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
-import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings, type PlaybackSettings } from "./settings";
+import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings, type PlaybackSettings, type TitleMemoryEntry } from "./settings";
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
@@ -85,6 +85,7 @@ const resolvedStreamCache = new Map<string, ResolvedStreamCacheEntry>();
 const inflightResolvedStreamRequests = new Map<string, Promise<{ url: string; chain?: string[] }>>();
 const RESOLVED_STREAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const RESOLVED_STREAM_CACHE_MAX_SIZE = 200;
+const TITLE_MEMORY_MAX_ITEMS = 400;
 
 // Minimum time toast must be visible before dismissing (allows mount animation)
 const MIN_TOAST_DURATION = 300;
@@ -133,13 +134,48 @@ async function getEffectiveStreamingSettings(): Promise<StreamingSettings> {
     };
 }
 
+function getTitleMemory(imdbId: string): TitleMemoryEntry | null {
+    const map = useSettingsStore.getState().get("titleMemory");
+    return map[imdbId] ?? null;
+}
+
+function rememberTitleMemory(imdbId: string, patch: Partial<TitleMemoryEntry>) {
+    const store = useSettingsStore.getState();
+    const map = { ...store.get("titleMemory") };
+    const existing = map[imdbId];
+
+    map[imdbId] = {
+        ...(existing ?? { updatedAt: Date.now() }),
+        ...patch,
+        updatedAt: Date.now(),
+    };
+
+    const entries = Object.entries(map);
+    if (entries.length > TITLE_MEMORY_MAX_ITEMS) {
+        entries
+            .sort((a, b) => (b[1].updatedAt ?? 0) - (a[1].updatedAt ?? 0))
+            .slice(TITLE_MEMORY_MAX_ITEMS)
+            .forEach(([key]) => delete map[key]);
+    }
+
+    store.set("titleMemory", map);
+}
+
+function applyTitleMemorySettings(base: StreamingSettings, memory: TitleMemoryEntry | null): StreamingSettings {
+    if (!memory?.qualityProfileId) return base;
+    return {
+        ...base,
+        profileId: memory.qualityProfileId,
+    };
+}
+
 type SubtitleQueryResult = {
     addonName: string;
     subtitles: AddonSubtitle[];
 };
 
-function combineSubtitles(results: SubtitleQueryResult[]): AddonSubtitle[] {
-    const preferredLang = (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage || "english";
+function combineSubtitles(results: SubtitleQueryResult[], preferredLangOverride?: string): AddonSubtitle[] {
+    const preferredLang = preferredLangOverride || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage || "english";
     const byKey = new Map<string, AddonSubtitle>();
 
     for (const { addonName, subtitles } of results) {
@@ -172,6 +208,7 @@ async function fetchSubtitlesForMedia(
     imdbId: string,
     type: "movie" | "show",
     tvParams?: TvSearchParams,
+    preferredLanguage?: string,
 ): Promise<AddonSubtitle[]> {
     try {
         const addons = queryClient.getQueryData<{ id: string; url: string; name: string; enabled: boolean; order: number }[]>(["user-addons"]) ?? [];
@@ -207,7 +244,7 @@ async function fetchSubtitlesForMedia(
             }),
         );
 
-        return combineSubtitles(results);
+        return combineSubtitles(results, preferredLanguage);
     } catch {
         return [];
     }
@@ -471,6 +508,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
+        const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
+
         // Build descriptive filename with source metadata
         const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
         const fileName = meta ? `${title} [${meta}]` : title;
@@ -485,7 +524,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 ? { season: pk.season, episode: pk.episode }
                 : undefined;
             // Non-blocking: fetch in background, populate preview store when ready
-            fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams).then((fetched) => {
+            fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
                 if (fetched.length > 0) {
                     usePreviewStore.getState().setDirectSubtitles(fetched);
                 }
@@ -498,7 +537,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
         const syncStore = useDeviceSyncStore.getState();
 
-        const mediaPlayer = useSettingsStore.getState().get("mediaPlayer");
+        const mediaPlayer = !syncStore.activeTarget && titleMemory?.preferredPlayer
+            ? titleMemory.preferredPlayer
+            : useSettingsStore.getState().get("mediaPlayer");
 
         // For browser playback, open the preview dialog immediately (loading state)
         // before resolving the URL, so the user sees instant feedback.
@@ -527,6 +568,19 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         })) {
             // Sent to remote device — close any loading preview
             usePreviewStore.getState().closePreview();
+            if (options?.progressKey?.imdbId) {
+                const streaming = useSettingsStore.getState().get("streaming");
+                const playback = useSettingsStore.getState().get("playback") as PlaybackSettings;
+                rememberTitleMemory(options.progressKey.imdbId, {
+                    preferredAddonId: source.addonId,
+                    preferredLanguage: playback.subtitleLanguage || streaming.preferredLanguage,
+                    qualityProfileId: streaming.profileId,
+                    preferredPlayer: mediaPlayer,
+                    preferredSourceTitle: source.title,
+                    preferredSourceResolution: source.resolution,
+                    preferredSourceQuality: source.quality,
+                });
+            }
             return;
         }
 
@@ -542,6 +596,20 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
         } else {
             openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
+        }
+
+        if (options?.progressKey?.imdbId) {
+            const streaming = useSettingsStore.getState().get("streaming");
+            const playback = useSettingsStore.getState().get("playback") as PlaybackSettings;
+            rememberTitleMemory(options.progressKey.imdbId, {
+                preferredAddonId: source.addonId,
+                preferredLanguage: playback.subtitleLanguage || streaming.preferredLanguage,
+                qualityProfileId: streaming.profileId,
+                preferredPlayer: mediaPlayer,
+                preferredSourceTitle: source.title,
+                preferredSourceResolution: source.resolution,
+                preferredSourceQuality: source.quality,
+            });
         }
     },
 
@@ -672,14 +740,27 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             }
 
-            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults]);
+            const titleMemory = getTitleMemory(imdbId);
+            const subtitleLanguage = titleMemory?.preferredLanguage
+                || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
+                || "english";
+
+            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
             timer.step("fetched-stream-data", {
                 totalSources: allSources.length,
                 subtitles: subtitles.length,
             });
 
-            const streamingSettings = await getEffectiveStreamingSettings();
-            const result = selectBestSource(allSources, streamingSettings);
+            const baseSettings = await getEffectiveStreamingSettings();
+            const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
+            const result = selectBestSource(allSources, streamingSettings, {
+                preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
+                preferredAddon: titleMemory?.preferredAddonId,
+                preferCached: streamingSettings.preferCached,
+                preferredSourceTitle: titleMemory?.preferredSourceTitle,
+                preferredSourceResolution: titleMemory?.preferredSourceResolution,
+                preferredSourceQuality: titleMemory?.preferredSourceQuality,
+            });
             timer.step("selected-source", {
                 hasMatches: result.hasMatches,
                 cachedMatches: result.cachedMatches.length,
@@ -823,10 +904,22 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             }
 
-            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults]);
+            const titleMemory = getTitleMemory(episodeContext.imdbId);
+            const subtitleLanguage = titleMemory?.preferredLanguage
+                || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
+                || "english";
+            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
 
-            const streamingSettings = await getEffectiveStreamingSettings();
-            const result = selectBestSource(allSources, streamingSettings);
+            const baseSettings = await getEffectiveStreamingSettings();
+            const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
+            const result = selectBestSource(allSources, streamingSettings, {
+                preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
+                preferredAddon: titleMemory?.preferredAddonId,
+                preferCached: streamingSettings.preferCached,
+                preferredSourceTitle: titleMemory?.preferredSourceTitle,
+                preferredSourceResolution: titleMemory?.preferredSourceResolution,
+                preferredSourceQuality: titleMemory?.preferredSourceQuality,
+            });
 
             if (result.source) {
                 set({

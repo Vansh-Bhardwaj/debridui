@@ -14,7 +14,7 @@ import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-
 // ── State ──────────────────────────────────────────────────────────────────
 
 let activeSession: { key: ProgressKey; url: string; sessionId: string; seq: number } | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSyncTime = 0;
 let lastSyncedPosition = 0;
 let lastVlcState: string | null = null;
@@ -22,11 +22,30 @@ let lastKnownPosition = 0; // Track last known time for natural-end detection
 let lastHistoryEmitTime = 0;
 let lastHistoryProgress = 0;
 
-const POLL_INTERVAL = 3000; // 3s for responsive progress bar
+const POLL_INTERVAL_PLAYING = 3000;
+const POLL_INTERVAL_PAUSED = 5000;
+const POLL_INTERVAL_IDLE = 7000;
+const POLL_INTERVAL_HIDDEN = 10000;
 const SERVER_SYNC_INTERVAL = 60_000; // 60s for DB writes
 const MIN_PROGRESS_CHANGE = 5; // seconds
 const HISTORY_MIN_INTERVAL = 45_000;
 const HISTORY_MIN_PROGRESS_ADVANCE = 15;
+
+function getPollDelay(state?: string): number {
+    if (typeof document !== "undefined" && document.hidden) return POLL_INTERVAL_HIDDEN;
+    if (state === "playing") return POLL_INTERVAL_PLAYING;
+    if (state === "paused") return POLL_INTERVAL_PAUSED;
+    return POLL_INTERVAL_IDLE;
+}
+
+function schedulePoll(state?: string) {
+    if (!activeSession) return;
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(() => {
+        pollTimer = null;
+        poll();
+    }, getPollDelay(state));
+}
 
 // ── localStorage helpers (same format as use-progress) ─────────────────────
 
@@ -149,6 +168,7 @@ async function sendScrobble(key: ProgressKey, action: "start" | "pause" | "stop"
 
 async function poll() {
     if (!activeSession) return;
+    let nextState: string | undefined;
 
     try {
         const bridge = getVLCBridgeClient();
@@ -156,6 +176,7 @@ async function poll() {
         if (!res.success || !res.data) return;
 
         const { time, length, state } = res.data;
+        nextState = state;
         if (length <= 0) return;
 
         const progressPercent = (time / length) * 100;
@@ -220,9 +241,12 @@ async function poll() {
             lastSyncTime = Date.now();
             lastSyncedPosition = finalPosition;
             stopVLCProgressSync();
+            return;
         }
     } catch {
         // VLC unreachable — keep trying
+    } finally {
+        if (activeSession) schedulePoll(nextState);
     }
 }
 
@@ -243,7 +267,6 @@ export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
     lastVlcState = null;
     lastHistoryEmitTime = 0;
     lastHistoryProgress = 0;
-    pollTimer = setInterval(poll, POLL_INTERVAL);
     // Immediate first poll
     poll();
 }
@@ -251,7 +274,7 @@ export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
 /** Stop tracking. Call when VLC stops or user navigates away. */
 export function stopVLCProgressSync() {
     if (pollTimer) {
-        clearInterval(pollTimer);
+        clearTimeout(pollTimer);
         pollTimer = null;
     }
     // Final sync if we have an active session

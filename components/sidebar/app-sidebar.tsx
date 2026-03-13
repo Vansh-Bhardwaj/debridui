@@ -7,7 +7,7 @@ import { NavMain } from "@/components/sidebar/nav-main";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { AccountSwitcher } from "./account-switcher";
-import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity, Bookmark, History } from "lucide-react";
+import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity, Bookmark, History, Compass } from "lucide-react";
 import { useSearch } from "@/components/mdb/search-provider";
 import { useTraktRecentEpisodes } from "@/hooks/use-trakt";
 
@@ -23,13 +23,13 @@ function WatchlistBadge() {
 
     if (count === 0) return null;
     return (
-        <span className="ml-auto text-[10px] font-medium leading-none bg-primary/15 text-primary px-1.5 py-0.5 rounded-sm">
+        <span className="ml-auto text-[10px] font-medium leading-none text-primary">
             {count}
         </span>
     );
 }
 
-const baseNavMain = [
+const browseNav = [
         {
             title: "Dashboard",
             url: "/dashboard",
@@ -39,6 +39,11 @@ const baseNavMain = [
             title: "Search",
             url: "/search",
             icon: SearchIcon,
+        },
+        {
+            title: "Browse",
+            url: "/discover/browse",
+            icon: Compass,
         },
         {
             title: "Watchlist",
@@ -55,6 +60,9 @@ const baseNavMain = [
             url: "/files",
             icon: FolderOpen,
         },
+    ];
+
+const manageNav = [
         {
             title: "Links",
             url: "/links",
@@ -94,8 +102,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { toggle: toggleSearch } = useSearch();
 
     // Inject live badge into the Watchlist nav item
-    const navMain = useMemo(() =>
-        baseNavMain.map((item) =>
+    const navBrowse = useMemo(() =>
+        browseNav.map((item) =>
             item.title === "Watchlist"
                 ? { ...item, badge: <WatchlistBadge /> }
                 : item
@@ -113,8 +121,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <AccountSwitcher />
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={navMain} onAction={handleNavAction} />
-                <NavMain items={navSecondary} className="mt-auto" variant="subtle" />
+                <NavMain items={navBrowse} onAction={handleNavAction} label="Browse" />
+                <NavMain items={manageNav} onAction={handleNavAction} label="Manage" className="pt-1" />
+                <NavMain items={navSecondary} className="mt-auto" variant="subtle" label="Support" />
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border/50">
                 <NavUser />

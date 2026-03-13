@@ -26,12 +26,10 @@ import {
     type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Gallery } from "@/components/common/gallery";
 import { DISCORD_URL, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ICONS } from "@/lib/constants";
 import { AccountType } from "@/lib/types";
 import { LandingStickyNav } from "@/components/common/landing-sticky-nav";
-import { AuthRedirect } from "@/components/common/auth-redirect";
 
 // Force static generation — zero CPU cost on Cloudflare Workers
 export const dynamic = "force-static";
@@ -133,8 +131,6 @@ const steps = [
 export default function Home() {
     return (
         <div className="min-h-screen">
-            {/* Client-side auth check — redirects logged-in users to dashboard */}
-            <AuthRedirect />
             {/* Sticky navigation — appears after scrolling past hero */}
             <LandingStickyNav />
 
@@ -158,7 +154,7 @@ export default function Home() {
                                     {tech.name}
                                 </span>
                             ))}
-                            <Badge className="tracking-wider transition-none">Open Source</Badge>
+                            <span className="text-xs tracking-widest uppercase text-muted-foreground">Open source</span>
                         </div>
                     </div>
 
@@ -203,6 +199,10 @@ export default function Home() {
                             </Button>
                         </div>
 
+                        <p className="text-xs text-muted-foreground animate-[splash-text_0.5s_0.4s_ease_both]">
+                            Returning users continue to their dashboard. New users can create an account in the next step.
+                        </p>
+
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2 pt-2 text-xs sm:text-sm text-muted-foreground animate-[splash-text_0.5s_0.45s_ease_both]">
                             <span className="w-full sm:w-auto">Supports</span>
                             {Object.values(AccountType).map((type, i) => (
@@ -242,7 +242,7 @@ export default function Home() {
             {/* Highlights strip */}
             <section className="px-6 py-16 md:px-12 md:py-24 lg:px-20">
                 <div className="max-w-6xl mx-auto">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
                         {[
                             { icon: MonitorPlay, label: "Built-in Player", desc: "Watch directly in your browser with codec detection" },
                             { icon: Smartphone, label: "Device Sync", desc: "Control playback across devices, Spotify Connect-style" },
@@ -251,7 +251,7 @@ export default function Home() {
                         ].map((item) => {
                             const Icon = item.icon;
                             return (
-                                <div key={item.label} className="pl-4 border-l border-border/50">
+                                <div key={item.label} className="rounded-sm border border-border/50 bg-muted/20 p-4">
                                     <Icon className="size-5 text-primary mb-3" strokeWidth={1.5} />
                                     <p className="text-sm font-medium mb-1">{item.label}</p>
                                     <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>

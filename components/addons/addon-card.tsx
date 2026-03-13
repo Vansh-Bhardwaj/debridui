@@ -150,6 +150,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                             disabled={isFirst}
                             aria-label={`Move ${addon.name} up`}
                             title="Move up"
+                            className="h-10 w-10 sm:h-9 sm:w-9"
                             data-tv-focusable
                             tabIndex={0}>
                             <ArrowUp className="size-4" />
@@ -163,6 +164,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                             disabled={isLast}
                             aria-label={`Move ${addon.name} down`}
                             title="Move down"
+                            className="h-10 w-10 sm:h-9 sm:w-9"
                             data-tv-focusable
                             tabIndex={0}>
                             <ArrowDown className="size-4" />
@@ -177,6 +179,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                         }}
                         aria-label={`Copy ${addon.name} URL`}
                         title="Copy addon URL"
+                        className="h-10 w-10 sm:h-9 sm:w-9"
                         data-tv-focusable
                         tabIndex={0}>
                         <Share2 className="size-4" />
@@ -185,7 +188,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
                         variant="ghost"
                         size="icon"
                         onClick={() => onRemove(addon)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="h-10 w-10 sm:h-9 sm:w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                         aria-label={`Remove ${addon.name}`}
                         title="Remove addon"
                         data-tv-focusable

@@ -59,6 +59,9 @@ const FILTER_OPTIONS: { value: ResolutionFilter; label: string }[] = [
     { value: "all", label: "All" },
 ];
 
+const INITIAL_VISIBLE_SOURCES = 10;
+const VISIBLE_SOURCES_STEP = 10;
+
 interface SourcesProps {
     imdbId: string;
     mediaType?: "movie" | "show";
@@ -277,6 +280,8 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
     }, [sources]);
 
     const [addonFilter, setAddonFilter] = useState("all");
+    const [visibleByKey, setVisibleByKey] = useState<Record<string, number>>({});
+    const [cachedOnly, setCachedOnly] = useState(false);
 
     // Resolution filter — remembered independently from settings
     const [resolutionFilter, setResolutionFilterRaw] = useState<ResolutionFilter>(getSavedFilter);
@@ -304,6 +309,24 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
         }
         return result;
     }, [sources, addonFilter, resolutionFilter]);
+
+    const cachedCount = useMemo(() => filtered?.filter((s) => s.isCached).length ?? 0, [filtered]);
+    const uncachedCount = useMemo(() => Math.max(0, (filtered?.length ?? 0) - cachedCount), [filtered, cachedCount]);
+
+    const visibleSources = useMemo(() => {
+        if (!filtered?.length) return [];
+        return cachedOnly ? filtered.filter((s) => s.isCached) : filtered;
+    }, [filtered, cachedOnly]);
+
+    const visibleKey = `${addonFilter}:${resolutionFilter}:${cachedOnly ? "cached" : "all"}:${imdbId}:${mediaType}:${tvParams?.season ?? "_"}:${tvParams?.episode ?? "_"}`;
+    const visibleCount = visibleByKey[visibleKey] ?? INITIAL_VISIBLE_SOURCES;
+
+    const displayedSources = useMemo(() => {
+        if (!visibleSources.length) return [];
+        return visibleSources.slice(0, visibleCount);
+    }, [visibleSources, visibleCount]);
+
+    const hasMoreSources = visibleSources.length > displayedSources.length;
 
     // Total unfiltered sources count (after addon filter only)
     const totalSourceCount = useMemo(() => {
@@ -345,6 +368,15 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
 
                 {/* Addon filter + refresh — shown when multiple addons provide sources */}
                 <div className="flex items-center gap-1.5">
+                    <Button
+                        variant={cachedOnly ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCachedOnly((prev) => !prev)}
+                        className="h-8"
+                        data-tv-focusable
+                    >
+                        Cached only
+                    </Button>
                     {addonNames.length > 1 && (
                         <Select value={addonFilter} onValueChange={setAddonFilter}>
                             <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm" data-tv-focusable>
@@ -382,9 +414,19 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     </div>
                 )}
 
-                {!isLoading && filtered?.length === 0 && (
+                {!isLoading && visibleSources.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center px-4 gap-3">
-                        {totalSourceCount > 0 ? (
+                        {filtered && filtered.length > 0 && cachedOnly ? (
+                            <>
+                                <p className="text-sm text-muted-foreground">No cached sources found</p>
+                                <p className="text-xs text-muted-foreground/70">
+                                    {filtered.length} source{filtered.length !== 1 ? "s" : ""} available when uncached is included
+                                </p>
+                                <Button variant="outline" size="sm" onClick={() => setCachedOnly(false)}>
+                                    Show all sources
+                                </Button>
+                            </>
+                        ) : totalSourceCount > 0 ? (
                             <>
                                 <p className="text-sm text-muted-foreground">
                                     No {resolutionFilter === "4k" ? "4K" : resolutionFilter} sources found
@@ -409,9 +451,23 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     </div>
                 )}
 
-                {filtered?.map((source) => (
+                {!isLoading && (filtered?.length ?? 0) > 0 && (
+                    <div className="px-4 py-2 border-b border-border/50 bg-muted/20 text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+                        <span>Showing {displayedSources.length} of {visibleSources.length} sources</span>
+                        <span className="text-border">·</span>
+                        <span>{cachedCount} cached</span>
+                        {uncachedCount > 0 && (
+                            <>
+                                <span className="text-border">·</span>
+                                <span>{uncachedCount} uncached</span>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {displayedSources.map((source, index) => (
                     <SourceRow
-                        key={`${source.addonId}-${source.url ?? "no-url"}`}
+                        key={`${source.addonId}-${source.url ?? source.title}-${index}`}
                         source={source}
                         mediaTitle={mediaTitle}
                         subtitles={subtitles}
@@ -420,6 +476,43 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                         mediaType={mediaType}
                     />
                 ))}
+
+                {!isLoading && (hasMoreSources || visibleCount > INITIAL_VISIBLE_SOURCES) && (
+                    <div className="flex items-center justify-center px-4 py-3 border-t border-border/50 bg-muted/20">
+                        <div className="flex w-full sm:w-auto items-center gap-2">
+                            {visibleCount > INITIAL_VISIBLE_SOURCES && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                        setVisibleByKey((prev) => ({
+                                            ...prev,
+                                            [visibleKey]: INITIAL_VISIBLE_SOURCES,
+                                        }))
+                                    }
+                                    className="flex-1 sm:flex-none"
+                                >
+                                    Show less
+                                </Button>
+                            )}
+                            {hasMoreSources && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                        setVisibleByKey((prev) => ({
+                                            ...prev,
+                                            [visibleKey]: (prev[visibleKey] ?? INITIAL_VISIBLE_SOURCES) + VISIBLE_SOURCES_STEP,
+                                        }))
+                                    }
+                                    className="flex-1 sm:flex-none"
+                                >
+                                    Load more ({Math.min(VISIBLE_SOURCES_STEP, visibleSources.length - displayedSources.length)})
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Failed addons warning */}
                 {!isLoading && failedAddons.length > 0 && (

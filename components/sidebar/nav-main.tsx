@@ -2,7 +2,7 @@
 
 import { type LucideIcon } from "lucide-react";
 
-import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { useSidebar } from "../ui/sidebar";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ export function NavMain({
     onAction,
     className,
     variant = "default",
+    label,
 }: {
     items: {
         title: string;
@@ -28,12 +29,18 @@ export function NavMain({
     onAction?: (action: string) => void;
     className?: string;
     variant?: "default" | "subtle";
+    label?: string;
 }) {
     const { setOpenMobile } = useSidebar();
     const pathname = usePathname();
 
     return (
         <SidebarGroup className={className}>
+            {label && (
+                <SidebarGroupLabel className="text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                    {label}
+                </SidebarGroupLabel>
+            )}
             <SidebarMenu>
                 {items.map((item) => {
                     const isActive = item.url !== "#" && (

@@ -37,9 +37,10 @@ export function SortControls() {
     };
 
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+            <span className="text-xs tracking-widest uppercase text-muted-foreground whitespace-nowrap">Sort</span>
             <Select value={sortBy} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-[180px] border-border/50" id="sort-select">
+                <SelectTrigger className="w-full sm:w-[180px] border-border/50" id="sort-select" aria-label="Sort files by">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -50,8 +51,15 @@ export function SortControls() {
                     ))}
                 </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={handleOrderChange} className="px-2 border-border/50">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOrderChange}
+                className="px-2 border-border/50 min-w-[84px]"
+                aria-label={`Sort order: ${sortOrder === "desc" ? "descending" : "ascending"}. Toggle sort order`}
+            >
                 {sortOrder === "desc" ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+                <span className="ml-1 text-xs hidden sm:inline">{sortOrder === "desc" ? "Desc" : "Asc"}</span>
             </Button>
         </div>
     );

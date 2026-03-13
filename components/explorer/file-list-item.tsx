@@ -7,7 +7,6 @@ import { formatSize, formatRelativeTime, formatSpeed, cn } from "@/lib/utils";
 import { StatusBadge } from "../common/display";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileItemContextMenu } from "./file-item-context-menu";
-import { Badge } from "../ui/badge";
 
 interface FileListItemProps {
     file: DebridFile;
@@ -186,9 +185,9 @@ export const FileListItem = memo(function FileListItem({
                             </div>
                             <div className="flex items-center gap-2">
                                 {showProgress && (
-                                    <Badge className="px-1 md:px-1.5 pb-0 border-0 rounded-sm text-xs md:text-sm bg-primary/10 text-primary">
+                                    <span className="text-xs font-medium text-primary">
                                         {file.progress?.toFixed(2)}%
-                                    </Badge>
+                                    </span>
                                 )}
                                 <StatusBadge status={file.status} hide="completed" />
                             </div>

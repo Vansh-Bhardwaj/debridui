@@ -350,7 +350,9 @@ export function useTVFocus() {
         if (!tvMode) return;
 
         let rafId: number;
+        let lastProcessedAt = 0;
         const prevButtons = new Map<number, boolean[]>();
+        const FRAME_INTERVAL_MS = 1000 / 30;
 
         // Cache video element to avoid DOM queries every frame (~60/s)
         let cachedVideo: HTMLVideoElement | null = null;
@@ -369,6 +371,13 @@ export function useTVFocus() {
         };
 
         const poll = () => {
+            const frameNow = performance.now();
+            if (document.hidden || frameNow - lastProcessedAt < FRAME_INTERVAL_MS) {
+                rafId = requestAnimationFrame(poll);
+                return;
+            }
+            lastProcessedAt = frameNow;
+
             const gamepads = navigator.getGamepads?.();
             if (!gamepads) { rafId = requestAnimationFrame(poll); return; }
 

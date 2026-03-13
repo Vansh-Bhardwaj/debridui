@@ -187,7 +187,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                         Website
                                     </Link>
                                 )}
-                                {media.ids?.imdb && (
+                                {!!media.ids?.imdb && (
                                     <Link
                                         href={`https://www.imdb.com/title/${media.ids?.imdb}`}
                                         target="_blank"
@@ -200,7 +200,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                         IMDb
                                     </Link>
                                 )}
-                                {media.ids.tmdb && (
+                                {!!media.ids.tmdb && (
                                     <Link
                                         href={`https://www.themoviedb.org/${type}/${media.ids.tmdb}`}
                                         target="_blank"
@@ -213,7 +213,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                         TMDB
                                     </Link>
                                 )}
-                                {media.ids.trakt && (
+                                {!!media.ids.trakt && (
                                     <Link
                                         href={`https://trakt.tv/${type === "movie" ? "movies" : "shows"}/${media.ids.trakt}`}
                                         target="_blank"
@@ -226,7 +226,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                         Trakt
                                     </Link>
                                 )}
-                                {type === "show" && media.ids?.imdb && (
+                                {type === "show" && !!media.ids?.imdb && (
                                     <Link
                                         href={`https://tvcharts.co/show/${media.ids?.imdb}`}
                                         target="_blank"

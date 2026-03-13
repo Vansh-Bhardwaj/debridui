@@ -217,6 +217,11 @@ export const DevicePicker = memo(function DevicePicker() {
                 {hasDevices && (
                     <>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem className="focus:bg-transparent cursor-default" onSelect={(e) => e.preventDefault()}>
+                            <p className="text-xs text-muted-foreground">
+                                Select a device to hand off current playback instantly
+                            </p>
+                        </DropdownMenuItem>
                         {devices.map((device) => (
                             <div key={device.id}>
                                 <DropdownMenuItem

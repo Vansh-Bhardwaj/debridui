@@ -12,10 +12,10 @@ import { MediaHeader } from "./media-header";
 import { RelatedMedia } from "./related-media";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, memo, useCallback, useMemo } from "react";
+import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
-import { CalendarDays, Tv, Eye, EyeOff, Loader2, Globe, Radio } from "lucide-react";
+import { CalendarDays, Tv, Eye, EyeOff, Loader2, Globe, Radio, ArrowUp, ArrowDown } from "lucide-react";
 import { traktClient } from "@/lib/trakt";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -170,6 +170,26 @@ const EpisodesSection = memo(function EpisodesSection({
 
     const displayEpisodes = preloadedEpisodes ?? episodes;
 
+    const [chunkIndex, setChunkIndex] = useState(0);
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+    useEffect(() => {
+        setChunkIndex(0);
+        setSortOrder("asc");
+    }, [selectedSeason]);
+
+    const CHUNK_SIZE = 100;
+
+    const processedEpisodes = useMemo(() => {
+        if (!displayEpisodes) return null;
+        const start = chunkIndex * CHUNK_SIZE;
+        let slice = displayEpisodes.slice(start, start + CHUNK_SIZE);
+        if (sortOrder === "desc") {
+            slice = [...slice].reverse();
+        }
+        return slice;
+    }, [displayEpisodes, chunkIndex, sortOrder]);
+
     // Build a set of watched episode numbers for the selected season
     const watchedSet = useMemo(() => {
         const set = new Set<number>();
@@ -182,16 +202,19 @@ const EpisodesSection = memo(function EpisodesSection({
         return set;
     }, [watchedProgress, selectedSeason]);
 
-    if (!isLoading && !preloadedEpisodes && (!displayEpisodes || displayEpisodes.length === 0)) return null;
-
-    const seasonLabel = label ?? (selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`);
     const skeletonCount = Math.min(episodeCount || 3, 20);
     const loading = !preloadedEpisodes && isLoading;
-    const allWatched = displayEpisodes ? watchedSet.size >= displayEpisodes.length : false;
+
+    if (!loading && (!displayEpisodes || displayEpisodes.length === 0)) return null;
+
+    const seasonLabel = label ?? (selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`);
+    const allWatched = processedEpisodes && processedEpisodes.length > 0
+        ? processedEpisodes.every(ep => watchedSet.has(ep.number)) 
+        : false;
 
     const handleMarkSeasonWatched = () => {
-        if (!showTraktId || !displayEpisodes) return;
-        const epNumbers = displayEpisodes.map((e) => e.number);
+        if (!showTraktId || !processedEpisodes) return;
+        const epNumbers = processedEpisodes.map((e) => e.number);
         if (allWatched) {
             unmarkWatched.mutate({ showTraktId, showId: mediaId, season: selectedSeason, episodes: epNumbers });
         } else {
@@ -200,14 +223,49 @@ const EpisodesSection = memo(function EpisodesSection({
         }
     };
 
+    const totalChunks = displayEpisodes ? Math.ceil(displayEpisodes.length / CHUNK_SIZE) : 0;
+    const needsChunking = totalChunks > 1;
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-light text-muted-foreground" id="sources">
                     {seasonLabel}
                 </h3>
-                <div className="flex items-center gap-3">
-                    {showTraktId && displayEpisodes && displayEpisodes.length > 0 && (
+                <div className="flex flex-wrap items-center justify-end gap-3 flex-1 ml-4">
+                    {needsChunking && (
+                        <div className="flex items-center gap-2 mr-1">
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setSortOrder(s => s === "asc" ? "desc" : "asc")}
+                                className="h-7 w-7"
+                                aria-label="Toggle Sort Order"
+                                title="Toggle sorting order"
+                            >
+                                {sortOrder === "desc" ? <ArrowDown className="size-4 text-muted-foreground" /> : <ArrowUp className="size-4 text-muted-foreground" />}
+                            </Button>
+                            <Select value={chunkIndex.toString()} onValueChange={(v) => setChunkIndex(parseInt(v, 10))}>
+                                <SelectTrigger className="h-7 w-[90px] sm:w-[110px] text-xs px-2">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: totalChunks }).map((_, i) => {
+                                        const startIdx = i * CHUNK_SIZE;
+                                        const endIdx = Math.min((i + 1) * CHUNK_SIZE, displayEpisodes!.length) - 1;
+                                        const startEp = displayEpisodes![startIdx].number;
+                                        const endEp = displayEpisodes![endIdx].number;
+                                        return (
+                                            <SelectItem key={i} value={i.toString()}>
+                                                Ep {startEp}-{endEp}
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    {showTraktId && processedEpisodes && processedEpisodes.length > 0 && (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -221,10 +279,10 @@ const EpisodesSection = memo(function EpisodesSection({
                             ) : (
                                 <Eye className="size-3" />
                             )}
-                            {allWatched ? "Unmark All" : "Mark All Watched"}
+                            {allWatched ? "Unmark" : "Mark"} {needsChunking ? "Shown" : "All"}
                         </Button>
                     )}
-                    <span className="text-xs tracking-wider uppercase text-muted-foreground">
+                    <span className="text-xs tracking-wider uppercase text-muted-foreground hidden sm:inline-flex">
                         {watchedSet.size > 0 && (
                             <span className="text-primary/80 normal-case">{watchedSet.size}/{displayEpisodes?.length ?? "?"} watched <span className="text-border mx-1">·</span></span>
                         )}
@@ -246,7 +304,7 @@ const EpisodesSection = memo(function EpisodesSection({
                               </div>
                           </div>
                       ))
-                    : displayEpisodes?.map((episode) => {
+                    : processedEpisodes?.map((episode) => {
                           const isWatched = watchedSet.has(episode.number);
                           // "New" = aired in last 7 days and not watched
                           const isNew = !isWatched && !!episode.first_aired &&
@@ -287,8 +345,9 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     const [selectedGroup, setSelectedGroup] = useState<string>(groupParam || "");
     const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(partParam ? parseInt(partParam, 10) : 0);
 
-    const { data: seasons, isLoading: seasonsLoading } = useTraktShowSeasons(mediaId);
-    const { data: watchedProgress } = useTraktShowProgress(mediaId);
+    const baseId = media.ids?.slug || media.ids?.imdb || mediaId;
+    const { data: seasons, isLoading: seasonsLoading } = useTraktShowSeasons(baseId);
+    const { data: watchedProgress } = useTraktShowProgress(baseId);
 
     // TMDB episode groups (only when user has TMDB key configured)
     const tmdbId = media.ids?.tmdb;
@@ -422,7 +481,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                                                   season={season}
                                                   isSelected={selectedSeason === season.number}
                                                   onClick={() => handleSeasonChange(season.number)}
-                                                  mediaId={mediaId}
+                                                  mediaId={baseId}
                                               />
                                           ))}
                                 </div>
@@ -432,7 +491,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                         <EpisodesSection
                             selectedSeason={selectedSeason}
                             episodeCount={episodeCount}
-                            mediaId={mediaId}
+                            mediaId={baseId}
                             media={media}
                             watchedProgress={watchedProgress}
                             showTraktId={media.ids?.trakt}
@@ -471,7 +530,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
 
                                     <EpisodesSection
                                         selectedSeason={filteredGroups[selectedGroupIndex]?.number ?? 0}
-                                        mediaId={mediaId}
+                                        mediaId={baseId}
                                         media={media}
                                         label={filteredGroups[selectedGroupIndex]?.title}
                                         preloadedEpisodes={groupEpisodes}
@@ -506,12 +565,12 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
 
             <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Cast & Crew" />
-                <PeopleSection mediaId={mediaId} type="shows" />
+                <PeopleSection mediaId={baseId} type="shows" />
             </section>
 
             <section className="space-y-6" data-tv-section>
                 <SectionDivider label="Related Shows" />
-                <RelatedMedia mediaId={mediaId} type="show" />
+                <RelatedMedia mediaId={baseId} type="show" />
             </section>
         </div>
     );

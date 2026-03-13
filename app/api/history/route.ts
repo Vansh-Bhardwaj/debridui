@@ -4,10 +4,12 @@ import { db } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
 import { eq, desc, and, count, isNull } from "drizzle-orm";
 
-const HISTORY_MERGE_WINDOW_MS = 15 * 60 * 1000;
+const HISTORY_MERGE_WINDOW_MS = 3 * 60 * 60 * 1000;
 const HISTORY_RATE_WINDOW_MS = 60_000;
 const HISTORY_MAX_WRITES_PER_WINDOW = 40;
 const historyWriteTimestamps = new Map<string, number[]>();
+const sessionHistoryMap = new Map<string, { id: string; updatedAt: number }>();
+const SESSION_MAP_TTL_MS = 6 * 60 * 60 * 1000;
 
 function isHistoryRateLimited(userId: string): boolean {
     const now = Date.now();
@@ -26,6 +28,41 @@ function isHistoryRateLimited(userId: string): boolean {
     }
 
     return false;
+}
+
+function getSessionHistoryKey(
+    userId: string,
+    sessionId: string,
+    imdbId: string,
+    type: "movie" | "show",
+    season?: number,
+    episode?: number,
+) {
+    return `${userId}:${sessionId}:${imdbId}:${type}:${season ?? "_"}:${episode ?? "_"}`;
+}
+
+function getSessionHistoryId(key: string): string | null {
+    const entry = sessionHistoryMap.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.updatedAt > SESSION_MAP_TTL_MS) {
+        sessionHistoryMap.delete(key);
+        return null;
+    }
+    entry.updatedAt = Date.now();
+    sessionHistoryMap.set(key, entry);
+    return entry.id;
+}
+
+function setSessionHistoryId(key: string, id: string) {
+    sessionHistoryMap.set(key, { id, updatedAt: Date.now() });
+    if (sessionHistoryMap.size > 5000) {
+        const now = Date.now();
+        for (const [k, v] of sessionHistoryMap.entries()) {
+            if (now - v.updatedAt > SESSION_MAP_TTL_MS) {
+                sessionHistoryMap.delete(k);
+            }
+        }
+    }
 }
 
 // GET /api/history?limit=20&offset=0 — paginated watch history, newest first
@@ -90,7 +127,7 @@ export async function POST(request: NextRequest) {
             eventType?: "pause" | "stop" | "complete" | "session_end";
             sessionId?: string;
         };
-        const { imdbId, type, season, episode, fileName, progressSeconds, durationSeconds, eventType } = body;
+        const { imdbId, type, season, episode, fileName, progressSeconds, durationSeconds, eventType, sessionId } = body;
 
         if (!imdbId || !type || typeof progressSeconds !== "number" || typeof durationSeconds !== "number") {
             return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
@@ -135,6 +172,37 @@ export async function POST(request: NextRequest) {
             conditions.push(eq(watchHistory.episode, episode));
         }
 
+        const sessionKey = sessionId
+            ? getSessionHistoryKey(session.user.id, sessionId, imdbId, type, season ?? undefined, episode ?? undefined)
+            : null;
+
+        // Fast path: if this playback run already mapped to a history row, update that row.
+        if (sessionKey) {
+            const knownId = getSessionHistoryId(sessionKey);
+            if (knownId) {
+                const [known] = await db
+                    .select()
+                    .from(watchHistory)
+                    .where(and(eq(watchHistory.id, knownId), eq(watchHistory.userId, session.user.id)))
+                    .limit(1);
+
+                if (known) {
+                    await db
+                        .update(watchHistory)
+                        .set({
+                            progressSeconds: Math.max(known.progressSeconds, normalizedProgress),
+                            durationSeconds: Math.max(known.durationSeconds, safeDuration),
+                            fileName: known.fileName ?? fileName ?? null,
+                            watchedAt: new Date(),
+                        })
+                        .where(and(eq(watchHistory.id, known.id), eq(watchHistory.userId, session.user.id)));
+
+                    setSessionHistoryId(sessionKey, known.id);
+                    return NextResponse.json({ success: true, merged: true, sessionMerged: true });
+                }
+            }
+        }
+
         const [latest] = await db
             .select()
             .from(watchHistory)
@@ -142,7 +210,9 @@ export async function POST(request: NextRequest) {
             .orderBy(desc(watchHistory.watchedAt))
             .limit(1);
 
-        if (latest && Date.now() - new Date(latest.watchedAt).getTime() <= HISTORY_MERGE_WINDOW_MS) {
+        const shouldMerge = latest && Date.now() - new Date(latest.watchedAt).getTime() <= HISTORY_MERGE_WINDOW_MS;
+
+        if (shouldMerge && latest) {
             const progressDelta = Math.abs((latest.progressSeconds ?? 0) - normalizedProgress);
             const durationDelta = Math.abs((latest.durationSeconds ?? 0) - safeDuration);
             if (progressDelta <= 2 && durationDelta <= 2 && Date.now() - new Date(latest.watchedAt).getTime() <= 30_000) {
@@ -159,10 +229,14 @@ export async function POST(request: NextRequest) {
                 })
                 .where(and(eq(watchHistory.id, latest.id), eq(watchHistory.userId, session.user.id)));
 
+            if (sessionKey) setSessionHistoryId(sessionKey, latest.id);
+
             return NextResponse.json({ success: true, merged: true });
         }
 
+        const id = crypto.randomUUID();
         await db.insert(watchHistory).values({
+            id,
             userId: session.user.id,
             imdbId,
             type,
@@ -173,6 +247,8 @@ export async function POST(request: NextRequest) {
             durationSeconds: safeDuration,
             watchedAt: new Date(),
         });
+
+        if (sessionKey) setSessionHistoryId(sessionKey, id);
 
         return NextResponse.json({ success: true });
     } catch (error) {

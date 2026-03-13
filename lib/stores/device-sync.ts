@@ -61,6 +61,8 @@ interface DeviceSyncState {
     setEnabled: (enabled: boolean) => void;
     /** Select a device as the playback target. null = play locally on this device. */
     setActiveTarget: (deviceId: string | null) => void;
+    /** Attempt to hand off current local playback to a remote target immediately. */
+    handoffCurrentPlayback: (targetId: string) => Promise<boolean>;
     /** Attempt to play on the active target. Returns true if intercepted (remote), false if should play locally. */
     playOnTarget: (payload: TransferPayload) => boolean;
 
@@ -398,6 +400,31 @@ function handleTransfer(playback: TransferPayload, fromName: string) {
     });
 }
 
+async function buildCurrentPlaybackPayload(): Promise<TransferPayload | null> {
+    const { usePreviewStore } = await import("@/lib/stores/preview");
+    const preview = usePreviewStore.getState();
+    const video = typeof document !== "undefined" ? document.querySelector("video") : null;
+
+    if (!preview.directUrl || !preview.directTitle) return null;
+
+    const payload: TransferPayload = {
+        url: preview.directUrl,
+        title: preview.directTitle,
+        imdbId: preview.progressKey?.imdbId,
+        mediaType: preview.progressKey?.type,
+        season: preview.progressKey?.season,
+        episode: preview.progressKey?.episode,
+        subtitles: preview.directSubtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
+    };
+
+    if (video instanceof HTMLVideoElement) {
+        payload.progressSeconds = Number.isFinite(video.currentTime) ? video.currentTime : undefined;
+        payload.durationSeconds = Number.isFinite(video.duration) ? video.duration : undefined;
+    }
+
+    return payload;
+}
+
 // ── Store ──────────────────────────────────────────────────────────────────
 
 export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
@@ -431,9 +458,25 @@ export const useDeviceSyncStore = create<DeviceSyncState>()((set, get) => ({
                 description: "Content will play on the selected device",
                 duration: 2000,
             });
+
+            void get().handoffCurrentPlayback(deviceId);
         } else if (!deviceId) {
             toast.info("Playing on this device", { duration: 2000 });
         }
+    },
+
+    handoffCurrentPlayback: async (targetId) => {
+        if (!get().enabled || !wsClient) return false;
+
+        const payload = await buildCurrentPlaybackPayload();
+        if (!payload) return false;
+
+        get().transferPlayback(targetId, payload);
+        toast.success("Instant handoff sent", {
+            description: payload.title,
+            duration: 2200,
+        });
+        return true;
     },
 
     playOnTarget: (payload) => {

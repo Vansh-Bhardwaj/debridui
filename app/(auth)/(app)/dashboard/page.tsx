@@ -2,6 +2,7 @@
 export const dynamic = "force-static";
 
 import Image from "next/image";
+import Link from "next/link";
 import nextDynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
@@ -130,9 +131,35 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                         <SearchIcon className="size-4 text-muted-foreground/60 group-hover:text-foreground transition-colors duration-300" />
                         <span className="flex-1 text-left">Search movies, shows, files...</span>
                         <kbd className="hidden sm:inline-flex h-6 items-center gap-1 rounded-sm border border-border/50 bg-muted/30 px-2 font-mono text-xs text-muted-foreground">
-                            ⌘K
+                            Ctrl/Cmd+K
                         </kbd>
                     </button>
+                </div>
+
+                <div
+                    className="flex flex-wrap items-center gap-2 animate-in fade-in-0 motion-reduce:animate-none"
+                    style={{ animationDuration: "600ms", animationDelay: "380ms", animationFillMode: "backwards" }}>
+                    <Link
+                        href="/files"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                        Your Files
+                    </Link>
+                    <Link
+                        href="/discover"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                        Discover
+                    </Link>
+                    <Link
+                        href="/watchlist"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                        Watchlist
+                    </Link>
                 </div>
             </div>
         </section>
@@ -381,7 +408,14 @@ const DashboardPage = memo(function DashboardPage() {
             </div>
 
             {/* Content Sections with lazy loading */}
-            <div className="lg:px-6 space-y-16">
+            <div className="lg:px-6 space-y-12 md:space-y-16">
+                {!tvMode && (
+                    <div className="flex items-center gap-4">
+                        <div className="h-px w-8 bg-primary" />
+                        <span className="text-xs tracking-widest uppercase text-muted-foreground">Browse</span>
+                    </div>
+                )}
+
                 {/* For You — personalized recommendations (only shown when Trakt connected + has watch history) */}
                 <LazyTraktSection label="For You" icon={ICON_HEART} delay={0}>
                     {(visible) => <ForYouSection visible={visible} />}

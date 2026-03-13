@@ -61,6 +61,8 @@ export default function OnboardingPage() {
                                 alt="DebridUI"
                                 width={48}
                                 height={48}
+                                loading="eager"
+                                priority
                                 className="invert dark:invert-0"
                             />
                         </div>

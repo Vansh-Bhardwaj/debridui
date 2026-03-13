@@ -6,6 +6,6 @@ import { useEffect } from "react";
 
 export default function DiscoverIndex() {
     const router = useRouter();
-    useEffect(() => { router.replace("/dashboard"); }, [router]);
+    useEffect(() => { router.replace("/discover/browse"); }, [router]);
     return null;
 }

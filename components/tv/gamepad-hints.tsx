@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSettingsStore } from "@/lib/stores/settings";
 
 const IDLE_TIMEOUT = 5000; // Hide after 5s of inactivity
+const INPUT_POLL_INTERVAL = 120;
 
 interface HintItem {
     label: string;
@@ -75,10 +76,10 @@ export function GamepadHints() {
     // Show on any gamepad input
     useEffect(() => {
         if (!tvMode || !gamepadConnected) return;
-        let rafId: number;
         const prevButtons = new Map<number, boolean[]>();
 
         const poll = () => {
+            if (document.hidden) return;
             const gamepads = navigator.getGamepads?.();
             if (gamepads) {
                 for (const gp of gamepads) {
@@ -89,10 +90,10 @@ export function GamepadHints() {
                     prevButtons.set(gp.index, cur);
                 }
             }
-            rafId = requestAnimationFrame(poll);
         };
-        rafId = requestAnimationFrame(poll);
-        return () => cancelAnimationFrame(rafId);
+
+        const id = setInterval(poll, INPUT_POLL_INTERVAL);
+        return () => clearInterval(id);
     }, [tvMode, gamepadConnected]);
 
     if (!tvMode || !gamepadConnected || hasVideo) return null;

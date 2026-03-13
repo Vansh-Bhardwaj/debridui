@@ -634,6 +634,18 @@ export class TraktClient {
             .sort((a, b) => b.score - a.score);
     }
 
+    /**
+     * Search for Trakt media by TMDB ID
+     */
+    public async searchByTmdbId(
+        id: number | string,
+        type: "movie" | "show",
+        extended = "full,images"
+    ): Promise<TraktSearchResult[]> {
+        const endpoint = `search/tmdb/${id}?type=${type}&extended=${extended}`;
+        const results = await this.makeRequest<TraktSearchResult[]>(endpoint, {}, false);
+        return results;
+    }
     // Convenience Methods
     /**
      * Get trending movies

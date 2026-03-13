@@ -53,6 +53,7 @@ export const MediaSection = memo(function MediaSection({
     const effectiveRows = tvMode ? 1 : rows;
     const maxItems = 20;
     const filteredItems = useMemo(() => items?.slice(0, maxItems).filter((item) => item.movie || item.show) ?? [], [items, maxItems]);
+    const itemCount = filteredItems.length;
     const gridRows = effectiveRows === 1 ? "grid-rows-1" : "grid-rows-2";
 
     // TV mode: larger card columns for 10-foot viewing
@@ -86,7 +87,11 @@ export const MediaSection = memo(function MediaSection({
         <section className={cn("space-y-4", className)} data-tv-section>
             {/* Section Header */}
             <div className="flex items-end justify-between gap-4">
-                <h2 className="text-sm tracking-widest uppercase text-muted-foreground">{title}</h2>
+                <div className="flex items-center gap-2 text-sm tracking-widest uppercase text-muted-foreground">
+                    <h2>{title}</h2>
+                    {!isLoading && itemCount > 0 && <span className="text-border">·</span>}
+                    {!isLoading && itemCount > 0 && <span>{itemCount}</span>}
+                </div>
                 {viewAllHref && (
                     <Link
                         href={viewAllHref}

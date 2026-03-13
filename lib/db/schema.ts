@@ -84,6 +84,7 @@ export const watchHistory = pgTable(
         type: text("type", { enum: ["movie", "show"] }).notNull(),
         season: integer("season"),
         episode: integer("episode"),
+        sessionId: text("session_id"),
         fileName: text("file_name"),
         progressSeconds: integer("progress_seconds").notNull().default(0),
         durationSeconds: integer("duration_seconds").notNull().default(0),
@@ -92,6 +93,7 @@ export const watchHistory = pgTable(
     (table) => [
         index("watch_history_userId_idx").on(table.userId),
         index("watch_history_watchedAt_idx").on(table.watchedAt),
+        index("watch_history_session_id_idx").on(table.sessionId),
     ]
 );
 

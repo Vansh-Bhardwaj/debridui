@@ -139,6 +139,27 @@ export interface TMDBCollectionDetails {
     parts: TMDBMovieSummary[];
 }
 
+export interface TMDBTVSummary {
+    id: number;
+    name: string;
+    overview?: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+    first_air_date?: string;
+    vote_average: number;
+    vote_count: number;
+    popularity: number;
+    genre_ids: number[];
+    origin_country?: string[];
+}
+
+export interface TMDBDiscoverResponse<T> {
+    page: number;
+    total_pages: number;
+    total_results: number;
+    results: T[];
+}
+
 export interface TMDBClientConfig {
     apiKey: string;
     baseUrl?: string;
@@ -232,6 +253,31 @@ export class TMDBClient {
         }
 
         return null;
+    }
+
+    /**
+     * Discover movies via TMDB's /discover/movie endpoint.
+     * Accepts any filter param TMDB supports (with_genres, with_origin_country, vote_count.gte, etc).
+     */
+    public async discoverMovies(
+        params: Record<string, string | number> = {}
+    ): Promise<TMDBDiscoverResponse<TMDBMovieSummary>> {
+        return this.makeRequest<TMDBDiscoverResponse<TMDBMovieSummary>>("/discover/movie", {
+            sort_by: "popularity.desc",
+            ...params,
+        });
+    }
+
+    /**
+     * Discover TV shows via TMDB's /discover/tv endpoint.
+     */
+    public async discoverTV(
+        params: Record<string, string | number> = {}
+    ): Promise<TMDBDiscoverResponse<TMDBTVSummary>> {
+        return this.makeRequest<TMDBDiscoverResponse<TMDBTVSummary>>("/discover/tv", {
+            sort_by: "popularity.desc",
+            ...params,
+        });
     }
 
     public async getCollection(collectionId: number): Promise<TMDBCollectionDetails> {

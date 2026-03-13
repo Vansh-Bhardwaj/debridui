@@ -505,14 +505,23 @@ export function useAddonCatalogDefs() {
 /**
  * Fetch content for a single addon catalog.
  * Returns TraktMediaItem[] for reuse with MediaSection / MediaCard.
+ * Accepts optional `extra` params (e.g. `{ genre: "Action" }`) for filtered queries.
  */
-export function useAddonCatalog(catalog: AddonCatalogDef | null, enabled = true): UseQueryResult<TraktMediaItem[]> {
+export function useAddonCatalog(
+    catalog: AddonCatalogDef | null,
+    enabled = true,
+    extra?: Record<string, string>
+): UseQueryResult<TraktMediaItem[]> {
+    // Stabilise `extra` by serialising to a key — avoids new-object-every-render issues
+    const extraKey = extra ? Object.entries(extra).sort().map(([k, v]) => `${k}=${v}`).join("&") : "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const stableExtra = useMemo(() => extra, [extraKey]);
     return useQuery({
-        queryKey: ["addon", catalog?.addonId, "catalog", catalog?.type, catalog?.id],
+        queryKey: ["addon", catalog?.addonId, "catalog", catalog?.type, catalog?.id, stableExtra ?? null],
         queryFn: async () => {
             if (!catalog) return [];
             const client = new AddonClient({ url: catalog.addonUrl });
-            const res = await client.fetchCatalog(catalog.type, catalog.id);
+            const res = await client.fetchCatalog(catalog.type, catalog.id, stableExtra);
             return catalogMetasToMediaItems(res.metas);
         },
         enabled: enabled && !!catalog,
@@ -529,4 +538,40 @@ export function useAddonCatalogDef(addonId: string, type: string, catalogId: str
         [catalogs, addonId, type, catalogId]
     );
     return { data: catalog, isLoading };
+}
+
+/**
+ * Get the available genre options from all browseable addon catalogs.
+ * Reads manifest `catalogs[].extra[].options` where extra.name is "genre".
+ */
+export function useAddonCatalogGenres(): string[] {
+    const { data: addons = [] } = useUserAddons();
+
+    const enabledAddons = useMemo(
+        () => addons.filter((a: Addon) => a.enabled && a.showCatalogs),
+        [addons]
+    );
+
+    const manifestQueries = useQueries({
+        queries: enabledAddons.map((addon: Addon) => ({
+            ...manifestQueryOptions(addon),
+            enabled: true,
+        })),
+    });
+
+    return useMemo(() => {
+        const genres = new Set<string>();
+        for (const q of manifestQueries) {
+            const manifest = q.data;
+            if (!manifest?.catalogs) continue;
+            for (const cat of manifest.catalogs) {
+                for (const ext of cat.extra ?? []) {
+                    if (ext.name === "genre" && ext.options) {
+                        for (const opt of ext.options) genres.add(opt);
+                    }
+                }
+            }
+        }
+        return Array.from(genres).sort();
+    }, [manifestQueries]);
 }

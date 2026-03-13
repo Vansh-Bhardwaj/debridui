@@ -105,7 +105,7 @@ export const PairDialog = memo(function PairDialog({
                     <DialogTitle>Connect a Device</DialogTitle>
                     <DialogDescription>
                         Open this link on your TV, tablet or other device to connect it to your session.
-                        All connected devices can control playback on each other.
+                        All connected devices can control playback on each other, and selecting a target performs instant handoff.
                     </DialogDescription>
                 </DialogHeader>
 

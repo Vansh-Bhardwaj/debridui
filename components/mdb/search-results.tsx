@@ -10,6 +10,10 @@ import { SearchMediaItem } from "./search-media-item";
 import { SearchSourceItem } from "./search-source-item";
 import { SectionDivider } from "@/components/common/section-divider";
 import { cn } from "@/lib/utils";
+import { useMemo, useState } from "react";
+
+const INITIAL_VISIBLE_SOURCE_RESULTS = 10;
+const VISIBLE_SOURCE_RESULTS_STEP = 10;
 
 interface SearchResultsProps {
     query: string;
@@ -65,6 +69,14 @@ export function SearchResults({
     const isQueryLoading = isFileSearching || isTraktSearching || isSourceSearching;
     const bothLoaded = !isFileSearching && !isTraktSearching && !isSourceSearching;
     const hasAnyResults = hasFileResults || hasTraktResults || hasSourceResults;
+    const [visibleSourcesByKey, setVisibleSourcesByKey] = useState<Record<string, number>>({});
+    const sourceVisibleKey = `${variant}:${trimmedQuery}:${sourceResults?.length ?? 0}`;
+    const visibleSourceCount = visibleSourcesByKey[sourceVisibleKey] ?? INITIAL_VISIBLE_SOURCE_RESULTS;
+    const visibleSourceResults = useMemo(
+        () => sourceResults?.slice(0, visibleSourceCount) ?? [],
+        [sourceResults, visibleSourceCount]
+    );
+    const hasMoreSourceResults = (sourceResults?.length ?? 0) > visibleSourceResults.length;
 
     // Show initial state when query is too short
     if (trimmedQuery.length <= 2) {
@@ -134,9 +146,30 @@ export function SearchResults({
                             <CommandGroup className="space-y-3 p-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                                 <span className="text-xs tracking-widest uppercase text-muted-foreground">Sources</span>
                                 <div className="border border-border/50 rounded-sm overflow-hidden">
-                                    {sourceResults.map((result) => (
+                                    <div className="px-3 py-2 border-b border-border/50 bg-muted/20 text-xs text-muted-foreground">
+                                        Showing {visibleSourceResults.length} of {sourceResults.length} sources
+                                    </div>
+                                    {visibleSourceResults.map((result) => (
                                         <SearchSourceItem key={result.hash} result={result} variant="modal" />
                                     ))}
+                                    {hasMoreSourceResults && (
+                                        <div className="flex items-center justify-center px-3 py-3 border-t border-border/50 bg-muted/20">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setVisibleSourcesByKey((prev) => ({
+                                                        ...prev,
+                                                        [sourceVisibleKey]:
+                                                            (prev[sourceVisibleKey] ?? INITIAL_VISIBLE_SOURCE_RESULTS) +
+                                                            VISIBLE_SOURCE_RESULTS_STEP,
+                                                    }))
+                                                }
+                                                className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                            >
+                                                Load more sources ({Math.min(VISIBLE_SOURCE_RESULTS_STEP, sourceResults.length - visibleSourceResults.length)})
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </CommandGroup>
                         )}
@@ -216,9 +249,30 @@ export function SearchResults({
                         <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Sources" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
-                                {sourceResults.map((result) => (
+                                <div className="px-3 py-2 border-b border-border/50 bg-muted/20 text-xs text-muted-foreground">
+                                    Showing {visibleSourceResults.length} of {sourceResults.length} sources
+                                </div>
+                                {visibleSourceResults.map((result) => (
                                     <SearchSourceItem key={result.hash} result={result} variant="page" />
                                 ))}
+                                {hasMoreSourceResults && (
+                                    <div className="flex items-center justify-center px-3 py-3 border-t border-border/50 bg-muted/20">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setVisibleSourcesByKey((prev) => ({
+                                                    ...prev,
+                                                    [sourceVisibleKey]:
+                                                        (prev[sourceVisibleKey] ?? INITIAL_VISIBLE_SOURCE_RESULTS) +
+                                                        VISIBLE_SOURCE_RESULTS_STEP,
+                                                }))
+                                            }
+                                            className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                        >
+                                            Load more sources ({Math.min(VISIBLE_SOURCE_RESULTS_STEP, sourceResults.length - visibleSourceResults.length)})
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </section>
                     )}

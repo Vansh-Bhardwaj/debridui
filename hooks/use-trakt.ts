@@ -180,6 +180,38 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
     return useQuery({
         queryKey: ["trakt", "media", slug, type, { tmdbFallback: !!tmdbApiKey }],
         queryFn: async () => {
+            // Handle TMDB IDs from browse page (format: "title-year-tmdb-{id}")
+            const tmdbMatch = slug.match(/-tmdb-(\d+)$/);
+            if (tmdbMatch) {
+                const tmdbId = parseInt(tmdbMatch[1], 10);
+
+                // 1. Ask Trakt itself to resolve the TMDB ID to get a real slug
+                try {
+                    const searchResults = await traktClient.searchByTmdbId(tmdbId, type);
+                    const item = type === "movie" ? searchResults[0]?.movie : searchResults[0]?.show;
+                    
+                    if (item?.ids?.slug) {
+                        // Success! Re-route the fetch using the official Trakt slug to get Cast & Crew, Seasons, Related, etc.
+                        return await (type === "movie" 
+                            ? traktClient.getMovie(item.ids.slug) 
+                            : traktClient.getShow(item.ids.slug));
+                    }
+                } catch {
+                    // Ignore Trakt search failure, fallback to TMDB API directly
+                }
+
+                // 2. Trakt doesn't know this TMDB ID, fallback to TMDB API directly (limited data)
+                if (tmdbApiKey) {
+                    const client = createTMDBClient(tmdbApiKey);
+                    if (client) {
+                        const detail = type === "movie"
+                            ? await client.getMovieDetails(tmdbId)
+                            : await client.getTVDetails(tmdbId);
+                        return tmdbToTraktMedia(detail, type);
+                    }
+                }
+            }
+
             try {
                 return await (type === "movie" ? traktClient.getMovie(slug) : traktClient.getShow(slug));
             } catch (error) {

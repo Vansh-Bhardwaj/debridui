@@ -14,6 +14,19 @@ export interface QualityRange {
 
 export type QualityProfileId = "max-quality" | "high-quality" | "balanced" | "data-saver" | "low-bandwidth" | "custom";
 
+export interface TitleMemoryEntry {
+    preferredAddonId?: string;
+    preferredLanguage?: string;
+    qualityProfileId?: QualityProfileId;
+    preferredPlayer?: MediaPlayer;
+    preferredSourceTitle?: string;
+    preferredSourceResolution?: Resolution;
+    preferredSourceQuality?: SourceQuality;
+    updatedAt: number;
+}
+
+export type TitleMemoryMap = Record<string, TitleMemoryEntry>;
+
 export interface QualityProfile {
     id: QualityProfileId;
     name: string;
@@ -125,7 +138,7 @@ export function getActiveRange(settings: StreamingSettings): QualityRange {
     return profile?.range ?? QUALITY_PROFILES[2].range; // fallback to balanced
 }
 
-type SettingValue = string | number | boolean | MediaPlayer | StreamingSettings | PlaybackSettings;
+type SettingValue = string | number | boolean | MediaPlayer | StreamingSettings | PlaybackSettings | TitleMemoryMap;
 
 type SettingPreset<T extends SettingValue> = {
     value: T;
@@ -148,6 +161,7 @@ type SettingsConfig = {
     streaming: SettingConfig<StreamingSettings>;
     playback: SettingConfig<PlaybackSettings>;
     tmdbApiKey: SettingConfig<string>;
+    titleMemory: SettingConfig<TitleMemoryMap>;
 };
 
 const settingsConfig: SettingsConfig = {
@@ -258,6 +272,9 @@ const settingsConfig: SettingsConfig = {
     tmdbApiKey: {
         defaultValue: "",
     },
+    titleMemory: {
+        defaultValue: {},
+    },
 };
 
 type SettingsData = {
@@ -286,6 +303,7 @@ const getDefaultSettings = (): SettingsData => {
         streaming: settingsConfig.streaming.defaultValue,
         playback: settingsConfig.playback.defaultValue,
         tmdbApiKey: settingsConfig.tmdbApiKey.defaultValue,
+        titleMemory: settingsConfig.titleMemory.defaultValue,
     };
 };
 

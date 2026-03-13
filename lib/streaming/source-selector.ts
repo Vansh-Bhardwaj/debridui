@@ -54,6 +54,40 @@ function detectLanguage(source: AddonSource): string | null {
     return null;
 }
 
+const SOURCE_NOISE_TOKENS = new Set([
+    "the", "and", "for", "with", "from", "1080p", "2160p", "720p", "480p", "x264", "x265",
+    "hevc", "h264", "web", "webrip", "webdl", "bluray", "remux", "proper", "repack", "aac", "ac3",
+]);
+
+function tokenizeSourceTitle(text: string): string[] {
+    return text
+        .toLowerCase()
+        .replace(/s\d{1,2}e\d{1,2}/g, " ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(" ")
+        .filter((token) => token.length >= 3 && !SOURCE_NOISE_TOKENS.has(token));
+}
+
+function sourceAffinityScore(source: AddonSource, preferredTitle?: string): number {
+    if (!preferredTitle) return 0;
+    const currentTokens = new Set(tokenizeSourceTitle(`${source.title} ${source.description ?? ""}`));
+    if (currentTokens.size === 0) return 0;
+
+    const preferredTokens = tokenizeSourceTitle(preferredTitle);
+    if (preferredTokens.length === 0) return 0;
+
+    let overlap = 0;
+    for (const token of preferredTokens) {
+        if (currentTokens.has(token)) overlap++;
+    }
+
+    const ratio = overlap / preferredTokens.length;
+    if (ratio >= 0.45) return -40;
+    if (ratio >= 0.28) return -22;
+    if (ratio >= 0.18) return -10;
+    return 0;
+}
+
 /**
  * Calculate a score for source ranking
  * Lower score = better source
@@ -64,6 +98,9 @@ function calculateScore(
         preferredLanguage?: string;
         preferredAddon?: string;
         preferCached?: boolean;
+        preferredSourceTitle?: string;
+        preferredSourceResolution?: string;
+        preferredSourceQuality?: string;
     } = {}
 ): number {
     let score = 0;
@@ -90,6 +127,17 @@ function calculateScore(
     // Preferred addon bonus (-15 points) - for sources from same addon as subtitles
     if (options.preferredAddon && source.addonId === options.preferredAddon) {
         score -= 15;
+    }
+
+    // Prefer the same source fingerprint the user manually selected before.
+    score += sourceAffinityScore(source, options.preferredSourceTitle);
+
+    if (options.preferredSourceResolution && source.resolution === options.preferredSourceResolution) {
+        score -= 12;
+    }
+
+    if (options.preferredSourceQuality && source.quality === options.preferredSourceQuality) {
+        score -= 10;
     }
 
     // Size tiebreaker — prefer larger files (higher bitrate) with diminishing returns.
@@ -124,6 +172,9 @@ export interface SelectionOptions {
     preferredLanguage?: string;
     preferredAddon?: string;
     preferCached?: boolean;
+    preferredSourceTitle?: string;
+    preferredSourceResolution?: string;
+    preferredSourceQuality?: string;
 }
 
 export function selectBestSource(
