@@ -112,3 +112,42 @@ if (currentImageResponse !== imageResponseStub) {
 } else {
         console.log("[patch-next-node-env] image-response already patched.");
 }
+
+// Some Next build paths include next/dist/compiled/@vercel/og directly.
+// Stub both edge/node compiled entrypoints so resvg.wasm/yoga.wasm cannot be
+// pulled into the Worker bundle.
+const compiledOgDir = path.join(
+    process.cwd(),
+    "node_modules",
+    "next",
+    "dist",
+    "compiled",
+    "@vercel",
+    "og"
+);
+
+const compiledOgStub = `"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+class ImageResponse extends Response {
+  constructor() {
+    throw new Error("@vercel/og is disabled in this deployment to keep Worker bundle size under Cloudflare free plan limits.");
+  }
+}
+exports.ImageResponse = ImageResponse;
+`;
+
+for (const entry of ["index.edge.js", "index.node.js"]) {
+    const entryPath = path.join(compiledOgDir, entry);
+    if (!fs.existsSync(entryPath)) {
+        console.log(`[patch-next-node-env] Skipped ${entry} patch (file missing).`);
+        continue;
+    }
+
+    const current = fs.readFileSync(entryPath, "utf8");
+    if (current !== compiledOgStub) {
+        fs.writeFileSync(entryPath, compiledOgStub);
+        console.log(`[patch-next-node-env] Patched ${entry} to disable @vercel/og compiled runtime.`);
+    } else {
+        console.log(`[patch-next-node-env] ${entry} already patched.`);
+    }
+}
