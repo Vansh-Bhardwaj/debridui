@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const disableImageOptimization =
     process.env.NEXT_DISABLE_IMAGE_OPTIMIZATION === "true" || process.platform === "win32";
@@ -26,8 +27,56 @@ const nextConfig: NextConfig = {
         unoptimized: disableImageOptimization,
         formats: ["image/avif", "image/webp"],
     },
+    // Exclude @vercel/og (ImageResponse) — not used in this project.
+    // Saves ~2 MB from the Cloudflare Worker free-plan bundle (3 MiB gzip limit).
+    serverExternalPackages: ["@vercel/og"],
+    turbopack: {
+        resolveAlias: {
+            "@vercel/og": path.join(__dirname, "lib/og-stub.ts"),
+            "next/dist/compiled/@vercel/og": path.join(__dirname, "lib/og-stub.ts"),
+        },
+    },
+    webpack(config, { isServer }) {
+        if (isServer) {
+            (config.resolve ??= {}).alias = {
+                ...(config.resolve.alias as Record<string, unknown>),
+                "@vercel/og": false,
+                "next/dist/compiled/@vercel/og": false,
+            };
+        }
+        return config;
+    },
     experimental: {
-        optimizePackageImports: ["lucide-react", "@radix-ui/react-icons", "date-fns", "zod", "drizzle-orm", "react-hook-form", "@tanstack/react-query", "uuid"],
+        optimizePackageImports: [
+            "lucide-react",
+            "@radix-ui/react-icons",
+            "date-fns",
+            "zod",
+            "drizzle-orm",
+            "react-hook-form",
+            "@tanstack/react-query",
+            "uuid",
+            "@radix-ui/react-alert-dialog",
+            "@radix-ui/react-avatar",
+            "@radix-ui/react-checkbox",
+            "@radix-ui/react-collapsible",
+            "@radix-ui/react-context-menu",
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-label",
+            "@radix-ui/react-scroll-area",
+            "@radix-ui/react-select",
+            "@radix-ui/react-separator",
+            "@radix-ui/react-slot",
+            "@radix-ui/react-switch",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-tooltip",
+            "embla-carousel-react",
+            "embla-carousel-autoplay",
+            "embla-carousel-wheel-gestures",
+            "sonner",
+            "cmdk",
+        ],
     },
     env: {
         NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),

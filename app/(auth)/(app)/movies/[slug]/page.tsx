@@ -1,13 +1,21 @@
 "use client";
 export const dynamic = "force-static";
 
+import lazyLoad from "next/dynamic";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { memo, useEffect } from "react";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
-import { MediaDetails } from "@/components/mdb/media-details";
 import { useSettingsStore } from "@/lib/stores/settings";
+
+// Lazy-loaded with ssr:false: the SSR output is already a loading skeleton (data
+// is fetched client-side), so excluding the heavy component tree from the server
+// bundle saves significant Worker bundle size.
+const MediaDetails = lazyLoad(
+    () => import("@/components/mdb/media-details").then((m) => ({ default: m.MediaDetails })),
+    { ssr: false },
+);
 
 const MoviePage = memo(function MoviePage() {
     const params = useParams();
