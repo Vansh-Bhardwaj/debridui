@@ -22,6 +22,10 @@ export interface TitleMemoryEntry {
     preferredSourceTitle?: string;
     preferredSourceResolution?: Resolution;
     preferredSourceQuality?: SourceQuality;
+    lastPlayedAt?: number;
+    lastSeason?: number;
+    lastEpisode?: number;
+    bingeScore?: number;
     updatedAt: number;
 }
 

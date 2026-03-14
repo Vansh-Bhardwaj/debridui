@@ -299,7 +299,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('loading-hint-dismissed')
     );
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [canStartPlayback, setCanStartPlayback] = useState(false);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
     const [subtitleSize, setSubtitleSize] = useState(
@@ -1958,23 +1957,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (videoRef.current) videoRef.current.loop = loop;
     }, [loop]);
 
-    // This allows the proxy to convert SRT->VTT before the browser starts video playback, similar to Stremio web.
+    // Warm the subtitle proxy in the background, but never block first frame on it.
     useEffect(() => {
         const first = subtitles?.[0];
-        if (!first?.url) {
-            setCanStartPlayback(true);
-            return;
-        }
+        if (!first?.url) return;
 
-        // Once playback has started, don't re-block it for subtitle changes.
-        // The parsedCues effect handles loading new tracks independently.
-        if (canStartPlayback) return;
-
-        let done = false;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-        setCanStartPlayback(false);
 
         const run = async () => {
             try {
@@ -1984,20 +1973,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     await res.text();
                 }
             } catch {
-                // If subtitle prep fails, don't block video playback.
+                // Subtitle warm-up is best-effort only.
             } finally {
                 clearTimeout(timeoutId);
-                if (!done) setCanStartPlayback(true);
             }
         };
 
         void run();
         return () => {
-            done = true;
             clearTimeout(timeoutId);
             controller.abort();
         };
-    }, [subtitles, canStartPlayback]);
+    }, [subtitles]);
 
     // Load addon subtitles and parse cues for manual overlay rendering.
     useEffect(() => {
@@ -2006,7 +1993,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setParsedCues([]);
             return;
         }
-        if (!canStartPlayback) return;
 
         const controller = new AbortController();
 
@@ -2115,26 +2101,44 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             for (const t of existing) t.mode = "disabled";
 
             setParsedCues(subtitles.map(() => []));
-            const allCues: SubtitleCue[][] = [];
-            for (const sub of subtitles) {
-                if (!sub.url) {
-                    allCues.push([]);
-                    continue;
-                }
+            const prioritizedIndex = activeSubtitleIndex >= 0
+                ? activeSubtitleIndex
+                : (() => {
+                    const preferredIndex = preferredSubLang
+                        ? subtitles.findIndex((sub) => isSubtitleLanguage(sub, preferredSubLang))
+                        : -1;
+                    return preferredIndex !== -1 ? preferredIndex : subtitles.findIndex((sub) => !!sub.url);
+                })();
 
-                const txt = await fetchSubtitleText(sub.url);
-                if (!txt) {
-                    allCues.push([]);
-                    continue;
+            const allCues: SubtitleCue[][] = subtitles.map(() => []);
+
+            if (prioritizedIndex >= 0 && subtitles[prioritizedIndex]?.url) {
+                const prioritizedText = await fetchSubtitleText(subtitles[prioritizedIndex]!.url);
+                if (controller.signal.aborted) return;
+                if (prioritizedText) {
+                    allCues[prioritizedIndex] = parseCuesFromText(prioritizedText);
+                    setParsedCues([...allCues]);
                 }
-                allCues.push(parseCuesFromText(txt));
             }
-            setParsedCues(allCues);
+
+            const remaining = await Promise.all(
+                subtitles.map(async (sub, index) => {
+                    if (index === prioritizedIndex) return allCues[index];
+                    if (!sub.url) return [];
+
+                    const txt = await fetchSubtitleText(sub.url);
+                    return txt ? parseCuesFromText(txt) : [];
+                })
+            );
+
+            if (!controller.signal.aborted) {
+                setParsedCues(remaining);
+            }
         };
 
         void run();
         return () => controller.abort();
-    }, [canStartPlayback, subtitles]);
+    }, [subtitles, activeSubtitleIndex, preferredSubLang]);
 
     // Sync active cue text for manual overlay (bypasses Windows OS ::cue style override)
     useEffect(() => {
@@ -2217,8 +2221,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative">
                     <video
                         ref={videoRef}
-                        src={canStartPlayback ? finalUrl : undefined}
-                        autoPlay={canStartPlayback && !iosTapToPlay}
+                        src={finalUrl}
+                        autoPlay={!iosTapToPlay}
                         playsInline
                         preload="metadata"
                         crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
@@ -2230,17 +2234,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     />
 
                     {/* YouTube-style top loading bar */}
-                    {(!canStartPlayback || (isLoading && !error)) && (
+                    {(isLoading && !error) && (
                         <div className="player-loading-bar absolute top-0 left-0 right-0 h-[3px] z-50 overflow-hidden" />
                     )}
 
                     {/* Unified loading overlay */}
-                    {(!canStartPlayback || (isLoading && !error)) && (
+                    {(isLoading && !error) && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-40">
                             <div className="h-10 w-10 border-[2.5px] border-white/15 border-t-white rounded-full animate-spin" />
-                            {!canStartPlayback && (
-                                <p className="text-xs tracking-widest uppercase text-white/40">Preparing subtitles</p>
-                            )}
                         </div>
                     )}
 

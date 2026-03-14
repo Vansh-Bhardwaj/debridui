@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { QueueItem } from "@/lib/device-sync/protocol";
 import { usePreviewStore } from "@/lib/stores/preview";
+import { useStreamingStore } from "@/lib/stores/streaming";
 import { FileType } from "@/lib/types";
 import { ListMusic, X, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,17 @@ export function PlaybackQueue({ className, compact }: PlaybackQueueProps) {
             // Send to active target
             transferPlayback(activeTarget, payload);
         } else {
+            if (payload.imdbId && payload.mediaType === "show" && payload.season != null && payload.episode != null) {
+                useStreamingStore.getState().setEpisodeContext({
+                    imdbId: payload.imdbId,
+                    title: payload.title,
+                    season: payload.season,
+                    episode: payload.episode,
+                });
+            } else {
+                useStreamingStore.getState().setEpisodeContext(null);
+            }
+
             // Play locally
             usePreviewStore.getState().openSinglePreview({
                 url: payload.url,

@@ -56,7 +56,7 @@ interface StreamingState {
     playNextBestSource: () => boolean;
 
     // Preloading
-    preloadedData: PreloadedData | null;
+    preloadedData: PreloadedData[];
     preloadNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
 
     play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
@@ -257,6 +257,204 @@ const cleanShowTitle = (title: string): string => {
     return match ? match[1] : title;
 };
 
+function getPreloadKey(imdbId: string, season: number, episode: number): string {
+    return `${imdbId}:s${season}e${episode}`;
+}
+
+function isSequentialEpisode(prevSeason: number, prevEpisode: number, nextSeason: number, nextEpisode: number): boolean {
+    return (nextSeason === prevSeason && nextEpisode === prevEpisode + 1)
+        || (nextSeason === prevSeason + 1 && nextEpisode === 1);
+}
+
+function getBingeMemoryPatch(progressKey: ProgressKey): Partial<TitleMemoryEntry> {
+    if (progressKey.type !== "show" || progressKey.season == null || progressKey.episode == null) {
+        return { lastPlayedAt: Date.now() };
+    }
+
+    const existing = getTitleMemory(progressKey.imdbId);
+    const now = Date.now();
+    const hoursSinceLastPlay = existing?.lastPlayedAt ? (now - existing.lastPlayedAt) / 3_600_000 : Number.POSITIVE_INFINITY;
+    const sequential = existing?.lastSeason != null
+        && existing?.lastEpisode != null
+        && isSequentialEpisode(existing.lastSeason, existing.lastEpisode, progressKey.season, progressKey.episode);
+
+    let bingeScore = existing?.bingeScore ?? 0;
+
+    if (sequential) {
+        if (hoursSinceLastPlay <= 6) {
+            bingeScore = Math.min(6, bingeScore + 2);
+        } else if (hoursSinceLastPlay <= 96) {
+            bingeScore = Math.min(6, Math.max(2, bingeScore + 1));
+        } else {
+            bingeScore = 2;
+        }
+    } else if (existing?.lastSeason === progressKey.season && existing?.lastEpisode === progressKey.episode) {
+        bingeScore = Math.max(1, bingeScore);
+    } else if (hoursSinceLastPlay <= 48) {
+        bingeScore = Math.max(1, bingeScore - 1);
+    } else {
+        bingeScore = 0;
+    }
+
+    return {
+        lastPlayedAt: now,
+        lastSeason: progressKey.season,
+        lastEpisode: progressKey.episode,
+        bingeScore,
+    };
+}
+
+function getPrefetchDepth(memory: TitleMemoryEntry | null): number {
+    const bingeScore = memory?.bingeScore ?? 0;
+    if (bingeScore >= 4) return 3;
+    if (bingeScore >= 2) return 2;
+    return 1;
+}
+
+async function buildPreloadTargets(episodeContext: EpisodeContext, depth: number): Promise<Array<{ season: number; episode: number; title: string }>> {
+    const { traktClient } = await import("@/lib/trakt");
+    const seasonCache = new Map<number, Awaited<ReturnType<typeof traktClient.getShowEpisodes>>>();
+
+    const getSeasonEpisodes = async (season: number) => {
+        if (!seasonCache.has(season)) {
+            seasonCache.set(season, await traktClient.getShowEpisodes(episodeContext.imdbId, season));
+        }
+        return seasonCache.get(season)!;
+    };
+
+    const targets: Array<{ season: number; episode: number; title: string }> = [];
+    let cursorSeason = episodeContext.season;
+    let cursorEpisode = episodeContext.episode;
+
+    while (targets.length < depth) {
+        let seasonEpisodes = await getSeasonEpisodes(cursorSeason);
+        let nextSeason = cursorSeason;
+        let nextEpisode = cursorEpisode + 1;
+
+        if (nextEpisode > seasonEpisodes.length) {
+            nextSeason += 1;
+            nextEpisode = 1;
+            seasonEpisodes = await getSeasonEpisodes(nextSeason);
+            if (seasonEpisodes.length === 0) break;
+        }
+
+        const episodeData = seasonEpisodes.find((entry) => entry.number === nextEpisode);
+        const seasonTag = `S${String(nextSeason).padStart(2, "0")}E${String(nextEpisode).padStart(2, "0")}`;
+        const titleSuffix = episodeData?.title ? ` - ${episodeData.title}` : "";
+
+        targets.push({
+            season: nextSeason,
+            episode: nextEpisode,
+            title: `${episodeContext.title} ${seasonTag}${titleSuffix}`,
+        });
+
+        cursorSeason = nextSeason;
+        cursorEpisode = nextEpisode;
+    }
+
+    return targets;
+}
+
+async function preloadEpisodeTarget(
+    addons: { id: string; url: string; name: string }[],
+    imdbId: string,
+    target: { season: number; episode: number; title: string },
+    titleMemory: TitleMemoryEntry | null,
+): Promise<PreloadedData | null> {
+    const { streamAddons, subtitleAddons } = await classifyAddons(addons);
+
+    const sourcePromises = streamAddons.map(async (addon) => {
+        const queryKey = ["addon", addon.id, "sources", imdbId, "show", { season: target.season, episode: target.episode }] as const;
+        try {
+            return await queryClient.fetchQuery({
+                queryKey,
+                queryFn: async () => {
+                    const client = new AddonClient({ url: addon.url });
+                    const response = await client.fetchStreams(imdbId, "show", { season: target.season, episode: target.episode });
+                    return parseStreams(response.streams, addon.id, addon.name);
+                },
+                staleTime: 3 * 60 * 1000,
+                gcTime: 10 * 60 * 1000,
+            });
+        } catch {
+            return [] as AddonSource[];
+        }
+    });
+
+    const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
+        try {
+            const client = new AddonClient({ url: addon.url });
+            const response = await client.fetchSubtitles(imdbId, "show", { season: target.season, episode: target.episode });
+            return { addonName: addon.name, subtitles: response.subtitles || [] };
+        } catch {
+            return { addonName: addon.name, subtitles: [] };
+        }
+    });
+
+    const [sourcesResults, subtitleResults] = await Promise.all([
+        Promise.all(sourcePromises),
+        Promise.all(subtitlePromises),
+    ]);
+
+    const allSources = sourcesResults.flat();
+    if (allSources.length === 0) return null;
+
+    const inlineSubResults: SubtitleQueryResult[] = [];
+    for (const source of allSources) {
+        if (source.inlineSubtitles?.length) {
+            inlineSubResults.push({ addonName: source.addonName, subtitles: source.inlineSubtitles });
+        }
+    }
+
+    const subtitleLanguage = titleMemory?.preferredLanguage
+        || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
+        || "english";
+    const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
+
+    const baseSettings = await getEffectiveStreamingSettings();
+    const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
+    const result = selectBestSource(allSources, streamingSettings, {
+        preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
+        preferredAddon: titleMemory?.preferredAddonId,
+        preferCached: streamingSettings.preferCached,
+        preferredSourceTitle: titleMemory?.preferredSourceTitle,
+        preferredSourceResolution: titleMemory?.preferredSourceResolution,
+        preferredSourceQuality: titleMemory?.preferredSourceQuality,
+    });
+
+    if (!result.source) return null;
+
+    return {
+        source: result.source,
+        allFetchedSources: result.allSorted,
+        subtitles,
+        title: target.title,
+        season: target.season,
+        episode: target.episode,
+        imdbId,
+    };
+}
+
+function buildRequestFromProgressKey(progressKey: ProgressKey, title: string): StreamingRequest {
+    if (progressKey.type === "show" && progressKey.season != null && progressKey.episode != null) {
+        return {
+            imdbId: progressKey.imdbId,
+            type: "show",
+            title: cleanShowTitle(title),
+            tvParams: {
+                season: progressKey.season,
+                episode: progressKey.episode,
+            },
+        };
+    }
+
+    return {
+        imdbId: progressKey.imdbId,
+        type: "movie",
+        title,
+    };
+}
+
 function dismissToast() {
     if (!toastId) return;
 
@@ -430,7 +628,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     selectedSource: null,
     allFetchedSources: [],
     episodeContext: null,
-    preloadedData: null,
+    preloadedData: [],
 
     // Source picker
     sourcePickerOpen: false,
@@ -483,22 +681,34 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     },
 
     getProgressKey: () => {
-        const { activeRequest } = get();
-        if (!activeRequest) return null;
+        const { activeRequest, episodeContext } = get();
+        if (activeRequest) {
+            if (activeRequest.type === "show" && activeRequest.tvParams) {
+                return {
+                    imdbId: activeRequest.imdbId,
+                    type: "show" as const,
+                    season: activeRequest.tvParams.season,
+                    episode: activeRequest.tvParams.episode,
+                };
+            }
 
-        if (activeRequest.type === "show" && activeRequest.tvParams) {
-            return {
-                imdbId: activeRequest.imdbId,
-                type: "show" as const,
-                season: activeRequest.tvParams.season,
-                episode: activeRequest.tvParams.episode,
-            };
+            if (activeRequest.type === "movie") {
+                return {
+                    imdbId: activeRequest.imdbId,
+                    type: "movie" as const,
+                };
+            }
         }
 
-        if (activeRequest.type === "movie") {
+        const previewProgressKey = usePreviewStore.getState().progressKey;
+        if (previewProgressKey) return previewProgressKey;
+
+        if (episodeContext) {
             return {
-                imdbId: activeRequest.imdbId,
-                type: "movie" as const,
+                imdbId: episodeContext.imdbId,
+                type: "show" as const,
+                season: episodeContext.season,
+                episode: episodeContext.episode,
             };
         }
 
@@ -507,6 +717,24 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
     playSource: async (source, title, options) => {
         if (!source.url) return;
+
+        if (options?.progressKey) {
+            const request = buildRequestFromProgressKey(options.progressKey, title);
+            set({ activeRequest: request });
+
+            if (request.type === "show" && request.tvParams) {
+                set({
+                    episodeContext: {
+                        imdbId: request.imdbId,
+                        title: cleanShowTitle(request.title),
+                        season: request.tvParams.season,
+                        episode: request.tvParams.episode,
+                    },
+                });
+            } else {
+                set({ episodeContext: null });
+            }
+        }
 
         const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
 
@@ -579,6 +807,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     preferredSourceTitle: source.title,
                     preferredSourceResolution: source.resolution,
                     preferredSourceQuality: source.quality,
+                    ...getBingeMemoryPatch(options.progressKey),
                 });
             }
             return;
@@ -609,6 +838,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 preferredSourceTitle: source.title,
                 preferredSourceResolution: source.resolution,
                 preferredSourceQuality: source.quality,
+                ...getBingeMemoryPatch(options.progressKey),
             });
         }
     },
@@ -620,8 +850,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             type: request.type,
             addonCount: addons.length,
         });
-        // Clear preloaded data if we are playing something unrelated
-        set({ preloadedData: null });
+        set({ preloadedData: [] });
 
         const { imdbId, type, title: rawTitle, tvParams } = request;
 
@@ -651,12 +880,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
         set({ activeRequest: request, selectedSource: null, allFetchedSources: [] });
 
-        // Set episode context if this is a show
         if (type === "show" && tvParams) {
             set({
                 episodeContext: {
                     imdbId,
-                    title: cleanShowTitle(rawTitle), // Store clean title for context
+                    title: cleanShowTitle(rawTitle),
                     season: tvParams.season,
                     episode: tvParams.episode,
                 },
@@ -673,7 +901,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         toastCreatedAt = Date.now();
 
         try {
-            // Classify addons by capability — only query addons for what they support
             const { streamAddons, subtitleAddons } = await classifyAddons(addons);
             timer.step("classified-addons", {
                 streamAddons: streamAddons.length,
@@ -692,8 +919,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                                 const response = await client.fetchStreams(imdbId, type, tvParams);
                                 return parseStreams(response.streams, addon.id, addon.name);
                             },
-                            staleTime: 3 * 60 * 1000, // 3 minutes
-                            gcTime: 10 * 60 * 1000,   // match use-addons.ts
+                            staleTime: 3 * 60 * 1000,
+                            gcTime: 10 * 60 * 1000,
                         }),
                         PER_ADDON_TIMEOUT,
                         [] as AddonSource[]
@@ -703,7 +930,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             });
 
-            // Fetch subtitles in parallel from subtitle-capable addons only
             const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
                 try {
                     return await withTimeout(
@@ -725,14 +951,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 Promise.all(subtitlePromises),
             ]);
 
-            const sourcesResults = sourcesSettled.map((r) => r.status === "fulfilled" ? r.value : [] as AddonSource[]);
-
-            // Filter out old requests
+            const sourcesResults = sourcesSettled.map((result) => result.status === "fulfilled" ? result.value : [] as AddonSource[]);
             if (requestId !== currentRequestId) return;
 
             const allSources = sourcesResults.flat();
-
-            // Collect inline subtitles from stream-capable addons (e.g. AIO Stream)
             const inlineSubResults: SubtitleQueryResult[] = [];
             for (const source of allSources) {
                 if (source.inlineSubtitles?.length) {
@@ -787,7 +1009,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const source = result.source!;
             const progressKey = getProgressKey();
 
-            // Store context for source picker (alternative source selection)
             set({
                 activeRequest: null,
                 selectedSource: source,
@@ -827,119 +1048,40 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const { episodeContext, preloadedData } = get();
         if (!episodeContext) return;
 
-        // Prevent duplicate preloading
         const currentPreloadId = ++preloadRequestId;
 
-        const nextEpisode = episodeContext.episode + 1;
-        let targetSeason = episodeContext.season;
-        let targetEpisode = nextEpisode;
-        let targetTitle = episodeContext.title; // Initial guess
-
-        // Don't preload if we already have data for this target
-        if (preloadedData && preloadedData.season === targetSeason && preloadedData.episode === targetEpisode && preloadedData.imdbId === episodeContext.imdbId) {
-            return;
-        }
-
         try {
-            // 1. Fetch Metadata (Title + verify existence)
-            const { traktClient } = await import("@/lib/trakt");
-            const episodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
-
-            if (targetEpisode > episodes.length) {
-                targetSeason += 1;
-                targetEpisode = 1;
-
-                const nextSeasEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
-                if (nextSeasEpisodes.length === 0) return; // End of show
-
-                const epData = nextSeasEpisodes.find(e => e.number === 1);
-                targetTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${epData?.title ? ` - ${epData.title}` : ""}`;
-            } else {
-                const epData = episodes.find(e => e.number === targetEpisode);
-                targetTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${epData?.title ? ` - ${epData.title}` : ""}`;
-            }
-
-            // 2. Classify addons by capability
-            const { streamAddons, subtitleAddons } = await classifyAddons(addons);
-
-            // 3. Fetch Streams (Background) — only from stream-capable addons
-            const sourcePromises = streamAddons.map(async (addon) => {
-                const queryKey = ["addon", addon.id, "sources", episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode }] as const;
-                try {
-                    return await queryClient.fetchQuery({
-                        queryKey,
-                        queryFn: async () => {
-                            const client = new AddonClient({ url: addon.url });
-                            const response = await client.fetchStreams(episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode });
-                            return parseStreams(response.streams, addon.id, addon.name);
-                        },
-                        staleTime: 3 * 60 * 1000,
-                        gcTime: 10 * 60 * 1000,
-                    });
-                } catch { return [] as AddonSource[]; }
-            });
-
-            const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
-                try {
-                    const client = new AddonClient({ url: addon.url });
-                    const response = await client.fetchSubtitles(episodeContext.imdbId, "show", { season: targetSeason, episode: targetEpisode });
-                    return { addonName: addon.name, subtitles: response.subtitles || [] };
-                } catch { return { addonName: addon.name, subtitles: [] }; }
-            });
-
-            const [sourcesResults, subtitleResults] = await Promise.all([
-                Promise.all(sourcePromises),
-                Promise.all(subtitlePromises),
-            ]);
-
-            if (preloadRequestId !== currentPreloadId) return;
-
-            const allSources = sourcesResults.flat();
-
-            // Collect inline subtitles from stream-capable addons
-            const inlineSubResults: SubtitleQueryResult[] = [];
-            for (const source of allSources) {
-                if (source.inlineSubtitles?.length) {
-                    inlineSubResults.push({ addonName: source.addonName, subtitles: source.inlineSubtitles });
-                }
-            }
-
             const titleMemory = getTitleMemory(episodeContext.imdbId);
-            const subtitleLanguage = titleMemory?.preferredLanguage
-                || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
-                || "english";
-            const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
+            const targets = await buildPreloadTargets(episodeContext, getPrefetchDepth(titleMemory));
+            if (targets.length === 0) return;
 
-            const baseSettings = await getEffectiveStreamingSettings();
-            const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
-            const result = selectBestSource(allSources, streamingSettings, {
-                preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
-                preferredAddon: titleMemory?.preferredAddonId,
-                preferCached: streamingSettings.preferCached,
-                preferredSourceTitle: titleMemory?.preferredSourceTitle,
-                preferredSourceResolution: titleMemory?.preferredSourceResolution,
-                preferredSourceQuality: titleMemory?.preferredSourceQuality,
-            });
+            const existingMap = new Map(
+                preloadedData
+                    .filter((entry) => entry.imdbId === episodeContext.imdbId)
+                    .map((entry) => [getPreloadKey(entry.imdbId, entry.season, entry.episode), entry])
+            );
 
-            if (result.source) {
-                set({
-                    preloadedData: {
-                        source: result.source,
-                        allFetchedSources: allSources,
-                        subtitles: subtitles,
-                        title: targetTitle,
-                        season: targetSeason,
-                        episode: targetEpisode,
-                        imdbId: episodeContext.imdbId
-                    }
-                });
-                if (process.env.NODE_ENV === "development") {
-                    console.log("Preloaded next episode:", targetTitle);
+            const nextQueue: PreloadedData[] = [];
+            for (const target of targets) {
+                const key = getPreloadKey(episodeContext.imdbId, target.season, target.episode);
+                const existing = existingMap.get(key);
+                if (existing) {
+                    nextQueue.push(existing);
+                    continue;
                 }
+
+                const preloaded = await preloadEpisodeTarget(addons, episodeContext.imdbId, target, titleMemory);
+                if (preloadRequestId !== currentPreloadId) return;
+                if (preloaded) nextQueue.push(preloaded);
             }
 
-        } catch (e) {
-            console.error("Preload failed", e);
+            set({ preloadedData: nextQueue });
+
+            if (process.env.NODE_ENV === "development" && nextQueue.length > 0) {
+                console.log("Preloaded episodes:", nextQueue.map((entry) => entry.title));
+            }
+        } catch (error) {
+            console.error("Preload failed", error);
         }
     },
 
@@ -954,42 +1096,46 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         let targetSeason = episodeContext.season;
         let targetEpisode = nextEpisode;
 
-        // Check preload
-        if (preloadedData && preloadedData.imdbId === episodeContext.imdbId) {
-            const isDirectNext = (preloadedData.season === episodeContext.season && preloadedData.episode === nextEpisode);
-            const isNextSeasonStart = (preloadedData.season === episodeContext.season + 1 && preloadedData.episode === 1);
+        const preloadedEntry = preloadedData.find((entry) =>
+            entry.imdbId === episodeContext.imdbId
+            && ((entry.season === episodeContext.season && entry.episode === nextEpisode)
+                || (entry.season === episodeContext.season + 1 && entry.episode === 1))
+        );
 
-            if (isDirectNext || isNextSeasonStart) {
-                // USE PRELOADED
-                const progressKey = {
-                    imdbId: episodeContext.imdbId,
-                    type: "show" as const,
-                    season: preloadedData.season,
-                    episode: preloadedData.episode,
-                };
+        if (preloadedEntry) {
+            const progressKey = {
+                imdbId: episodeContext.imdbId,
+                type: "show" as const,
+                season: preloadedEntry.season,
+                episode: preloadedEntry.episode,
+            };
 
-                set({
-                    episodeContext: {
-                        ...episodeContext,
-                        season: preloadedData.season,
-                        episode: preloadedData.episode,
-                        title: cleanShowTitle(preloadedData.title),
-                    },
-                    allFetchedSources: preloadedData.allFetchedSources || [preloadedData.source],
-                    preloadedData: null
-                });
+            set({
+                episodeContext: {
+                    ...episodeContext,
+                    season: preloadedEntry.season,
+                    episode: preloadedEntry.episode,
+                    title: cleanShowTitle(preloadedEntry.title),
+                },
+                selectedSource: preloadedEntry.source,
+                allFetchedSources: preloadedEntry.allFetchedSources || [preloadedEntry.source],
+                pendingPlayContext: {
+                    displayTitle: preloadedEntry.title,
+                    subtitles: preloadedEntry.subtitles,
+                    progressKey,
+                },
+                preloadedData: preloadedData.filter((entry) => getPreloadKey(entry.imdbId, entry.season, entry.episode) !== getPreloadKey(preloadedEntry.imdbId, preloadedEntry.season, preloadedEntry.episode)),
+            });
 
-                playSource(preloadedData.source, preloadedData.title, {
-                    subtitles: preloadedData.subtitles,
-                    progressKey
-                });
+            playSource(preloadedEntry.source, preloadedEntry.title, {
+                subtitles: preloadedEntry.subtitles,
+                progressKey,
+            });
 
-                toast.success("Playing next episode", { description: preloadedData.title, position: TOAST_POSITION });
-                return;
-            }
+            toast.success("Playing next episode", { description: preloadedEntry.title, position: TOAST_POSITION });
+            return;
         }
 
-        // Fallback to standard fetch
         try {
             const { traktClient } = await import("@/lib/trakt");
             const episodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
@@ -1003,7 +1149,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     const nextSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
                     if (nextSeasonEpisodes.length === 0) throw new Error("No episodes");
 
-                    const epData = nextSeasonEpisodes.find(e => e.number === 1);
+                    const epData = nextSeasonEpisodes.find((entry) => entry.number === 1);
                     const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
                     const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${titleSuffix}`;
 
@@ -1011,33 +1157,32 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         imdbId: episodeContext.imdbId,
                         type: "show",
                         title: nextTitle,
-                        tvParams: { season: targetSeason, episode: 1 }
+                        tvParams: { season: targetSeason, episode: 1 },
                     }, addons, options);
                     return;
-
                 } catch {
                     toast.info("End of series", { description: "You've reached the last episode", position: TOAST_POSITION });
                     return;
                 }
-            } else {
-                const epData = episodes.find(e => e.number === nextEpisode);
-                const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
-                const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${titleSuffix}`;
-
-                await play({
-                    imdbId: episodeContext.imdbId,
-                    type: "show",
-                    title: nextTitle,
-                    tvParams: { season: targetSeason, episode: targetEpisode }
-                }, addons, options);
             }
+
+            const epData = episodes.find((entry) => entry.number === nextEpisode);
+            const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
+            const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${titleSuffix}`;
+
+            await play({
+                imdbId: episodeContext.imdbId,
+                type: "show",
+                title: nextTitle,
+                tvParams: { season: targetSeason, episode: targetEpisode },
+            }, addons, options);
         } catch (error) {
             console.error("Failed to navigate/fetch metadata:", error);
             await play({
                 imdbId: episodeContext.imdbId,
                 type: "show",
                 title: episodeContext.title,
-                tvParams: { season: targetSeason, episode: targetEpisode }
+                tvParams: { season: targetSeason, episode: targetEpisode },
             }, addons, options);
         }
     },
@@ -1104,7 +1249,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // Increment requestId to invalidate in-flight fetches
         requestId++;
         dismissToast();
-        set({ activeRequest: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false });
+        set({ activeRequest: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false, preloadedData: [] });
     },
 
     dismiss: () => {

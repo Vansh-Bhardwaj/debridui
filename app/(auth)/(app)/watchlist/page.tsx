@@ -456,6 +456,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                             isLoading={watchlistMovies.isLoading}
                             error={watchlistMovies.error}
                             rows={2}
+                            expandable
                         />
                     </SectionErrorBoundary>
                     {/* Shows aren't shown in cinema — hide section for that filter */}
@@ -467,6 +468,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                                 isLoading={watchlistShows.isLoading}
                                 error={watchlistShows.error}
                                 rows={2}
+                                expandable
                             />
                         </SectionErrorBoundary>
                     )}
@@ -486,6 +488,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                             isLoading={favoritesMovies.isLoading}
                             error={favoritesMovies.error}
                             rows={2}
+                            expandable
                         />
                     </SectionErrorBoundary>
                     <SectionErrorBoundary section="Favorites Shows">
@@ -495,6 +498,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                             isLoading={favoritesShows.isLoading}
                             error={favoritesShows.error}
                             rows={2}
+                            expandable
                         />
                     </SectionErrorBoundary>
                     {!favoritesMovies.isLoading && !favoritesShows.isLoading &&
