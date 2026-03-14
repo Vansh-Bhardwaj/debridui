@@ -30,6 +30,9 @@ const SERVER_SYNC_INTERVAL = 60_000; // 60s for DB writes
 const MIN_PROGRESS_CHANGE = 5; // seconds
 const HISTORY_MIN_INTERVAL = 45_000;
 const HISTORY_MIN_PROGRESS_ADVANCE = 15;
+const WATCHED_FALLBACK_THRESHOLD = 95;
+const COMPLETE_PROGRESS_THRESHOLD = 0.95;
+let lastTraktFallbackKey: string | null = null;
 
 function getPollDelay(state?: string): number {
     if (typeof document !== "undefined" && document.hidden) return POLL_INTERVAL_HIDDEN;
@@ -144,6 +147,7 @@ async function syncHistoryToServer(
 
 async function sendScrobble(key: ProgressKey, action: "start" | "pause" | "stop", progress: number) {
     if (!traktClient.getAccessToken()) return;
+    const progressIdentity = `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}`;
     const request = TraktClient.buildScrobbleRequest(
         key.imdbId, key.type, Math.min(100, Math.max(0, progress)), key.season, key.episode
     );
@@ -160,7 +164,22 @@ async function sendScrobble(key: ProgressKey, action: "start" | "pause" | "stop"
             }, 2000);
         }
     } catch {
-        // scrobble failed — non-critical
+        if (action === "stop" && progress >= WATCHED_FALLBACK_THRESHOLD && lastTraktFallbackKey !== progressIdentity) {
+            try {
+                if (key.type === "show" && key.season != null && key.episode != null) {
+                    await traktClient.addEpisodesToHistory({ imdb: key.imdbId }, key.season, [key.episode]);
+                } else if (key.type === "movie") {
+                    await traktClient.addToHistory({ movies: [{ ids: { imdb: key.imdbId } }] });
+                }
+
+                lastTraktFallbackKey = progressIdentity;
+                setTimeout(() => {
+                    queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                }, 2000);
+            } catch {
+                // non-critical
+            }
+        }
     }
 }
 
@@ -225,8 +244,10 @@ async function poll() {
             const wasNearEnd = lastKnownPosition >= length * 0.9;
             const endedNaturally = time === 0 && length > 0 && wasNearEnd;
             const finalPosition = endedNaturally ? length : Math.max(0, time || lastKnownPosition);
+            const completedByProgress = length > 0 && finalPosition / length >= COMPLETE_PROGRESS_THRESHOLD;
+            const treatAsComplete = endedNaturally || completedByProgress;
 
-            if (endedNaturally) {
+            if (treatAsComplete) {
                 sendScrobble(activeSession.key, "stop", 100);
                 syncHistoryToServer(activeSession.key, finalPosition, length, "complete", true);
             } else {
@@ -235,8 +256,8 @@ async function poll() {
             }
 
             syncToServer(activeSession.key, finalPosition, length, {
-                eventType: endedNaturally ? "play_complete" : "play_stop",
-                reason: endedNaturally ? "natural_end" : "stopped",
+                eventType: treatAsComplete ? "play_complete" : "play_stop",
+                reason: treatAsComplete ? (endedNaturally ? "natural_end" : "near_end_stop") : "stopped",
             });
             lastSyncTime = Date.now();
             lastSyncedPosition = finalPosition;
@@ -255,6 +276,7 @@ async function poll() {
 /** Start tracking progress for a VLC playback session. */
 export function startVLCProgressSync(progressKey: ProgressKey, url: string) {
     stopVLCProgressSync();
+    lastTraktFallbackKey = null;
     activeSession = {
         key: progressKey,
         url,

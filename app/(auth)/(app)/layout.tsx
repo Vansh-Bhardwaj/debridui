@@ -27,6 +27,7 @@ import { GamepadHints } from "@/components/tv/gamepad-hints";
 import { TVCursor } from "@/components/tv/tv-cursor";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import { useTVFocus } from "@/hooks/use-tv-focus";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 
 // Header keyboard shortcuts button
@@ -95,6 +96,7 @@ function TVLayout({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const { userAccounts, currentAccount, currentUser, client } = useAuth();
     const { tvMode } = useTVMode();
+    useUserSettings();
 
     // Initialize device sync once on mount (reads setting from Zustand)
     useEffect(() => { initDeviceSync(); }, []);

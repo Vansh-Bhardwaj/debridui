@@ -1,9 +1,11 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { traktClient, TraktClient } from "@/lib/trakt";
 import type { ProgressKey } from "@/hooks/use-progress";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 type ScrobbleAction = "start" | "pause" | "stop";
+const WATCHED_FALLBACK_THRESHOLD = 95;
 
 /**
  * Hook for Trakt scrobble integration.
@@ -12,11 +14,22 @@ type ScrobbleAction = "start" | "pause" | "stop";
  */
 export function useTraktScrobble(progressKey: ProgressKey | null) {
     const lastActionRef = useRef<ScrobbleAction | null>(null);
+    const fallbackMarkedRef = useRef<string | null>(null);
     const queryClient = useQueryClient();
+    const { data: settings } = useUserSettings(true);
+
+    const progressIdentity = progressKey
+        ? `${progressKey.imdbId}:${progressKey.type}:${progressKey.season ?? "_"}:${progressKey.episode ?? "_"}`
+        : null;
+
+    useEffect(() => {
+        lastActionRef.current = null;
+        fallbackMarkedRef.current = null;
+    }, [progressIdentity]);
 
     const scrobble = useCallback(
         async (action: ScrobbleAction, progressPercent: number) => {
-            if (!progressKey || !traktClient.getAccessToken()) return;
+            if (!progressKey || !(settings?.trakt_access_token || traktClient.getAccessToken())) return;
             // Avoid sending duplicate consecutive actions
             if (action === lastActionRef.current && action !== "stop") return;
             lastActionRef.current = action;
@@ -42,10 +55,34 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                     }, 2000);
                 }
             } catch (e) {
+                if (
+                    action === "stop" &&
+                    progressPercent >= WATCHED_FALLBACK_THRESHOLD &&
+                    fallbackMarkedRef.current !== progressIdentity
+                ) {
+                    try {
+                        if (progressKey.type === "show" && progressKey.season != null && progressKey.episode != null) {
+                            await traktClient.addEpisodesToHistory(
+                                { imdb: progressKey.imdbId },
+                                progressKey.season,
+                                [progressKey.episode]
+                            );
+                        } else if (progressKey.type === "movie") {
+                            await traktClient.addToHistory({ movies: [{ ids: { imdb: progressKey.imdbId } }] });
+                        }
+
+                        fallbackMarkedRef.current = progressIdentity;
+                        setTimeout(() => {
+                            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                        }, 2000);
+                    } catch (historyError) {
+                        console.error("[trakt-history-fallback]", historyError);
+                    }
+                }
                 console.error("[trakt-scrobble]", action, e);
             }
         },
-        [progressKey, queryClient]
+        [progressIdentity, progressKey, queryClient, settings?.trakt_access_token]
     );
 
     return { scrobble };

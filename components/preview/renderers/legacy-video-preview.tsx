@@ -411,6 +411,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             seekAccRef.current = null;
         }, 1000);
     }, []);
+    const showSpeedOsd = useCallback((rate: number) => {
+        showOsd(`Speed ${rate}x`, "right");
+    }, [showOsd]);
 
     const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastTapRef = useRef<{ time: number; x: number } | null>(null);
@@ -787,6 +790,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setSelectedAudioIndex(chosenIndex);
         }
         if (el) {
+            el.defaultPlaybackRate = playbackRate;
+            el.playbackRate = playbackRate;
             setDuration(el.duration || 0);
             if (hasSeenkedToInitialRef.current) {
                 // On transcode fallback/source switch, prefer the user's current
@@ -807,7 +812,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
-    }, [originalLanguageCode, preferredAudioLang, startFromSeconds, initialProgress, applyResumePosition]);
+    }, [originalLanguageCode, preferredAudioLang, playbackRate, startFromSeconds, initialProgress, applyResumePosition]);
 
 
 
@@ -1443,7 +1448,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 longPressSavedRateRef.current = el.playbackRate;
                 el.playbackRate = 2;
                 longPressActiveRef.current = true;
-                showOsd("2× Speed", "center");
+                showOsd("2x Speed", "right");
             }
         }, 500);
     }, [showOsd]);
@@ -1636,8 +1641,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 event.preventDefault();
             }
 
-            // Re-show controls on any keyboard shortcut
-            resetControlsTimeout();
+            const keepsDesktopChromeHidden = !useCompactControls && ["ArrowLeft", "ArrowRight", "j", "J", "l", "L", ",", "<", ".", ">", "[", "]"].includes(event.key);
+            if (!keepsDesktopChromeHidden) {
+                resetControlsTimeout();
+            }
 
             switch (event.key) {
                 case "Escape":
@@ -1738,7 +1745,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     event.preventDefault();
                     setPlaybackRate((prev) => {
                         const next = Math.max(0.25, +(prev - 0.25).toFixed(2));
-                        showOsd(`Speed ${next}x`, "center");
+                        showSpeedOsd(next);
                         return next;
                     });
                     break;
@@ -1746,7 +1753,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     event.preventDefault();
                     setPlaybackRate((prev) => {
                         const next = Math.min(4, +(prev + 0.25).toFixed(2));
-                        showOsd(`Speed ${next}x`, "center");
+                        showSpeedOsd(next);
                         return next;
                     });
                     break;
@@ -1877,7 +1884,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -2315,7 +2322,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         )}
                         style={{ transitionDuration: osdVisible ? "150ms" : "250ms", transitionTimingFunction: "cubic-bezier(0.25, 0.1, 0.25, 1)" }}
                     >
-                        <div className="player-osd-inner rounded-lg px-5 py-2.5 text-sm font-semibold text-white min-w-[100px] text-center"
+                        <div
+                            className={cn(
+                                "player-osd-inner rounded-lg text-center text-white",
+                                osdPosition === "left" || osdPosition === "right"
+                                    ? "min-w-[84px] px-3.5 py-1.5 text-xs font-medium"
+                                    : "min-w-[100px] px-5 py-2.5 text-sm font-semibold"
+                            )}
                             style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", letterSpacing: "0.03em" }}>
                             {osdText}
                             {/^Volume \d+%$/.test(osdText) && (
@@ -2695,7 +2708,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     </span>
                                     {playbackRate !== 1 && (
                                         <span className="ml-2 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white/80 select-none">
-                                            {playbackRate}×
+                                            {playbackRate}x
                                         </span>
                                     )}
                                 </div>
@@ -2907,7 +2920,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                 const next = e.deltaY < 0
                                                                     ? Math.min(4, +(prev + 0.25).toFixed(2))
                                                                     : Math.max(0.25, +(prev - 0.25).toFixed(2));
-                                                                showOsd(`Speed ${next}x`, "center");
+                                                                showSpeedOsd(next);
                                                                 return next;
                                                             });
                                                         }}
@@ -2919,7 +2932,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
                                                             <button
                                                                 key={rate}
-                                                                onClick={() => { setPlaybackRate(rate); showOsd(`Speed ${rate}x`, "center"); setSettingsPanel(null); }}
+                                                                onClick={() => { setPlaybackRate(rate); showSpeedOsd(rate); setSettingsPanel(null); }}
                                                                 className={POPUP_ITEM}
                                                                 data-active={playbackRate === rate}
                                                                 data-tv-focusable

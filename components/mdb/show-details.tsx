@@ -12,7 +12,7 @@ import { MediaHeader } from "./media-header";
 import { RelatedMedia } from "./related-media";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, memo, useCallback, useMemo, useEffect } from "react";
+import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
 import { CalendarDays, Tv, Eye, EyeOff, Loader2, Globe, Radio, ArrowUp, ArrowDown } from "lucide-react";
@@ -172,11 +172,6 @@ const EpisodesSection = memo(function EpisodesSection({
 
     const [chunkIndex, setChunkIndex] = useState(0);
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
-    useEffect(() => {
-        setChunkIndex(0);
-        setSortOrder("asc");
-    }, [selectedSeason]);
 
     const CHUNK_SIZE = 100;
 
@@ -489,6 +484,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                         )}
 
                         <EpisodesSection
+                            key={`season-${selectedSeason}`}
                             selectedSeason={selectedSeason}
                             episodeCount={episodeCount}
                             mediaId={baseId}
@@ -529,6 +525,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                                     </ScrollCarousel>
 
                                     <EpisodesSection
+                                        key={`group-${selectedGroup}-${selectedGroupIndex}`}
                                         selectedSeason={filteredGroups[selectedGroupIndex]?.number ?? 0}
                                         mediaId={baseId}
                                         media={media}
