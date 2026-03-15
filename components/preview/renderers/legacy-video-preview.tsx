@@ -178,6 +178,54 @@ async function resolveAddonStreamUrl(downloadUrl: string): Promise<{ url?: strin
     return null;
 }
 
+const SPEED_TEST_SAMPLE_BYTES = 2 * 1024 * 1024;
+
+async function measureStreamMbps(url: string, sampleBytes = SPEED_TEST_SAMPLE_BYTES): Promise<{ mbps: number; bytes: number }> {
+    const controller = new AbortController();
+    const startedAt = performance.now();
+    let bytesRead = 0;
+    let reachedSampleLimit = false;
+
+    try {
+        const response = await fetch(url, {
+            headers: { Range: `bytes=0-${sampleBytes - 1}` },
+            cache: "no-store",
+            signal: controller.signal,
+        });
+
+        if (!response.ok && response.status !== 206) {
+            throw new Error(`Speed probe failed (${response.status})`);
+        }
+
+        if (!response.body) {
+            const buf = await response.arrayBuffer();
+            bytesRead = Math.min(buf.byteLength, sampleBytes);
+        } else {
+            const reader = response.body.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                bytesRead += value?.byteLength ?? 0;
+                if (bytesRead >= sampleBytes) {
+                    reachedSampleLimit = true;
+                    controller.abort();
+                    break;
+                }
+            }
+        }
+    } catch (error) {
+        if (!reachedSampleLimit) {
+            throw error;
+        }
+    }
+
+    const elapsedSeconds = Math.max((performance.now() - startedAt) / 1000, 0.05);
+    return {
+        mbps: (bytesRead * 8) / (elapsedSeconds * 1_000_000),
+        bytes: bytesRead,
+    };
+}
+
 
 export interface LegacyVideoPreviewProps {
     file: DebridFileNode;
@@ -321,6 +369,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         () => useSettingsStore.getState().settings.playback.playbackSpeed
     );
     const [isLoading, setIsLoading] = useState(true);
+    const [isSpeedProbeRunning, setIsSpeedProbeRunning] = useState(false);
+    const [lastSpeedProbeMbps, setLastSpeedProbeMbps] = useState<number | null>(null);
+    const speedProbeInFlightRef = useRef(false);
+    const lastSpeedProbeAtRef = useRef(0);
 
     // User's preferred subtitle language from settings
     const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
@@ -367,6 +419,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Custom seekbar drag state
     const seekbarRef = useRef<HTMLDivElement>(null);
     const [isDraggingSeekbar, setIsDraggingSeekbar] = useState(false);
+    const [seekDragPreviewTime, setSeekDragPreviewTime] = useState<number | null>(null);
     const wasPausedBeforeDragRef = useRef(false);
     // Center action icon (YouTube-style play/pause flash)
     const [centerAction, setCenterAction] = useState<"play" | "pause" | null>(null);
@@ -451,6 +504,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Final URL: if user requested direct, use download URL; otherwise use smart selection
     const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
+    const speedProbeUrl = useMemo(() => {
+        // HLS manifests are tiny and not representative for throughput.
+        if (finalUrl.includes(".m3u8")) return downloadUrl;
+        return finalUrl;
+    }, [downloadUrl, finalUrl]);
 
     // Suppress warning if we're using a transcoded stream
     // Check if we have an HLS stream available
@@ -498,6 +556,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const PROGRESS_UPDATE_INTERVAL = 5000; // Update localStorage every 5 seconds
     const UI_TIME_UPDATE_INTERVAL = 250; // Limit time-label/seekbar rerenders to ~4fps
     const SEEK_SYNC_MIN_INTERVAL = 1200;
+    const SPEED_PROBE_COOLDOWN_MS = 45_000;
     // Minimum fraction of total duration the user must have actually played before
     // a seek-to-end (position > 95%) is counted as completion. Prevents marking an
     // episode done when the user merely scrubs to the last few seconds to preview it.
@@ -554,6 +613,53 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             userSetSubtitleRef.current = false;
         }
     }, [progressKey]);
+
+    const runBufferingSpeedProbe = useCallback(async (opts?: { auto?: boolean }) => {
+        const auto = !!opts?.auto;
+        if (speedProbeInFlightRef.current) return;
+        if (!speedProbeUrl) return;
+
+        const now = Date.now();
+        if (auto && now - lastSpeedProbeAtRef.current < SPEED_PROBE_COOLDOWN_MS) {
+            return;
+        }
+
+        speedProbeInFlightRef.current = true;
+        setIsSpeedProbeRunning(true);
+
+        try {
+            let usedProxyFallback = false;
+            const probe = await measureStreamMbps(speedProbeUrl).catch(async () => {
+                usedProxyFallback = true;
+                return measureStreamMbps(`/api/addon/proxy?url=${encodeURIComponent(speedProbeUrl)}&ts=${Date.now()}`);
+            });
+
+            if (probe.bytes < 128 * 1024) {
+                throw new Error("Probe sample too small");
+            }
+
+            lastSpeedProbeAtRef.current = Date.now();
+            setLastSpeedProbeMbps(probe.mbps);
+
+            const mbpsText = `${probe.mbps.toFixed(1)} Mbps`;
+            if (auto) {
+                showOsd(`Network ${mbpsText}`, "center");
+                if (probe.mbps < 8) {
+                    showOsd(`Low throughput: ${mbpsText}`, "center");
+                }
+            } else {
+                showOsd(`Network ${mbpsText}`, "center");
+                toast.success(usedProxyFallback ? `Measured ${mbpsText} (proxy fallback)` : `Measured ${mbpsText}`);
+            }
+        } catch {
+            if (!auto) {
+                toast.error("Could not measure stream speed for this source");
+            }
+        } finally {
+            setIsSpeedProbeRunning(false);
+            speedProbeInFlightRef.current = false;
+        }
+    }, [speedProbeUrl, showOsd, SPEED_PROBE_COOLDOWN_MS]);
 
     const applyResumePosition = useCallback((seekTo: number | null | undefined): boolean => {
         const video = videoRef.current;
@@ -1034,6 +1140,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         const onWaiting = () => {
             setIsLoading(true);
+            void runBufferingSpeedProbe({ auto: true });
         };
         const onPlaying = () => {
             setIsLoading(false);
@@ -1167,7 +1274,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 setAutoNextCountdown(null);
             }
         };
-    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext]);
+    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe]);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
@@ -1294,9 +1401,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         wasPausedBeforeDragRef.current = video.paused;
         video.pause();
         setIsDraggingSeekbar(true);
-        seekTo(pct * video.duration);
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [seekbarPctFromEvent, seekTo]);
+        setSeekHoverPct(pct);
+        setSeekDragPreviewTime(pct * video.duration);
+        e.currentTarget.setPointerCapture(e.pointerId);
+    }, [seekbarPctFromEvent]);
 
     const handleSeekbarPointerMove = useCallback((e: React.PointerEvent) => {
         const bar = seekbarRef.current;
@@ -1307,10 +1415,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (isDraggingSeekbar) {
             const video = videoRef.current;
             if (video && Number.isFinite(video.duration) && video.duration > 0) {
-                seekTo(pct * video.duration);
+                setSeekDragPreviewTime(pct * video.duration);
             }
         }
-    }, [isDraggingSeekbar, seekTo]);
+    }, [isDraggingSeekbar]);
 
     const handleSeekbarPointerUp = useCallback((e: React.PointerEvent) => {
         if (!isDraggingSeekbar) return;
@@ -1319,6 +1427,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const video = videoRef.current;
         if (video && Number.isFinite(video.duration) && video.duration > 0) {
             seekTo(pct * video.duration);
+            setSeekDragPreviewTime(null);
             if (!wasPausedBeforeDragRef.current) {
                 video.play().catch(() => { });
             }
@@ -1328,6 +1437,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const handleSeekbarPointerLeave = useCallback(() => {
         if (!isDraggingSeekbar) setSeekHoverPct(null);
     }, [isDraggingSeekbar]);
+
+    const handleSeekbarPointerCancel = useCallback(() => {
+        setIsDraggingSeekbar(false);
+        setSeekDragPreviewTime(null);
+        setSeekHoverPct(null);
+    }, []);
+
+    const displayedSeekbarTime = seekDragPreviewTime ?? currentTime;
+    const displayedSeekbarPct = duration > 0 ? (displayedSeekbarTime / duration) * 100 : 0;
+
+    useEffect(() => {
+        return () => {
+            if (!progressKey) return;
+            useStreamingStore.setState((state) => {
+                const current = state.currentProgressKey;
+                const matchesCurrent = !!current
+                    && current.imdbId === progressKey.imdbId
+                    && current.type === progressKey.type
+                    && current.season === progressKey.season
+                    && current.episode === progressKey.episode;
+
+                return matchesCurrent ? { currentProgressKey: null } : {};
+            });
+        };
+    }, [progressKey]);
 
     const toggleMute = useCallback(() => {
         const el = videoRef.current;
@@ -2545,7 +2679,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 className="player-seekbar relative w-full cursor-pointer flex items-center touch-none"
                                 role="slider"
                                 aria-label="Seek"
-                                aria-valuenow={Math.round(currentTime)}
+                                aria-valuenow={Math.round(displayedSeekbarTime)}
                                 aria-valuemin={0}
                                 aria-valuemax={Math.round(duration)}
                                 tabIndex={0}
@@ -2553,6 +2687,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 onPointerDown={handleSeekbarPointerDown}
                                 onPointerMove={handleSeekbarPointerMove}
                                 onPointerUp={handleSeekbarPointerUp}
+                                onPointerCancel={handleSeekbarPointerCancel}
                                 onPointerLeave={handleSeekbarPointerLeave}
                             >
                                 {/* Track background + buffered + progress */}
@@ -2564,7 +2699,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     <div
                                         className="player-seekbar-progress absolute inset-y-0 left-0 rounded-[inherit]"
                                         style={{
-                                            width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
+                                            width: `${displayedSeekbarPct}%`,
                                             background: "var(--primary)"
                                         }}
                                     />
@@ -2597,7 +2732,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 <div
                                     className="player-seekbar-thumb"
                                     style={{
-                                        left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`
+                                        left: `${displayedSeekbarPct}%`
                                     }}
                                 />
                                 {/* Hover tooltip */}
@@ -2608,7 +2743,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             left: `clamp(24px, ${seekHoverPct * 100}%, calc(100% - 24px))`
                                         }}
                                     >
-                                        {formatTime(seekHoverPct * duration)}
+                                        {formatTime(isDraggingSeekbar && seekDragPreviewTime !== null ? seekDragPreviewTime : seekHoverPct * duration)}
                                     </div>
                                 )}
                             </div>
@@ -2908,6 +3043,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                 <PictureInPicture2 className="size-3.5 opacity-60" /> Picture in Picture
                                                             </button>
                                                         )}
+                                                        <button
+                                                            onClick={() => {
+                                                                void runBufferingSpeedProbe({ auto: false });
+                                                            }}
+                                                            className={POPUP_ITEM}
+                                                            disabled={isSpeedProbeRunning}
+                                                            data-tv-focusable
+                                                        >
+                                                            <RefreshCw className={cn("size-3.5 opacity-60", isSpeedProbeRunning && "animate-spin")} />
+                                                            <span className="flex-1">Network test</span>
+                                                            <span className="text-[11px] text-white/40 tabular-nums">
+                                                                {lastSpeedProbeMbps ? `${lastSpeedProbeMbps.toFixed(1)} Mbps` : "2MB sample"}
+                                                            </span>
+                                                        </button>
                                                     </div>
                                                 )}
 

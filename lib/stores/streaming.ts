@@ -43,6 +43,7 @@ export interface PreloadedData {
 
 interface StreamingState {
     activeRequest: StreamingRequest | null;
+    currentProgressKey: ProgressKey | null;
     selectedSource: AddonSource | null;
     allFetchedSources: AddonSource[];
     episodeContext: EpisodeContext | null;
@@ -625,6 +626,7 @@ function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onP
 
 export const useStreamingStore = create<StreamingState>()((set, get) => ({
     activeRequest: null,
+    currentProgressKey: null,
     selectedSource: null,
     allFetchedSources: [],
     episodeContext: null,
@@ -681,7 +683,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     },
 
     getProgressKey: () => {
-        const { activeRequest, episodeContext } = get();
+        const { activeRequest, currentProgressKey, episodeContext } = get();
         if (activeRequest) {
             if (activeRequest.type === "show" && activeRequest.tvParams) {
                 return {
@@ -703,6 +705,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const previewProgressKey = usePreviewStore.getState().progressKey;
         if (previewProgressKey) return previewProgressKey;
 
+        if (currentProgressKey) return currentProgressKey;
+
         if (episodeContext) {
             return {
                 imdbId: episodeContext.imdbId,
@@ -718,84 +722,120 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
-        if (options?.progressKey) {
-            const request = buildRequestFromProgressKey(options.progressKey, title);
-            set({ activeRequest: request });
+        const playbackRequest = options?.progressKey
+            ? buildRequestFromProgressKey(options.progressKey, title)
+            : null;
 
-            if (request.type === "show" && request.tvParams) {
+        set({ currentProgressKey: options?.progressKey ?? null });
+
+        if (playbackRequest) {
+            set({ activeRequest: playbackRequest });
+
+            if (playbackRequest.type === "show" && playbackRequest.tvParams) {
                 set({
                     episodeContext: {
-                        imdbId: request.imdbId,
-                        title: cleanShowTitle(request.title),
-                        season: request.tvParams.season,
-                        episode: request.tvParams.episode,
+                        imdbId: playbackRequest.imdbId,
+                        title: cleanShowTitle(playbackRequest.title),
+                        season: playbackRequest.tvParams.season,
+                        episode: playbackRequest.tvParams.episode,
                     },
                 });
             } else {
                 set({ episodeContext: null });
             }
         }
+        try {
+            const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
 
-        const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
+            // Build descriptive filename with source metadata
+            const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
+            const fileName = meta ? `${title} [${meta}]` : title;
 
-        // Build descriptive filename with source metadata
-        const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
-        const fileName = meta ? `${title} [${meta}]` : title;
+            // ── Auto-fetch subtitles when none provided ────────────────────
+            // Ensures every play path (continue watching, source picker, etc.)
+            // gets subtitles for the media, not just paths that pass them explicitly.
+            const subtitles = options?.subtitles;
+            if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
+                const pk = options.progressKey;
+                const tvParams = pk.season != null && pk.episode != null
+                    ? { season: pk.season, episode: pk.episode }
+                    : undefined;
+                // Non-blocking: fetch in background, populate preview store when ready
+                fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
+                    if (fetched.length > 0) {
+                        usePreviewStore.getState().setDirectSubtitles(fetched);
+                    }
+                });
+            }
 
-        // ── Auto-fetch subtitles when none provided ────────────────────
-        // Ensures every play path (continue watching, source picker, etc.)
-        // gets subtitles for the media, not just paths that pass them explicitly.
-        const subtitles = options?.subtitles;
-        if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
-            const pk = options.progressKey;
-            const tvParams = pk.season != null && pk.episode != null
-                ? { season: pk.season, episode: pk.episode }
-                : undefined;
-            // Non-blocking: fetch in background, populate preview store when ready
-            fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
-                if (fetched.length > 0) {
-                    usePreviewStore.getState().setDirectSubtitles(fetched);
-                }
-            });
-        }
+            // ── Device Sync interception ───────────────────────────────────
+            // If a remote device is selected as the playback target, send
+            // the content there instead of playing locally.
+            const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
+            const syncStore = useDeviceSyncStore.getState();
 
-        // ── Device Sync interception ───────────────────────────────────
-        // If a remote device is selected as the playback target, send
-        // the content there instead of playing locally.
-        const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
-        const syncStore = useDeviceSyncStore.getState();
+            const mediaPlayer = !syncStore.activeTarget && titleMemory?.preferredPlayer
+                ? titleMemory.preferredPlayer
+                : useSettingsStore.getState().get("mediaPlayer");
 
-        const mediaPlayer = !syncStore.activeTarget && titleMemory?.preferredPlayer
-            ? titleMemory.preferredPlayer
-            : useSettingsStore.getState().get("mediaPlayer");
+            // For browser playback, open the preview dialog immediately (loading state)
+            // before resolving the URL, so the user sees instant feedback.
+            if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
+                usePreviewStore.getState().openSinglePreview({
+                    url: "", // Empty → shows loading spinner in dialog
+                    title: fileName,
+                    fileType: FileType.VIDEO,
+                    subtitles,
+                    progressKey: options?.progressKey,
+                });
+            }
 
-        // For browser playback, open the preview dialog immediately (loading state)
-        // before resolving the URL, so the user sees instant feedback.
-        if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
-            usePreviewStore.getState().openSinglePreview({
-                url: "", // Empty → shows loading spinner in dialog
+            // Resolve addon proxy/redirect URL to the actual debrid download link
+            const resolved = await resolveStreamUrl(source.url);
+            const playUrl = resolved.url;
+
+            if (syncStore.playOnTarget({
+                url: playUrl,
                 title: fileName,
-                fileType: FileType.VIDEO,
-                subtitles,
-                progressKey: options?.progressKey,
-            });
-        }
+                imdbId: options?.progressKey?.imdbId,
+                mediaType: options?.progressKey?.type,
+                season: options?.progressKey?.season,
+                episode: options?.progressKey?.episode,
+                subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
+            })) {
+                // Sent to remote device — close any loading preview
+                usePreviewStore.getState().closePreview();
+                if (options?.progressKey?.imdbId) {
+                    const streaming = useSettingsStore.getState().get("streaming");
+                    const playback = useSettingsStore.getState().get("playback") as PlaybackSettings;
+                    rememberTitleMemory(options.progressKey.imdbId, {
+                        preferredAddonId: source.addonId,
+                        preferredLanguage: playback.subtitleLanguage || streaming.preferredLanguage,
+                        qualityProfileId: streaming.profileId,
+                        preferredPlayer: mediaPlayer,
+                        preferredSourceTitle: source.title,
+                        preferredSourceResolution: source.resolution,
+                        preferredSourceQuality: source.quality,
+                        ...getBingeMemoryPatch(options.progressKey),
+                    });
+                }
+                return;
+            }
 
-        // Resolve addon proxy/redirect URL to the actual debrid download link
-        const resolved = await resolveStreamUrl(source.url);
-        const playUrl = resolved.url;
+            if (mediaPlayer === MediaPlayer.BROWSER) {
+                const previewStore = usePreviewStore.getState();
+                previewStore.setDirectUrl(playUrl);
+                if (resolved.chain?.length) {
+                    previewStore.setRedirectChain(resolved.chain);
+                }
+                // Cache resolved URL for quick resume from Continue Watching
+                if (options?.progressKey) {
+                    cacheSource(options.progressKey, playUrl, title);
+                }
+            } else {
+                openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
+            }
 
-        if (syncStore.playOnTarget({
-            url: playUrl,
-            title: fileName,
-            imdbId: options?.progressKey?.imdbId,
-            mediaType: options?.progressKey?.type,
-            season: options?.progressKey?.season,
-            episode: options?.progressKey?.episode,
-            subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
-        })) {
-            // Sent to remote device — close any loading preview
-            usePreviewStore.getState().closePreview();
             if (options?.progressKey?.imdbId) {
                 const streaming = useSettingsStore.getState().get("streaming");
                 const playback = useSettingsStore.getState().get("playback") as PlaybackSettings;
@@ -810,36 +850,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     ...getBingeMemoryPatch(options.progressKey),
                 });
             }
-            return;
-        }
-
-        if (mediaPlayer === MediaPlayer.BROWSER) {
-            const previewStore = usePreviewStore.getState();
-            previewStore.setDirectUrl(playUrl);
-            if (resolved.chain?.length) {
-                previewStore.setRedirectChain(resolved.chain);
+        } finally {
+            if (playbackRequest) {
+                set((state) => state.activeRequest === playbackRequest ? { activeRequest: null } : {});
             }
-            // Cache resolved URL for quick resume from Continue Watching
-            if (options?.progressKey) {
-                cacheSource(options.progressKey, playUrl, title);
-            }
-        } else {
-            openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
-        }
-
-        if (options?.progressKey?.imdbId) {
-            const streaming = useSettingsStore.getState().get("streaming");
-            const playback = useSettingsStore.getState().get("playback") as PlaybackSettings;
-            rememberTitleMemory(options.progressKey.imdbId, {
-                preferredAddonId: source.addonId,
-                preferredLanguage: playback.subtitleLanguage || streaming.preferredLanguage,
-                qualityProfileId: streaming.profileId,
-                preferredPlayer: mediaPlayer,
-                preferredSourceTitle: source.title,
-                preferredSourceResolution: source.resolution,
-                preferredSourceQuality: source.quality,
-                ...getBingeMemoryPatch(options.progressKey),
-            });
         }
     },
 
@@ -1249,7 +1263,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // Increment requestId to invalidate in-flight fetches
         requestId++;
         dismissToast();
-        set({ activeRequest: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false, preloadedData: [] });
+        set({ activeRequest: null, currentProgressKey: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false, preloadedData: [] });
     },
 
     dismiss: () => {
