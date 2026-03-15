@@ -2310,6 +2310,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return () => window.removeEventListener("resize", updateCompactMode);
     }, []);
 
+    const isVolumeOsd = /^(Volume \d+%|Muted|Unmuted)$/.test(osdText);
+    const hasVolumeBar = /^Volume \d+%$/.test(osdText);
+    const isSeekOsd = /^[«»]\s\d+s$/.test(osdText);
+
     return (
         <div
             ref={containerRef}
@@ -2460,13 +2464,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div
                             className={cn(
                                 "player-osd-inner rounded-lg text-center text-white",
-                                osdPosition === "left" || osdPosition === "right"
-                                    ? "min-w-[84px] px-3.5 py-1.5 text-xs font-medium"
-                                    : "min-w-[100px] px-5 py-2.5 text-sm font-semibold"
+                                isVolumeOsd
+                                    ? "min-w-[100px] px-5 py-2.5 text-sm font-semibold"
+                                    : isSeekOsd
+                                        ? "w-[84px] px-3.5 py-1.5 text-xs font-medium tabular-nums"
+                                        : "min-w-[90px] px-3.5 py-1.5 text-xs font-medium"
                             )}
                             style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", letterSpacing: "0.03em" }}>
                             {osdText}
-                            {/^Volume \d+%$/.test(osdText) && (
+                            {hasVolumeBar && (
                                 <div className="player-osd-bar mt-2 h-1 w-full rounded-full bg-white/15 overflow-hidden">
                                     <div
                                         className="player-osd-bar-fill h-full rounded-full"
