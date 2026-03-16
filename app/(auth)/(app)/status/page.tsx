@@ -220,6 +220,7 @@ const CompatibilitySection = memo(function CompatibilitySection() {
                         <CodecRow label="H.265 / HEVC" supported={codecSupport.hevc} />
                         <CodecRow label="VP9" supported={codecSupport.vp9} />
                         <CodecRow label="AV1" supported={codecSupport.av1} />
+                        <CodecRow label="HDR (PQ/HLG)" supported={codecSupport.hdr} />
                     </CardContent>
                 )}
             </Card>

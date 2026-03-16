@@ -8,6 +8,7 @@ export interface CodecSupport {
     hevc: boolean;
     vp9: boolean;
     av1: boolean;
+    hdr: boolean;
     aac: boolean;
     ac3: boolean;
     eac3: boolean;
@@ -23,6 +24,8 @@ const _PROBLEMATIC_AUDIO_CODECS = ["ac3", "ac-3", "eac3", "e-ac-3", "dts", "true
 
 // File extensions that commonly contain problematic codecs
 const PROBLEMATIC_EXTENSIONS = [".mkv", ".avi", ".wmv", ".flv"];
+
+const HDR_MARKER_REGEX = /(?:\b(?:hdr10\+?|hdr|hlg|pq|dolby[\s.-]?vision|bt\.?2020|rec\.?2020)\b|\bdv\b)/i;
 
 /**
  * Check if we're on iOS (including iPadOS 13+ which uses a macOS user agent)
@@ -55,6 +58,35 @@ function canPlayType(mimeType: string): boolean {
 }
 
 /**
+ * Browser-level HDR rendering capability check (best effort).
+ * Requires both an HDR-capable display signal and at least one 10-bit HDR video profile.
+ */
+function supportsBrowserHdrPlayback(): boolean {
+    if (typeof window === "undefined") return false;
+
+    const hasHdrDisplay =
+        window.matchMedia?.("(dynamic-range: high)")?.matches ||
+        window.matchMedia?.("(video-dynamic-range: high)")?.matches ||
+        false;
+
+    const hevcMain10 =
+        canPlayType('video/mp4; codecs="hvc1.2.4.L153.B0"') ||
+        canPlayType('video/mp4; codecs="hev1.2.4.L153.B0"');
+    const vp9Profile2 = canPlayType('video/webm; codecs="vp09.02.10.10"');
+    const av1Main10 = canPlayType('video/mp4; codecs="av01.0.10M.10"');
+
+    return hasHdrDisplay && (hevcMain10 || vp9Profile2 || av1Main10);
+}
+
+/**
+ * Heuristic detection for HDR source naming in release titles and URLs.
+ */
+function isLikelyHdrSource(filename: string, downloadUrl?: string): boolean {
+    const haystack = `${filename} ${downloadUrl ?? ""}`.toLowerCase();
+    return HDR_MARKER_REGEX.test(haystack);
+}
+
+/**
  * Detect browser codec support
  * Note: This is a best-effort detection and may not be 100% accurate
  */
@@ -65,6 +97,7 @@ export function detectCodecSupport(): CodecSupport {
         hevc: canPlayType('video/mp4; codecs="hvc1.1.6.L120.90"') || canPlayType('video/mp4; codecs="hev1.1.6.L120.90"'),
         vp9: canPlayType('video/webm; codecs="vp9"'),
         av1: canPlayType('video/mp4; codecs="av01.0.05M.08"'),
+        hdr: supportsBrowserHdrPlayback(),
         
         // Audio codecs
         aac: canPlayType('audio/mp4; codecs="mp4a.40.2"'),
@@ -99,6 +132,7 @@ export function getCodecCompatibilityInfo(): { supported: string[]; unsupported:
     if (support.hevc) supported.push("HEVC/H.265"); else unsupported.push("HEVC/H.265");
     if (support.vp9) supported.push("VP9"); else unsupported.push("VP9");
     if (support.av1) supported.push("AV1"); else unsupported.push("AV1");
+    if (support.hdr) supported.push("HDR Playback"); else unsupported.push("HDR Playback");
 
     // Audio - the problematic ones
     if (support.aac) supported.push("AAC"); else unsupported.push("AAC");
@@ -118,6 +152,12 @@ export function getCodecCompatibilityInfo(): { supported: string[]; unsupported:
 export function shouldPreferTranscodedStream(filename: string): boolean {
     const support = detectCodecSupport();
     const ext = filename.toLowerCase();
+
+    // Preserve direct path for likely HDR masters on HDR-capable browsers.
+    // Provider transcodes are often SDR and can lose HDR metadata.
+    if (isLikelyHdrSource(filename) && support.hdr) {
+        return false;
+    }
 
     // MKV files often have AC3/DTS audio which most browsers don't support
     if (ext.endsWith(".mkv") && !support.ac3 && !support.dts && !support.eac3) {
@@ -150,6 +190,13 @@ export function selectBestStreamingUrl(
     const shouldTranscode = shouldPreferTranscodedStream(filename);
     const ios = isIOS();
     const safari = isSafari();
+    const likelyHdrSource = isLikelyHdrSource(filename, downloadUrl);
+
+    // If browser + display can do HDR and source is likely HDR, avoid SDR transcoding paths.
+    // Keep Safari/iOS on compatibility branch because direct MKV/HEVC playback can still fail there.
+    if (likelyHdrSource && support.hdr && !ios && !safari) {
+        return { url: downloadUrl, isTranscoded: false, format: "direct (HDR)" };
+    }
 
     // On iOS/Safari, ALWAYS prefer HLS (apple) format if available
     // iOS Safari has very limited codec support and HLS provides best compatibility
