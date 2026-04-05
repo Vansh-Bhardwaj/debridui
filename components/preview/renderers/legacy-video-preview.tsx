@@ -2360,7 +2360,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <video
                         ref={videoRef}
                         src={finalUrl}
-                        autoPlay={!iosTapToPlay}
+                        autoPlay={!iosTapToPlay && !!finalUrl}
                         playsInline
                         preload="metadata"
                         crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
