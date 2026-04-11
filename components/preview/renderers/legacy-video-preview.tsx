@@ -2,11 +2,12 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Hls from "hls.js";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
-import { selectBestStreamingUrl } from "@/lib/utils/codec-support";
+import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -99,6 +100,10 @@ interface AudioTrackInfo {
     enabled: boolean;
     label?: string;
     language?: string;
+}
+
+function serializeProgressKey(k?: { imdbId: string; season?: number; episode?: number } | null): string {
+    return k ? `${k.imdbId}:${k.season ?? ""}:${k.episode ?? ""}` : "";
 }
 
 function pickPreferredAudioTrackIndex(
@@ -347,6 +352,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('loading-hint-dismissed')
     );
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hlsRef = useRef<Hls | null>(null);
+    const [hlsAudioTracks, setHlsAudioTracks] = useState<{ name: string; lang?: string }[]>([]);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
     const [subtitleSize, setSubtitleSize] = useState(
@@ -487,9 +494,20 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const hasCodecIssue = isNonMP4Video(file.name);
 
     // Smart streaming URL selection based on browser codec support
-    // Uses transcoded streams when native format likely won't work
+    // Uses transcoded streams when native format likely won't work.
+    // When hls.js is available (Chrome/Firefox), prefer HLS over liveMP4 so
+    // that multi-audio tracks are preserved instead of being flattened to one.
     const streamingSelection = useMemo(() => {
-        return selectBestStreamingUrl(downloadUrl, streamingLinks, file.name);
+        const base = selectBestStreamingUrl(downloadUrl, streamingLinks, file.name);
+        if (
+            !isSafari() &&
+            Hls.isSupported() &&
+            streamingLinks?.apple &&
+            base.url !== streamingLinks.apple
+        ) {
+            return { url: streamingLinks.apple, isTranscoded: true, format: "HLS" };
+        }
+        return base;
     }, [downloadUrl, streamingLinks, file.name]);
 
     const effectiveUrl = streamingSelection.url;
@@ -504,8 +522,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Final URL: if user requested direct, use download URL; otherwise use smart selection
     const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
+    const isHlsUrl = finalUrl.includes(".m3u8");
+    const useHlsJs = isHlsUrl && !isSafari() && Hls.isSupported();
     const speedProbeUrl = useMemo(() => {
-        // HLS manifests are tiny and not representative for throughput.
         if (finalUrl.includes(".m3u8")) return downloadUrl;
         return finalUrl;
     }, [downloadUrl, finalUrl]);
@@ -588,11 +607,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return () => document.removeEventListener("keydown", handler, true);
     }, []);
 
-    // Reset skipped-segment tracking whenever the episode changes
-    const prevProgressKeyRef = useRef(progressKey);
+    // Reset skipped-segment tracking whenever the episode changes.
+    // Uses a serialized key instead of reference equality so new objects
+    // with the same imdbId/season/episode don't trigger a false reset.
+    const prevProgressKeyStrRef = useRef(serializeProgressKey(progressKey));
     useEffect(() => {
-        if (prevProgressKeyRef.current !== progressKey) {
-            prevProgressKeyRef.current = progressKey;
+        const cur = serializeProgressKey(progressKey);
+        if (prevProgressKeyStrRef.current !== cur) {
+            prevProgressKeyStrRef.current = cur;
+
+            // Stop the old media pipeline immediately to prevent dual audio
+            // when switching episodes within the same player instance.
+            const video = videoRef.current;
+            if (video) {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+            }
+
             skippedSegmentsRef.current = new Set();
             hasMarkedCompletedRef.current = false;
             hasShownResumeToastRef.current = false;
@@ -603,15 +635,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 skipGraceTimerRef.current = null;
             }
             setActiveSkipSegment(null);
-            // Reset actual watch-time counters for the new episode
             watchedTimeRef.current = 0;
             watchStartRef.current = null;
-            // Reset subtitle state to avoid carrying stale cues/tracks across media.
             setParsedCues([]);
             setActiveCueText("");
             setActiveSubtitleIndex(-1);
             userSetSubtitleRef.current = false;
-            // Reset audio state to avoid stale track index across episodes
             setAudioTrackCount(0);
             setSelectedAudioIndex(0);
         }
@@ -892,7 +921,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: AudioTrackInfo };
         }) | null;
-        if (el?.audioTracks) {
+        // Only read native audioTracks when hls.js isn't managing them
+        if (!hlsRef.current && el?.audioTracks) {
             setAudioTrackCount(el.audioTracks.length);
             const chosenIndex = pickPreferredAudioTrackIndex(el.audioTracks, preferredAudioLang, originalLanguageCode);
             setSelectedAudioIndex(chosenIndex);
@@ -925,17 +955,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
 
     // Auto-select original audio track when tracks become available (fallback for async loading)
+    // Skipped when hls.js manages tracks — it handles selection in AUDIO_TRACKS_UPDATED.
     useEffect(() => {
+        if (hlsRef.current) return;
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
         }) | null;
         if (!el?.audioTracks || el.audioTracks.length <= 1 || selectedAudioIndex !== 0) return;
 
-        // Only run if we're still on default (index 0) and tracks are now available
         const tracks = el.audioTracks;
         let originalIndex = 0;
 
-        // Check if any track is already enabled (browser default)
         for (let i = 0; i < tracks.length; i++) {
             if (tracks[i]?.enabled) {
                 originalIndex = i;
@@ -943,7 +973,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         }
 
-        // If no enabled track found, look for "original" or "default" in label
         if (!tracks[originalIndex]?.enabled) {
             const labelLower = (tracks[originalIndex]?.label ?? "").toLowerCase();
             if (!labelLower.includes("original") && !labelLower.includes("default")) {
@@ -957,7 +986,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         }
 
-        // Only update if different from current selection
         if (originalIndex !== 0) {
             setSelectedAudioIndex(originalIndex);
         }
@@ -966,6 +994,24 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Re-select audio track when Trakt original language data arrives asynchronously
     useEffect(() => {
         if (!originalLanguageCode) return;
+        if (hlsRef.current) {
+            // For hls.js, re-pick using the stored track info
+            const hls = hlsRef.current;
+            if (hls.audioTracks.length <= 1) return;
+            const idx = pickPreferredAudioTrackIndex(
+                Object.assign(
+                    hls.audioTracks.map((t) => ({ enabled: false, label: t.name, language: t.lang })),
+                    { length: hls.audioTracks.length }
+                ),
+                preferredAudioLang,
+                originalLanguageCode,
+            );
+            if (idx !== selectedAudioIndex) {
+                setSelectedAudioIndex(idx);
+                hls.audioTrack = idx;
+            }
+            return;
+        }
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
         }) | null;
@@ -974,7 +1020,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (idx !== selectedAudioIndex) setSelectedAudioIndex(idx);
     }, [originalLanguageCode, preferredAudioLang, selectedAudioIndex]);
 
+    // Apply native audioTracks selection (Safari path only — hls.js handles its own switching)
     useEffect(() => {
+        if (hlsRef.current) return;
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean } };
         }) | null;
@@ -1016,6 +1064,90 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             el.audioTracks?.removeEventListener?.("change", syncCount);
         };
     }, []);
+
+    // hls.js: attach to the video element for HLS playback in Chrome/Firefox.
+    // Exposes multiple audio tracks that native <video> cannot provide outside Safari.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !finalUrl || !useHlsJs) {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+                setHlsAudioTracks([]);
+            }
+            return;
+        }
+
+        // Preserve playback position when switching from direct stream to HLS
+        const resumeAt = video.currentTime > 1 ? video.currentTime : 0;
+        const wasPlaying = !video.paused;
+
+        const hls = new Hls({
+            enableWorker: true,
+            startLevel: -1,
+        });
+        hlsRef.current = hls;
+
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+            const tracks = hls.audioTracks.map((t) => ({
+                name: t.name || `Track ${t.id + 1}`,
+                lang: t.lang,
+            }));
+            setHlsAudioTracks(tracks);
+            setAudioTrackCount(tracks.length);
+
+            if (tracks.length > 1) {
+                const idx = pickPreferredAudioTrackIndex(
+                    Object.assign(
+                        tracks.map((t) => ({ enabled: false, label: t.name, language: t.lang })),
+                        { length: tracks.length }
+                    ),
+                    preferredAudioLang,
+                    originalLanguageCode,
+                );
+                setSelectedAudioIndex(idx);
+                hls.audioTrack = idx;
+            }
+        });
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) {
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    hls.startLoad();
+                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    hls.recoverMediaError();
+                }
+            }
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (resumeAt > 0) {
+                video.currentTime = resumeAt;
+            }
+            if (wasPlaying || !ios) {
+                video.play().catch(() => {});
+            }
+        });
+
+        hls.loadSource(finalUrl);
+        hls.attachMedia(video);
+
+        return () => {
+            hls.destroy();
+            hlsRef.current = null;
+            setHlsAudioTracks([]);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [finalUrl, useHlsJs]);
+
+    // hls.js: switch audio track when user selects a different one
+    useEffect(() => {
+        const hls = hlsRef.current;
+        if (!hls || hls.audioTracks.length <= 1) return;
+        if (hls.audioTrack !== selectedAudioIndex) {
+            hls.audioTrack = selectedAudioIndex;
+        }
+    }, [selectedAudioIndex]);
 
     useEffect(() => {
         if (activeSubtitleIndex < 0 || !subtitles?.length) return;
@@ -1263,10 +1395,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         window.addEventListener("pagehide", onPageHide);
 
         return () => {
-            // Stop the media pipeline to prevent background audio after close
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("timeupdate", onTimeUpdate);
@@ -1295,6 +1423,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         };
     }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe]);
+
+    // Stop media pipeline on unmount to prevent background audio after close.
+    // Separated from the event-listener effect so it only runs on true unmount,
+    // not on every dependency change which would kill the playing video.
+    useEffect(() => {
+        const video = videoRef.current;
+        return () => {
+            if (!video) return;
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        };
+    }, []);
 
     // Track buffered range for seekbar visual feedback
     useEffect(() => {
@@ -2379,7 +2524,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative">
                     <video
                         ref={videoRef}
-                        src={finalUrl}
+                        src={useHlsJs ? undefined : finalUrl}
                         autoPlay={!iosTapToPlay && !!finalUrl}
                         playsInline
                         preload="metadata"
@@ -2388,7 +2533,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
                         onLoadedData={handleLoad}
-                        onError={handleError}
+                        onError={useHlsJs ? undefined : handleError}
                     />
 
                     {/* YouTube-style top loading bar */}
@@ -2889,29 +3034,37 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     sideOffset={4}
                                                     onClick={(e) => e.stopPropagation()}
                                                     onDoubleClick={(e) => e.stopPropagation()}
-                                                    className={cn(POPUP_CLS, "min-w-[200px] max-h-[280px] overflow-y-auto z-50 p-1")}
+                                                    className={cn(POPUP_CLS, "min-w-[200px] z-50 p-1")}
                                                     style={POPUP_STYLE}
                                                 >
                                                     <div className={POPUP_LABEL}>Audio Tracks</div>
                                                     {Array.from({ length: audioTrackCount }, (_, i) => {
-                                                        const el = videoRef.current as (HTMLVideoElement & {
-                                                            audioTracks?: {
-                                                                length: number;
-                                                                [i: number]: {
-                                                                    enabled: boolean;
-                                                                    label?: string;
-                                                                    language?: string;
+                                                        let label: string;
+                                                        if (hlsAudioTracks.length > i) {
+                                                            const ht = hlsAudioTracks[i];
+                                                            const langLabel = ht.lang ? getLanguageDisplayName(ht.lang) : "";
+                                                            const base = (ht.name ?? "").trim();
+                                                            label = [langLabel, base].filter(Boolean).join(" · ") || `Track ${i + 1}`;
+                                                        } else {
+                                                            const el = videoRef.current as (HTMLVideoElement & {
+                                                                audioTracks?: {
+                                                                    length: number;
+                                                                    [i: number]: {
+                                                                        enabled: boolean;
+                                                                        label?: string;
+                                                                        language?: string;
+                                                                    };
                                                                 };
-                                                            };
-                                                        }) | null;
-                                                        const t = el?.audioTracks?.[i];
-                                                        const langLabel = t?.language
-                                                            ? getLanguageDisplayName(t.language)
-                                                            : "";
-                                                        const base = (t?.label ?? "").trim();
-                                                        const label =
-                                                            [langLabel, base].filter(Boolean).join(" · ") ||
-                                                            `Track ${i + 1}`;
+                                                            }) | null;
+                                                            const t = el?.audioTracks?.[i];
+                                                            const langLabel = t?.language
+                                                                ? getLanguageDisplayName(t.language)
+                                                                : "";
+                                                            const base = (t?.label ?? "").trim();
+                                                            label =
+                                                                [langLabel, base].filter(Boolean).join(" · ") ||
+                                                                `Track ${i + 1}`;
+                                                        }
                                                         return (
                                                             <button
                                                                 key={i}
@@ -2953,7 +3106,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     sideOffset={4}
                                                     onClick={(e) => e.stopPropagation()}
                                                     onDoubleClick={(e) => e.stopPropagation()}
-                                                    className={cn(POPUP_CLS, "min-w-[180px] max-h-[300px] overflow-y-auto z-50 p-1")}
+                                                    className={cn(POPUP_CLS, "min-w-[180px] z-50 p-1")}
                                                     style={POPUP_STYLE}
                                                 >
                                                     <div className={POPUP_LABEL}>Subtitles</div>
@@ -3001,7 +3154,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 sideOffset={4}
                                                 onClick={(e) => e.stopPropagation()}
                                                 onDoubleClick={(e) => e.stopPropagation()}
-                                                className={cn(POPUP_CLS, "w-[250px] max-h-[350px] overflow-y-auto z-50")}
+                                                className={cn(POPUP_CLS, "w-[250px] z-50")}
                                                 style={POPUP_STYLE}
                                             >
                                                 {/* === Main settings panel === */}
