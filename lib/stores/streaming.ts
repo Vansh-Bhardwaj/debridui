@@ -960,9 +960,23 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             });
 
-            const [sourcesSettled, subtitleResults] = await Promise.all([
+            // Fetch original language from Trakt (non-blocking, best-effort)
+            const originalLanguagePromise = (async (): Promise<string | undefined> => {
+                try {
+                    const { traktClient } = await import("@/lib/trakt");
+                    const media = type === "movie"
+                        ? await traktClient.getMovie(imdbId)
+                        : await traktClient.getShow(imdbId);
+                    return media.language ?? undefined;
+                } catch {
+                    return undefined;
+                }
+            })();
+
+            const [sourcesSettled, subtitleResults, originalLanguage] = await Promise.all([
                 Promise.allSettled(sourcePromises),
                 Promise.all(subtitlePromises),
+                originalLanguagePromise,
             ]);
 
             const sourcesResults = sourcesSettled.map((result) => result.status === "fulfilled" ? result.value : [] as AddonSource[]);
@@ -996,6 +1010,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 preferredSourceTitle: titleMemory?.preferredSourceTitle,
                 preferredSourceResolution: titleMemory?.preferredSourceResolution,
                 preferredSourceQuality: titleMemory?.preferredSourceQuality,
+                originalLanguage,
             });
             timer.step("selected-source", {
                 hasMatches: result.hasMatches,

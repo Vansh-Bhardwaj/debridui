@@ -611,6 +611,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setActiveCueText("");
             setActiveSubtitleIndex(-1);
             userSetSubtitleRef.current = false;
+            // Reset audio state to avoid stale track index across episodes
+            setAudioTrackCount(0);
+            setSelectedAudioIndex(0);
         }
     }, [progressKey]);
 
@@ -960,6 +963,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [audioTrackCount, selectedAudioIndex]);
 
+    // Re-select audio track when Trakt original language data arrives asynchronously
+    useEffect(() => {
+        if (!originalLanguageCode) return;
+        const el = videoRef.current as (HTMLVideoElement & {
+            audioTracks?: { length: number;[i: number]: { enabled: boolean; label?: string; language?: string } };
+        }) | null;
+        if (!el?.audioTracks || el.audioTracks.length <= 1) return;
+        const idx = pickPreferredAudioTrackIndex(el.audioTracks, preferredAudioLang, originalLanguageCode);
+        if (idx !== selectedAudioIndex) setSelectedAudioIndex(idx);
+    }, [originalLanguageCode, preferredAudioLang, selectedAudioIndex]);
+
     useEffect(() => {
         const el = videoRef.current as (HTMLVideoElement & {
             audioTracks?: { length: number;[i: number]: { enabled: boolean } };
@@ -1131,6 +1145,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             clearInterval(countdownTimerRef.current!);
                             countdownTimerRef.current = null;
                             setAutoNextCountdown(null);
+                            // Advance to next episode immediately when countdown expires
+                            onNextRef.current?.();
                         } else {
                             setAutoNextCountdown(left);
                         }
@@ -1247,6 +1263,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         window.addEventListener("pagehide", onPageHide);
 
         return () => {
+            // Stop the media pipeline to prevent background audio after close
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("timeupdate", onTimeUpdate);
@@ -2623,13 +2643,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             <SkipForward className="size-4 text-white/60 shrink-0" />
                                         </button>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={cancelAutoNext}
-                                        className="rounded px-3 py-1 text-xs text-white/50 transition-colors hover:text-white/90"
-                                    >
-                                        Cancel
-                                    </button>
                                 </div>
                             )}
 

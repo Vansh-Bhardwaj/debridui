@@ -69,10 +69,26 @@ const initialState = {
     progressKey: null,
 };
 
+/** Stop any currently playing video to prevent ghost audio during preview transitions */
+function _stopActiveVideo() {
+    if (typeof document === "undefined") return;
+    // Find any video element inside the preview dialog and fully release it
+    const videos = document.querySelectorAll<HTMLVideoElement>(
+        "[role='dialog'] video, .debridui-legacy-player video"
+    );
+    for (const video of videos) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+    }
+}
+
 export const usePreviewStore = create<PreviewState>()((set, get) => ({
     ...initialState,
 
     openPreview: (file, allFiles, fileId) => {
+        // Kill any existing video playback to prevent ghost audio
+        _stopActiveVideo();
         // Filter files by supported types using registry
         const previewableFiles = filterPreviewableFiles(allFiles);
         const currentIndex = previewableFiles.findIndex((f) => f.id === file.id || f.name === file.name);
@@ -92,6 +108,8 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
     },
 
     openSinglePreview: ({ url, title, fileType, subtitles, progressKey, streamingLinks }) => {
+        // Kill any existing video playback to prevent ghost audio
+        _stopActiveVideo();
         set({
             isOpen: true,
             mode: "single",

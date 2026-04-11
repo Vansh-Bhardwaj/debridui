@@ -101,6 +101,7 @@ function calculateScore(
         preferredSourceTitle?: string;
         preferredSourceResolution?: string;
         preferredSourceQuality?: string;
+        originalLanguage?: string;
     } = {}
 ): number {
     let score = 0;
@@ -121,6 +122,17 @@ function calculateScore(
         const lang = detectLanguage(source);
         if (lang === options.preferredLanguage.toLowerCase()) {
             score -= 20;
+        }
+    }
+
+    // Original language bonus — prefer sources containing the show's native audio
+    if (options.originalLanguage) {
+        const lang = detectLanguage(source);
+        const text = (source.title || source.description || "").toLowerCase();
+        if (lang === options.originalLanguage.toLowerCase()) {
+            score -= 25; // Direct match: source is in original language
+        } else if (/\b(multi|dual[\s-]?audio|dual)\b/.test(text)) {
+            score -= 10; // Multi/dual audio likely includes original
         }
     }
 
@@ -175,6 +187,7 @@ export interface SelectionOptions {
     preferredSourceTitle?: string;
     preferredSourceResolution?: string;
     preferredSourceQuality?: string;
+    originalLanguage?: string;
 }
 
 export function selectBestSource(
