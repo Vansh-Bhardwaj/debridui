@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { type AddonSource, type AddonSubtitle, type TvSearchParams, type AddonManifest, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
+import { type Addon, type AddonSource, type AddonSubtitle, type TvSearchParams, type AddonManifest, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
 import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
@@ -75,6 +75,54 @@ let toastId: string | number | null = null;
 let toastCreatedAt = 0;
 let requestId = 0;
 let preloadRequestId = 0;
+/** Bumps on each `playSource` call so late source hydration does not overwrite a newer play. */
+let playSourceToken = 0;
+
+const USER_ADDONS_QUERY_KEY = ["user-addons"] as const;
+
+function dedupeSourcesByUrl(sources: AddonSource[]): AddonSource[] {
+    const seen = new Set<string>();
+    const out: AddonSource[] = [];
+    for (const s of sources) {
+        if (!s.url || seen.has(s.url)) continue;
+        seen.add(s.url);
+        out.push(s);
+    }
+    return out;
+}
+
+/** If the playing URL is not in the addon list (e.g. cached debrid link), prepend it. */
+function mergePlayingIntoSourceList(playing: AddonSource, list: AddonSource[]): AddonSource[] {
+    const d = dedupeSourcesByUrl(list);
+    if (!playing.url) return d;
+    const ix = d.findIndex((s) => s.url === playing.url);
+    if (ix > 0) {
+        const chosen = d[ix]!;
+        return [chosen, ...d.filter((_, i) => i !== ix)];
+    }
+    if (ix === 0) return d;
+    return [playing, ...d];
+}
+
+function progressKeysMatch(a: ProgressKey | null | undefined, b: ProgressKey | undefined): boolean {
+    if (!a || !b) return false;
+    if (a.imdbId !== b.imdbId || a.type !== b.type) return false;
+    if (a.type === "movie" && b.type === "movie") return true;
+    return a.season === b.season && a.episode === b.episode;
+}
+
+async function getEnabledAddonInfos(): Promise<AddonInfo[]> {
+    let addons = queryClient.getQueryData<Addon[]>(USER_ADDONS_QUERY_KEY);
+    if (!addons?.length) {
+        const { getUserAddons } = await import("@/lib/actions/data");
+        addons = await getUserAddons();
+        queryClient.setQueryData(USER_ADDONS_QUERY_KEY, addons);
+    }
+    return addons
+        .filter((a) => a.enabled)
+        .sort((a, b) => a.order - b.order)
+        .map((a) => ({ id: a.id, url: a.url, name: a.name }));
+}
 
 type ResolvedStreamCacheEntry = {
     url: string;
@@ -364,24 +412,6 @@ async function preloadEpisodeTarget(
 ): Promise<PreloadedData | null> {
     const { streamAddons, subtitleAddons } = await classifyAddons(addons);
 
-    const sourcePromises = streamAddons.map(async (addon) => {
-        const queryKey = ["addon", addon.id, "sources", imdbId, "show", { season: target.season, episode: target.episode }] as const;
-        try {
-            return await queryClient.fetchQuery({
-                queryKey,
-                queryFn: async () => {
-                    const client = new AddonClient({ url: addon.url });
-                    const response = await client.fetchStreams(imdbId, "show", { season: target.season, episode: target.episode });
-                    return parseStreams(response.streams, addon.id, addon.name);
-                },
-                staleTime: 3 * 60 * 1000,
-                gcTime: 10 * 60 * 1000,
-            });
-        } catch {
-            return [] as AddonSource[];
-        }
-    });
-
     const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
         try {
             const client = new AddonClient({ url: addon.url });
@@ -392,12 +422,10 @@ async function preloadEpisodeTarget(
         }
     });
 
-    const [sourcesResults, subtitleResults] = await Promise.all([
-        Promise.all(sourcePromises),
+    const [allSources, subtitleResults] = await Promise.all([
+        fetchStreamSourcesFlat(imdbId, "show", { season: target.season, episode: target.episode }, streamAddons),
         Promise.all(subtitlePromises),
     ]);
-
-    const allSources = sourcesResults.flat();
     if (allSources.length === 0) return null;
 
     const inlineSubResults: SubtitleQueryResult[] = [];
@@ -427,7 +455,7 @@ async function preloadEpisodeTarget(
 
     return {
         source: result.source,
-        allFetchedSources: result.allSorted,
+        allFetchedSources: mergePlayingIntoSourceList(result.source, dedupeSourcesByUrl(allSources)),
         subtitles,
         title: target.title,
         season: target.season,
@@ -521,6 +549,37 @@ async function classifyAddons(addons: AddonInfo[]): Promise<{ streamAddons: Addo
     });
 
     return { streamAddons, subtitleAddons };
+}
+
+async function fetchStreamSourcesFlat(
+    imdbId: string,
+    type: "movie" | "show",
+    tvParams: TvSearchParams | undefined,
+    streamAddons: AddonInfo[],
+): Promise<AddonSource[]> {
+    const sourcePromises = streamAddons.map(async (addon) => {
+        const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
+        try {
+            return await withTimeout(
+                queryClient.fetchQuery({
+                    queryKey,
+                    queryFn: async () => {
+                        const client = new AddonClient({ url: addon.url });
+                        const response = await client.fetchStreams(imdbId, type, tvParams);
+                        return parseStreams(response.streams, addon.id, addon.name);
+                    },
+                    staleTime: 3 * 60 * 1000,
+                    gcTime: 10 * 60 * 1000,
+                }),
+                PER_ADDON_TIMEOUT,
+                [] as AddonSource[]
+            );
+        } catch {
+            return [] as AddonSource[];
+        }
+    });
+    const settled = await Promise.allSettled(sourcePromises);
+    return settled.map((r) => (r.status === "fulfilled" ? r.value : ([] as AddonSource[]))).flat();
 }
 
 interface ShowSourceToastParams {
@@ -722,6 +781,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
+        const hydrationToken = ++playSourceToken;
+
         const playbackRequest = options?.progressKey
             ? buildRequestFromProgressKey(options.progressKey, title)
             : null;
@@ -852,6 +913,32 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     ...getBingeMemoryPatch(options.progressKey),
                 });
             }
+
+            // Full addon source list for in-player switching (Continue Watching, manual row, auto → play, etc.)
+            const pkHydrate = options?.progressKey;
+            if (pkHydrate?.imdbId && pkHydrate.type) {
+                const capturedPk = pkHydrate;
+                const capturedSource = source;
+                const tok = hydrationToken;
+                void (async () => {
+                    try {
+                        const addonInfos = await getEnabledAddonInfos();
+                        if (addonInfos.length === 0) return;
+                        const { streamAddons } = await classifyAddons(addonInfos);
+                        const req = buildRequestFromProgressKey(capturedPk, title);
+                        const flat = await fetchStreamSourcesFlat(req.imdbId, req.type, req.tvParams, streamAddons);
+                        if (tok !== playSourceToken) return;
+                        const st = get();
+                        if (!progressKeysMatch(st.currentProgressKey, capturedPk)) return;
+                        if (st.selectedSource?.url !== capturedSource.url) return;
+                        set({
+                            allFetchedSources: mergePlayingIntoSourceList(capturedSource, dedupeSourcesByUrl(flat)),
+                        });
+                    } catch {
+                        /* non-blocking */
+                    }
+                })();
+            }
         } finally {
             if (playbackRequest) {
                 set((state) => state.activeRequest === playbackRequest ? { activeRequest: null } : {});
@@ -923,29 +1010,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 subtitleAddons: subtitleAddons.length,
             });
 
-            const sourcePromises = streamAddons.map(async (addon) => {
-                const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
-
-                try {
-                    return await withTimeout(
-                        queryClient.fetchQuery({
-                            queryKey,
-                            queryFn: async () => {
-                                const client = new AddonClient({ url: addon.url });
-                                const response = await client.fetchStreams(imdbId, type, tvParams);
-                                return parseStreams(response.streams, addon.id, addon.name);
-                            },
-                            staleTime: 3 * 60 * 1000,
-                            gcTime: 10 * 60 * 1000,
-                        }),
-                        PER_ADDON_TIMEOUT,
-                        [] as AddonSource[]
-                    );
-                } catch {
-                    return [] as AddonSource[];
-                }
-            });
-
             const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
                 try {
                     return await withTimeout(
@@ -975,16 +1039,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             })();
 
-            const [sourcesSettled, subtitleResults, originalLanguage] = await Promise.all([
-                Promise.allSettled(sourcePromises),
+            const [allSources, subtitleResults, originalLanguage] = await Promise.all([
+                fetchStreamSourcesFlat(imdbId, type, tvParams, streamAddons),
                 Promise.all(subtitlePromises),
                 originalLanguagePromise,
             ]);
 
-            const sourcesResults = sourcesSettled.map((result) => result.status === "fulfilled" ? result.value : [] as AddonSource[]);
             if (requestId !== currentRequestId) return;
-
-            const allSources = sourcesResults.flat();
             const inlineSubResults: SubtitleQueryResult[] = [];
             for (const source of allSources) {
                 if (source.inlineSubtitles?.length) {
@@ -1020,7 +1081,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 uncachedMatches: result.uncachedMatches.length,
             });
 
-            set({ allFetchedSources: result.allSorted, selectedSource: result.source });
+            const fullSourceList = dedupeSourcesByUrl(allSources);
+            set({
+                allFetchedSources: result.source
+                    ? mergePlayingIntoSourceList(result.source, fullSourceList)
+                    : fullSourceList,
+                selectedSource: result.source,
+            });
 
             if (!result.hasMatches) {
                 set({ activeRequest: null });
@@ -1057,7 +1124,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         progressKey: progressKey ?? undefined,
                         subtitles: subtitles.length > 0 ? subtitles : undefined,
                     }),
-                otherSourcesCount: result.allSorted.length - 1,
+                otherSourcesCount: Math.max(0, fullSourceList.length - 1),
                 onPickSource: () => set({ sourcePickerOpen: true }),
             });
             timer.end({ status: "ok", selectedCached: result.isCached });

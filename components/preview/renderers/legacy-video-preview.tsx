@@ -333,13 +333,22 @@ function PlayerCastButton({
 }
 
 const PLAYER_BTN =
-    "inline-flex items-center justify-center rounded-full text-white bg-transparent border-none cursor-pointer shrink-0 transition-[transform,background-color,box-shadow,color] duration-200 ease-premium hover:bg-white/18 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0 active:scale-[0.92] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none disabled:active:scale-100";
+    "inline-flex items-center justify-center rounded-full text-white bg-transparent border-none cursor-pointer shrink-0 transition-[transform,background-color,box-shadow,color,opacity] duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-white/[0.14] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-0 active:scale-[0.93] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-35 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none disabled:active:scale-100";
 const PLAYER_BTN_SM = `${PLAYER_BTN} w-9 h-9`;
 const PLAYER_BTN_MD = `${PLAYER_BTN} w-10 h-10`;
-const POPUP_STYLE: React.CSSProperties = { background: "rgba(15,15,15,0.95)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.1)" };
-const POPUP_CLS = "player-popup rounded-lg text-white";
+const POPUP_STYLE: React.CSSProperties = {
+    background: "rgba(14, 14, 17, 0.96)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    border: "1px solid rgba(255,255,255,0.085)",
+    boxShadow: "0 18px 50px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+/** Radix menu adds zoom/fade; `.player-popup` supplies its own entrance — disable the duplicate. */
+const POPUP_CLS =
+    "player-popup rounded-[10px] text-white data-[state=open]:animate-none data-[state=closed]:animate-none motion-reduce:!animate-none";
 const POPUP_LABEL = "player-popup-label text-[10px] tracking-[0.15em] uppercase text-white/40 px-3.5 pt-2.5 pb-1.5 select-none";
-const POPUP_ITEM = "player-popup-item relative flex items-center gap-2.5 w-full px-3.5 py-2 text-[13px] text-white/85 bg-transparent border-none cursor-pointer text-left transition-colors hover:bg-white/[0.08] hover:text-white";
+const POPUP_ITEM =
+    "player-popup-item relative flex items-center gap-2.5 w-full px-3.5 py-2 text-[13px] text-white/85 bg-transparent border-none cursor-pointer text-left rounded-md transition-[background,color,transform,opacity] duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:scale-[0.99] motion-reduce:active:scale-100";
 const POPUP_DIVIDER = "player-popup-divider h-px bg-white/[0.08] my-1";
 
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
@@ -2877,7 +2886,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Custom control bar */}
                     <div
                         className={cn(
-                            "absolute inset-x-0 bottom-0 z-40 pointer-events-none transition-all duration-300 ease-out",
+                            "absolute inset-x-0 bottom-0 z-40 pointer-events-none transition-[opacity,transform] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:duration-150 motion-reduce:transition-opacity",
                             showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
                         )}
                     >
@@ -3071,7 +3080,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}
                                         >
                                             <DropdownMenuTrigger asChild>
-                                                <button className={cn(PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide")} data-tv-focusable>
+                                                <button
+                                                    type="button"
+                                                    className={cn(
+                                                        PLAYER_BTN_SM,
+                                                        "text-[11px] font-medium tracking-wide",
+                                                        openMenu === "audio" && "bg-white/[0.12] shadow-[0_0_0_1px_rgba(255,255,255,0.12)] text-white"
+                                                    )}
+                                                    data-tv-focusable
+                                                >
                                                     Audio
                                                 </button>
                                             </DropdownMenuTrigger>
@@ -3138,9 +3155,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         >
                                             <DropdownMenuTrigger asChild>
                                                 <button
+                                                    type="button"
                                                     className={cn(
-                                                        PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide",
-                                                        activeSubtitleIndex >= 0 && "text-primary"
+                                                        PLAYER_BTN_SM,
+                                                        "text-[11px] font-medium tracking-wide",
+                                                        activeSubtitleIndex >= 0 && "text-primary",
+                                                        openMenu === "subtitles" && "bg-white/[0.12] shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
                                                     )}
                                                     data-tv-focusable
                                                 >
@@ -3193,14 +3213,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     className={cn(
                                                         PLAYER_BTN_SM,
                                                         "relative",
-                                                        openMenu === "streams" && "text-primary"
+                                                        openMenu === "streams" && "bg-white/[0.12] text-primary shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
                                                     )}
                                                     title="Change stream"
                                                     aria-label="Change stream source"
                                                     aria-expanded={openMenu === "streams"}
                                                     data-tv-focusable
                                                 >
-                                                    <Layers className="h-5 w-5" />
+                                                    <Layers
+                                                        className={cn(
+                                                            "h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
+                                                            openMenu === "streams" && "scale-[1.06]"
+                                                        )}
+                                                    />
                                                     <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-[2px] bg-primary/90 text-[9px] font-semibold leading-none text-primary-foreground flex items-center justify-center tabular-nums">
                                                         {allFetchedSources.length}
                                                     </span>
@@ -3255,11 +3280,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     >
                                         <DropdownMenuTrigger asChild>
                                             <button
-                                                className={PLAYER_BTN_SM}
-                                                style={{ transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                                                type="button"
+                                                className={cn(
+                                                    PLAYER_BTN_SM,
+                                                    openMenu === "settings" && "bg-white/[0.12] shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
+                                                )}
                                                 data-tv-focusable
                                             >
-                                                <Settings className={cn("h-5 w-5 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]", openMenu === "settings" && "rotate-90")} />
+                                                <Settings
+                                                    className={cn(
+                                                        "h-5 w-5 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
+                                                        openMenu === "settings" && "rotate-90 text-primary"
+                                                    )}
+                                                />
                                             </button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuPortal container={containerRef.current ?? undefined}>

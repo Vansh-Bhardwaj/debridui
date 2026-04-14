@@ -911,21 +911,27 @@ input[type="range"]:hover::-moz-range-thumb {
     transition: width 100ms ease;
 }
 
-/* Player popup menus (settings, subtitle, audio) */
+/* Player popup menus (settings, subtitle, audio, streams) */
 .player-popup {
     border-radius: 10px;
     background: rgba(22, 22, 22, 0.98);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    animation: player-popup-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: player-popup-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: bottom right;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .player-popup {
+        animation: none;
+    }
 }
 
 @keyframes player-popup-in {
     from {
         opacity: 0;
-        transform: scale(0.92) translateY(6px);
+        transform: scale(0.96) translateY(4px);
     }
     to {
         opacity: 1;
@@ -975,27 +981,36 @@ input[type="range"]:hover::-moz-range-thumb {
     border: none;
     cursor: pointer;
     transition:
-        background 100ms ease,
-        color 100ms ease,
-        padding-left 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
+        background 140ms cubic-bezier(0.22, 1, 0.36, 1),
+        color 140ms ease,
+        padding-left 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 140ms ease;
     text-align: left;
 }
 
-.player-popup-item:hover,
-.player-popup-item:focus-visible {
+.player-popup-item:hover:not(:disabled),
+.player-popup-item:focus-visible:not(:disabled) {
     background: rgba(255, 255, 255, 0.08);
     color: white;
     padding-left: 18px;
     outline: none;
 }
 
-.player-popup-item[data-active="true"] {
-    color: var(--primary);
-    font-weight: 500;
+.player-popup-item:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.player-popup-item:disabled:hover {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    padding-left: 14px;
 }
 
 .player-popup-item[data-active="true"] {
     color: var(--primary);
+    font-weight: 500;
+    background: color-mix(in oklch, var(--primary) 12%, transparent);
 }
 
 .player-popup-item[data-active="true"]::before {
@@ -1050,6 +1065,12 @@ input[type="range"]:hover::-moz-range-thumb {
     transform: scale(0.88);
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .player-stepper-btn:active {
+        transform: none;
+    }
+}
+
 .player-stepper-value {
     font-size: 12px;
     font-variant-numeric: tabular-nums;
@@ -1089,6 +1110,12 @@ input[type="range"]:hover::-moz-range-thumb {
 
 .player-speed-chip:active {
     transform: scale(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .player-speed-chip:active {
+        transform: none;
+    }
 }
 
 .player-speed-chip[data-active="true"] {
