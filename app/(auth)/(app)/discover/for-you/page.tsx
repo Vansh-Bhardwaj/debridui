@@ -26,7 +26,7 @@ function useRecommendationsByType(type: "movies" | "shows", limit: number) {
     });
 }
 
-function MediaGrid({
+const MediaGrid = memo(function MediaGrid({
     items,
     type,
     watchedIds,
@@ -40,15 +40,24 @@ function MediaGrid({
             {items.map((item, index) => {
                 const media = item.movie || item.show;
                 if (!media) return null;
+                const animateEntry = index < 16;
                 return (
                     <div
                         key={`${type}-${media.ids?.slug || index}`}
-                        className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
-                        style={{
-                            animationDelay: `${Math.min(index * 20, 400)}ms`,
-                            animationDuration: "400ms",
-                            animationFillMode: "backwards",
-                        }}
+                        className={
+                            animateEntry
+                                ? "animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                                : undefined
+                        }
+                        style={
+                            animateEntry
+                                ? {
+                                      animationDelay: `${Math.min(index * 16, 240)}ms`,
+                                      animationDuration: "320ms",
+                                      animationFillMode: "backwards",
+                                  }
+                                : undefined
+                        }
                     >
                         <MediaCard
                             media={media}
@@ -60,7 +69,7 @@ function MediaGrid({
             })}
         </div>
     );
-}
+});
 
 const ForYouPage = memo(function ForYouPage() {
     const [movieLimit, setMovieLimit] = useState(INITIAL_LIMIT);

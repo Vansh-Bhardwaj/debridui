@@ -6,7 +6,7 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
     return (
-        <div key={pathname} className="route-enter motion-reduce:animate-none">
+        <div key={pathname} className="route-enter motion-reduce:animate-none min-h-0">
             {children}
         </div>
     );

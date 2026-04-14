@@ -229,6 +229,7 @@ export function PreviewDialog() {
                 className={tvMode
                     ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-screen p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%]"
                     : "sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"}
+                overlayClassName="bg-black/70 backdrop-blur-none sm:bg-black/65"
                 showCloseButton={false}
                 aria-describedby="preview-dialog-description">
                 <DialogTitle className="sr-only">{activeTitle}</DialogTitle>

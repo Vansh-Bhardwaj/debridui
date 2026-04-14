@@ -351,7 +351,30 @@ export function ContinueWatching() {
     }
 
     if (items.length === 0) {
-        return null; // Don't show section if no items
+        return (
+            <section
+                className="mb-8 rounded-sm border border-dashed border-border/50 bg-muted/5 px-4 py-8 lg:px-6"
+                data-tv-section>
+                <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Continue watching</h2>
+                <p className="text-sm text-muted-foreground mt-2 max-w-lg leading-relaxed">
+                    Titles you start in the player appear here so you can resume in one click.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-5">
+                    <Link
+                        href="/discover/browse"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-background/80 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                        Browse catalog
+                    </Link>
+                    <Link
+                        href="/watchlist"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-background/80 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                        Watchlist
+                    </Link>
+                </div>
+            </section>
+        );
     }
 
     return (

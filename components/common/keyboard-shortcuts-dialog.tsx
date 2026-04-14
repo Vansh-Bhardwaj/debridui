@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, createContext, useContext } from "react";
+import { useEffect, useState, useCallback, createContext, useContext, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Keyboard } from "lucide-react";
 
@@ -14,43 +14,50 @@ interface ShortcutGroup {
     shortcuts: Shortcut[];
 }
 
-const SHORTCUT_GROUPS: ShortcutGroup[] = [
-    {
-        label: "Global",
-        shortcuts: [
-            { keys: ["⌘", "K"], description: "Open search" },
-            { keys: ["⌘", "B"], description: "Toggle sidebar" },
-            { keys: ["?"], description: "Keyboard shortcuts" },
-            { keys: ["⇧", "T"], description: "Toggle TV mode" },
-        ],
-    },
-    {
-        label: "Video Player",
-        shortcuts: [
-            { keys: ["Space"], description: "Play / Pause" },
-            { keys: ["←", "→"], description: "Seek ±5s" },
-            { keys: ["J", "L"], description: "Seek ±10s" },
-            { keys: ["[", "]"], description: "Speed ±0.25x" },
-            { keys: ["↑", "↓"], description: "Volume ±10%" },
-            { keys: ["M"], description: "Toggle mute" },
-            { keys: ["F"], description: "Toggle fullscreen" },
-            { keys: ["C"], description: "Cycle subtitles" },
-            { keys: ["<", ">"], description: "Frame step (paused)" },
-            { keys: ["⇧", "N"], description: "Next episode" },
-            { keys: ["⇧", "P"], description: "Previous episode" },
-        ],
-    },
-    {
-        label: "Preview / Gallery",
-        shortcuts: [
-            { keys: ["←"], description: "Previous item" },
-            { keys: ["→"], description: "Next item" },
-            { keys: ["Esc"], description: "Close" },
-        ],
-    },
-];
-
 import { useSettingsStore } from "@/lib/stores/settings";
+
+function isApplePlatform() {
+    if (typeof navigator === "undefined") return false;
+    return /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent);
+}
+
+function buildShortcutGroups(mod: string): ShortcutGroup[] {
+    return [
+        {
+            label: "Global",
+            shortcuts: [
+                { keys: [mod, "K"], description: "Open search" },
+                { keys: [mod, "B"], description: "Toggle sidebar" },
+                { keys: ["?"], description: "Keyboard shortcuts" },
+                { keys: ["⇧", "T"], description: "Toggle TV mode" },
+            ],
+        },
+        {
+            label: "Video Player",
+            shortcuts: [
+                { keys: ["Space"], description: "Play / Pause" },
+                { keys: ["←", "→"], description: "Seek ±5s" },
+                { keys: ["J", "L"], description: "Seek ±10s" },
+                { keys: ["[", "]"], description: "Speed ±0.25x" },
+                { keys: ["↑", "↓"], description: "Volume ±10%" },
+                { keys: ["M"], description: "Toggle mute" },
+                { keys: ["F"], description: "Toggle fullscreen" },
+                { keys: ["C"], description: "Cycle subtitles" },
+                { keys: ["<", ">"], description: "Frame step (paused)" },
+                { keys: ["⇧", "N"], description: "Next episode" },
+                { keys: ["⇧", "P"], description: "Previous episode" },
+            ],
+        },
+        {
+            label: "Preview / Gallery",
+            shortcuts: [
+                { keys: ["←"], description: "Previous item (when not seeking video)" },
+                { keys: ["→"], description: "Next item (when not seeking video)" },
+                { keys: ["Esc"], description: "Close" },
+            ],
+        },
+    ];
+}
 
 function Kbd({ children }: { children: string }) {
     return (
@@ -66,6 +73,14 @@ export const useKeyboardShortcuts = () => useContext(ShortcutsContext);
 
 export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
+    // Default Ctrl for SSR + first paint; align to ⌘ on Apple after mount (avoids hydration mismatch).
+    const [modKey, setModKey] = useState("Ctrl");
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- userAgent only exists client-side; deferred update avoids SSR/CSR label mismatch
+        setModKey(isApplePlatform() ? "⌘" : "Ctrl");
+    }, []);
+
+    const shortcutGroups = useMemo(() => buildShortcutGroups(modKey), [modKey]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
@@ -102,7 +117,7 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
                         <DialogDescription className="sr-only">Available keyboard shortcuts for navigation and playback</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-5 pt-1">
-                        {SHORTCUT_GROUPS.map((group) => (
+                        {shortcutGroups.map((group) => (
                             <div key={group.label} className="space-y-2">
                                 <div className="flex items-center gap-3">
                                     <div className="h-px w-6 bg-border" />

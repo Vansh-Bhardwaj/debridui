@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import LoginForm from "./login-form";
+import { SplashScreen } from "@/components/auth/splash-screen";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -16,8 +17,15 @@ export default function LoginPage() {
         }
     }, [session, isPending, router]);
 
-    // Don't render form while checking session to avoid flash
-    if (isPending || session) return null;
+    useEffect(() => {
+        if (!isPending && !session) {
+            router.prefetch("/dashboard");
+        }
+    }, [isPending, session, router]);
+
+    if (isPending || session) {
+        return <SplashScreen stage={isPending ? "Checking session…" : "Redirecting…"} />;
+    }
 
     return <LoginForm />;
 }

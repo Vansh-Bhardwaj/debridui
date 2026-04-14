@@ -4,6 +4,7 @@ import { getClient } from "@/lib/clients";
 import { getUserAccounts, addUserAccount, removeUserAccount } from "@/lib/actions/user-accounts";
 import { AccountType } from "@/lib/schemas";
 import { useToastMutation } from "@/lib/utils/mutation-factory";
+import type { User } from "@/lib/types";
 
 const USER_ACCOUNTS_KEY = ["user-accounts"];
 
@@ -80,6 +81,20 @@ export async function getDebridUserInfo(account: UserAccount) {
     return await getClient({ type: account.type }).getUser(account.apiKey);
 }
 
+/** Minimal `User` so the app shell + API client can render while `/getUser` is in flight. */
+export function debridUserPlaceholderFromAccount(account: UserAccount): User {
+    return {
+        id: account.id,
+        name: account.name,
+        email: "syncing@local",
+        language: "en",
+        isPremium: true,
+        premiumExpiresAt: new Date(Date.now() + 365 * 86400000),
+        type: account.type as AccountType,
+        apiKey: account.apiKey,
+    };
+}
+
 // Cache debrid user info with React Query
 // `rerender-dependencies` - Use primitive ID instead of object
 export function useDebridUserInfo(account: UserAccount | null) {
@@ -94,6 +109,7 @@ export function useDebridUserInfo(account: UserAccount | null) {
             return getDebridUserInfo(account);
         },
         enabled: !!accountId && !!accountType && !!accountApiKey,
+        placeholderData: account ? debridUserPlaceholderFromAccount(account) : undefined,
         staleTime: 24 * 60 * 60 * 1000, // 24 hours
         gcTime: 24 * 60 * 60 * 1000,
         retry: 1,

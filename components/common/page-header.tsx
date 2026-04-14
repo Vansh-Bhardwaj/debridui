@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PageHeaderProps {
     icon?: LucideIcon;
@@ -10,7 +11,12 @@ interface PageHeaderProps {
 
 export function PageHeader({ icon: Icon, title, description, action, divider = false }: PageHeaderProps) {
     return (
-        <div className={divider ? "space-y-10" : undefined} data-tv-section>
+        <div
+            className={cn(
+                "animate-in fade-in-0 slide-in-from-bottom-1 duration-500 ease-premium motion-reduce:animate-none",
+                divider && "space-y-10"
+            )}
+            data-tv-section>
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
                 <div className="space-y-2">
                     <div className="flex items-center gap-3">

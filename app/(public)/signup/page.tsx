@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import SignupForm from "./signup-form";
+import { SplashScreen } from "@/components/auth/splash-screen";
 
 export default function SignupPage() {
     const router = useRouter();
@@ -16,7 +17,15 @@ export default function SignupPage() {
         }
     }, [session, isPending, router]);
 
-    if (isPending || session) return null;
+    useEffect(() => {
+        if (!isPending && !session) {
+            router.prefetch("/dashboard");
+        }
+    }, [isPending, session, router]);
+
+    if (isPending || session) {
+        return <SplashScreen stage={isPending ? "Checking session…" : "Redirecting…"} />;
+    }
 
     return <SignupForm />;
 }

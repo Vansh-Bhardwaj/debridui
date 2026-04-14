@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,10 @@ const loginSchema = z.object({
 export default function LoginForm() {
     const router = useRouter();
     const [isRedirecting, setIsRedirecting] = useState(false);
+
+    useEffect(() => {
+        router.prefetch("/dashboard");
+    }, [router]);
 
     const isGoogleOAuthEnabled = !!(process.env.NEXT_PUBLIC_NEON_AUTH_URL || NEON_AUTH_URL);
 
@@ -49,8 +53,8 @@ export default function LoginForm() {
 
             if (data) {
                 setIsRedirecting(true);
-                toast.success("Logged in successfully");
-                router.push("/dashboard");
+                toast.success("Signed in", { duration: 2000 });
+                router.replace("/dashboard");
             }
         } catch {
             toast.error("An unexpected error occurred");

@@ -22,7 +22,7 @@ export const SplashScreen = memo(function SplashScreen({ stage }: SplashScreenPr
             </span>
             {/* Indeterminate progress bar */}
             <div className="w-32 h-[2px] rounded-full bg-muted overflow-hidden animate-[splash-text_0.4s_0.5s_ease_both]">
-                <div className="h-full bg-primary rounded-full animate-[splash-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+                <div className="h-full bg-primary rounded-full animate-[splash-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite motion-reduce:animate-none" />
             </div>
         </div>
     );

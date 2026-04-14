@@ -105,11 +105,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Sync user with database when session is detected
     // This ensures that foreign keys (like user_accounts.user_id) work
     // Skip if already synced this browser session to reduce Worker requests
+    // Defer until idle so it does not compete with session + debrid profile fetch on cold login
     useEffect(() => {
-        if (session && !sessionStorage.getItem("user-synced")) {
-            syncUser();
+        if (!session || sessionStorage.getItem("user-synced")) return;
+
+        const run = () => {
             sessionStorage.setItem("user-synced", "1");
+            void syncUser();
+        };
+
+        const idle =
+            typeof requestIdleCallback !== "undefined"
+                ? requestIdleCallback(run, { timeout: 5000 })
+                : undefined;
+        if (idle !== undefined) {
+            return () => cancelIdleCallback(idle);
         }
+        const t = window.setTimeout(run, 1);
+        return () => clearTimeout(t);
     }, [session]);
 
     // Centralized redirect logic - single source of truth for all auth redirects

@@ -79,7 +79,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, watched, c
         <Link href={linkHref} className="block group focus-visible:outline-none" aria-label={media.title} data-tv-focusable tabIndex={0}>
             <div
                 className={cn(
-                    "relative overflow-hidden transition-transform duration-300 ease-out hover:scale-hover [content-visibility:auto] [contain-intrinsic-size:120px_180px] rounded-sm group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
+                    "relative overflow-hidden rounded-sm shadow-none transition-[box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:shadow-xl group-hover:shadow-black/12 dark:group-hover:shadow-black/45 motion-reduce:transition-none motion-reduce:group-hover:shadow-none [content-visibility:auto] [contain-intrinsic-size:120px_180px] group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
                     className
                 )}>
                 <div className="aspect-2/3 relative overflow-hidden bg-muted/50 rounded-sm">
@@ -89,7 +89,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, watched, c
                             alt={media.title}
                             fill
                             sizes="(max-width: 640px) 120px, (max-width: 768px) 150px, (max-width: 1280px) 180px, (max-width: 1536px) 190px, 200px"
-                            className="object-cover transition-opacity duration-300"
+                            className="object-cover scale-100 transition-transform duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none group-hover:scale-105 motion-reduce:group-hover:scale-100"
                             loading="lazy"
                             unoptimized
                             onError={handleImageError}
@@ -124,7 +124,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, watched, c
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300" />
 
                     {/* Content — always visible on touch, hover on desktop */}
-                    <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 opacity-100 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 transition-all duration-300">
+                    <div className="absolute inset-x-0 bottom-0 p-3 translate-y-0 opacity-100 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none motion-reduce:sm:translate-y-0 motion-reduce:sm:opacity-100">
                         <h3 className="font-light text-sm text-white leading-tight line-clamp-2 mb-1.5">
                             {media.title}
                         </h3>

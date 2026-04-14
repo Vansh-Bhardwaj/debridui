@@ -6,6 +6,7 @@ import Link from "next/link";
 import nextDynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
+import { useRouter } from "next/navigation";
 import { memo, useState, useCallback, useEffect, useRef } from "react";
 import {
     useTraktTrendingMovies,
@@ -116,8 +117,8 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                 <p
                     className="text-sm text-muted-foreground max-w-md leading-relaxed animate-in fade-in-0 motion-reduce:animate-none"
                     style={{ animationDuration: "600ms", animationDelay: "200ms", animationFillMode: "backwards" }}>
-                    A modern debrid client for managing your files, discovering trending movies and shows — with addon
-                    support and streaming to your preferred media player.
+                    Browse what&apos;s trending, pick up your watchlist, and play through your addons — same rhythm as a
+                    library app, built for debrid streaming.
                 </p>
 
                 {/* Search bar */}
@@ -140,18 +141,11 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                     className="flex flex-wrap items-center gap-2 animate-in fade-in-0 motion-reduce:animate-none"
                     style={{ animationDuration: "600ms", animationDelay: "380ms", animationFillMode: "backwards" }}>
                     <Link
-                        href="/files"
+                        href="/discover/browse"
                         data-tv-focusable
                         className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                     >
-                        Your Files
-                    </Link>
-                    <Link
-                        href="/discover"
-                        data-tv-focusable
-                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                    >
-                        Discover
+                        Browse
                     </Link>
                     <Link
                         href="/watchlist"
@@ -159,6 +153,13 @@ const WelcomeSection = memo(function WelcomeSection({ onSearchClick }: { onSearc
                         className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                     >
                         Watchlist
+                    </Link>
+                    <Link
+                        href="/files"
+                        data-tv-focusable
+                        className="h-8 px-3 inline-flex items-center rounded-sm border border-border/50 bg-muted/20 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                        Your Files
                     </Link>
                 </div>
             </div>
@@ -324,13 +325,15 @@ function LazyTraktSection({
     );
 }
 
-/** "For You" — personalized Trakt recommendations, only shown when genuinely personalized */
+/** "For You" — personalized Trakt recommendations; whole block omitted when nothing to show */
 const ForYouSection = memo(function ForYouSection({ visible }: { visible: boolean }) {
     const isTraktConnected = !!traktClient.getAccessToken();
     const { data } = useTraktRecommendations(isTraktConnected && visible);
     if (!data?.isPersonalized || !data.items.length) return null;
     return (
-        <MediaSection title="Movies & Shows" items={data.items} rows={1} viewAllHref="/discover/for-you" />
+        <ContentSection label="For You" icon={ICON_HEART} delay={0}>
+            <MediaSection title="Movies & Shows" items={data.items} rows={1} viewAllHref="/discover/for-you" />
+        </ContentSection>
     );
 });
 
@@ -378,9 +381,16 @@ const AiringTodaySection = memo(function AiringTodaySection({ visible }: { visib
 });
 
 const DashboardPage = memo(function DashboardPage() {
+    const router = useRouter();
     const [searchOpen, setSearchOpen] = useState(false);
     const handleSearchClick = useCallback(() => setSearchOpen(true), []);
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
+
+    useEffect(() => {
+        router.prefetch("/watchlist");
+        router.prefetch("/discover/browse");
+        router.prefetch("/search");
+    }, [router]);
 
     // Above-the-fold: always fetch
     const trendingMovies = useTraktTrendingMovies(20);
@@ -412,14 +422,12 @@ const DashboardPage = memo(function DashboardPage() {
                 {!tvMode && (
                     <div className="flex items-center gap-4">
                         <div className="h-px w-8 bg-primary" />
-                        <span className="text-xs tracking-widest uppercase text-muted-foreground">Browse</span>
+                        <span className="text-xs tracking-widest uppercase text-muted-foreground">More to watch</span>
                     </div>
                 )}
 
-                {/* For You — personalized recommendations (only shown when Trakt connected + has watch history) */}
-                <LazyTraktSection label="For You" icon={ICON_HEART} delay={0}>
-                    {(visible) => <ForYouSection visible={visible} />}
-                </LazyTraktSection>
+                {/* For You — eager (not intersection-deferred); omitted unless Trakt + real recommendations */}
+                <ForYouSection visible />
 
                 {/* Addon Catalogs — lazy-loaded per-row */}
                 <SectionErrorBoundary section="Addon Catalogs">

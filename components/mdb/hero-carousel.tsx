@@ -49,13 +49,13 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                 tvMode ? "h-[60vh]" : "aspect-[2/1]"
             )}>
                 {/* Shimmer skeleton while image loads */}
-                <div className="absolute inset-0 bg-muted animate-pulse" />
+                <div className="absolute inset-0 bg-muted animate-pulse motion-reduce:animate-none" />
 
                 {/* Background Image with Ken Burns effect */}
                 <div
                     className={cn(
-                        "absolute inset-0 transition-transform duration-[8000ms] ease-out",
-                        isActive ? "scale-105" : "scale-100"
+                        "absolute inset-0 transition-transform duration-[8000ms] ease-premium motion-reduce:duration-0",
+                        isActive ? "scale-105 motion-reduce:scale-100" : "scale-100"
                     )}>
                     <img
                         src={desktopImage}
@@ -90,7 +90,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                     <div className="w-full max-w-7xl mx-auto px-8 lg:px-12 xl:px-16">
                         <div
                             className={cn(
-                                "max-w-2xl space-y-5 transition-all duration-700",
+                                "max-w-2xl space-y-5 transition-[opacity,transform] duration-700 ease-premium motion-reduce:transition-none",
                                 isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                             )}
                             style={{ transitionDelay: isActive ? "200ms" : "0ms" }}>
@@ -195,13 +195,13 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
             {/* Mobile Layout */}
             <div className="md:hidden relative w-full aspect-[9/14] overflow-hidden">
                 {/* Shimmer skeleton while image loads */}
-                <div className="absolute inset-0 bg-muted animate-pulse" />
+                <div className="absolute inset-0 bg-muted animate-pulse motion-reduce:animate-none" />
 
                 {/* Background */}
                 <div
                     className={cn(
-                        "absolute inset-0 transition-transform duration-[8000ms] ease-out",
-                        isActive ? "scale-105" : "scale-100"
+                        "absolute inset-0 transition-transform duration-[8000ms] ease-premium motion-reduce:duration-0",
+                        isActive ? "scale-105 motion-reduce:scale-100" : "scale-100"
                     )}>
                     <img
                         src={mobileImage}
@@ -245,7 +245,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                 <div className="absolute inset-x-0 bottom-0 p-4 pb-14">
                     <div
                         className={cn(
-                            "space-y-3 transition-all duration-500",
+                            "space-y-3 transition-[opacity,transform] duration-500 ease-premium motion-reduce:transition-none",
                             isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                         )}
                         style={{ transitionDelay: isActive ? "200ms" : "0ms" }}>

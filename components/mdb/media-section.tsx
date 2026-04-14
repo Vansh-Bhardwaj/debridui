@@ -31,7 +31,10 @@ const MediaSectionSkeleton = memo(function MediaSectionSkeleton() {
     return (
         <div className="grid grid-rows-2 grid-flow-col auto-cols-[120px] sm:auto-cols-[140px] md:auto-cols-[160px] xl:auto-cols-[175px] 2xl:auto-cols-[190px] gap-3 pt-2 pb-4 max-lg:px-4 w-max">
             {Array.from({ length: 20 }, (_, i) => (
-                <div key={i} className="animate-pulse" style={{ animationDelay: `${i * 50}ms` }}>
+                <div
+                    key={i}
+                    className="animate-pulse motion-reduce:animate-none"
+                    style={{ animationDelay: `${Math.min(i * 40, 400)}ms` }}>
                     <Skeleton className="aspect-2/3 rounded-sm" />
                 </div>
             ))}
@@ -141,11 +144,25 @@ export const MediaSection = memo(function MediaSection({
                         {pageItems.map((item, index) => {
                             const media = item.movie || item.show;
                             const type = item.movie ? "movie" : "show";
+                            const enter = index < 16;
                             return (
                                 <div
                                     key={`${type}-${media!.ids?.trakt || index}`}
-                                    className="animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
-                                    style={{ animationDelay: `${Math.min(index * 30, 300)}ms`, animationDuration: "400ms", animationFillMode: "backwards" }}>
+                                    className={
+                                        enter
+                                            ? "animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+                                            : undefined
+                                    }
+                                    style={
+                                        enter
+                                            ? {
+                                                  animationDelay: `${Math.min(index * 24, 240)}ms`,
+                                                  animationDuration: "360ms",
+                                                  animationFillMode: "backwards",
+                                                  animationTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+                                              }
+                                            : undefined
+                                    }>
                                     <MediaCard
                                         media={media!}
                                         type={type}

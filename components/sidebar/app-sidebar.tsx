@@ -31,7 +31,7 @@ function WatchlistBadge() {
 
 const browseNav = [
         {
-            title: "Dashboard",
+            title: "Home",
             url: "/dashboard",
             icon: HomeIcon,
         },

@@ -1441,22 +1441,36 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     }, []);
 
-    // Track buffered range for seekbar visual feedback
+    // Track buffered range for seekbar visual feedback (throttled — timeupdate fires very often)
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
+        const lastSentPctRef = { current: -1 as number };
+        const lastSentAtRef = { current: 0 };
+        const BUFFER_UI_MIN_MS = 200;
+        const BUFFER_UI_MIN_DELTA = 0.35;
+
         const update = () => {
             if (!video.duration) return;
-            // Find the buffered range containing the current playback position
             const ct = video.currentTime;
-            let end = ct; // Default to current time if no range found
+            let end = ct;
             for (let i = 0; i < video.buffered.length; i++) {
                 if (video.buffered.start(i) <= ct && ct <= video.buffered.end(i)) {
                     end = video.buffered.end(i);
                     break;
                 }
             }
-            setBufferedPercent((end / video.duration) * 100);
+            const pct = (end / video.duration) * 100;
+            const now = performance.now();
+            if (
+                now - lastSentAtRef.current < BUFFER_UI_MIN_MS &&
+                Math.abs(pct - lastSentPctRef.current) < BUFFER_UI_MIN_DELTA
+            ) {
+                return;
+            }
+            lastSentAtRef.current = now;
+            lastSentPctRef.current = pct;
+            setBufferedPercent(pct);
         };
         video.addEventListener("progress", update);
         video.addEventListener("timeupdate", update);

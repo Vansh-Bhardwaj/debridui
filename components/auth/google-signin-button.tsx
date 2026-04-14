@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -13,6 +14,13 @@ interface GoogleSignInButtonProps {
 
 export function GoogleSignInButton({ callbackURL = "/dashboard", disabled }: GoogleSignInButtonProps) {
     const [isLoading, setIsLoading] = useState(false);
+    const router = useRouter();
+
+    useEffect(() => {
+        if (callbackURL.startsWith("/")) {
+            router.prefetch(callbackURL);
+        }
+    }, [router, callbackURL]);
 
     async function handleGoogleSignIn() {
         setIsLoading(true);

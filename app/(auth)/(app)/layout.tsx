@@ -105,7 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // AuthProvider handles redirect to /onboarding if no accounts
     const isReady = userAccounts.length > 0 && currentAccount && currentUser && client;
     if (!isReady) {
-        return <SplashScreen />;
+        return <SplashScreen stage="Starting up…" />;
     }
 
     return (

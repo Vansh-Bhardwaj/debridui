@@ -31,7 +31,7 @@ const DETAIL_ROUTES: Record<string, string> = {
 
 // Static route labels
 const ROUTE_LABELS: Record<string, string> = {
-    dashboard: "Dashboard",
+    dashboard: "Home",
     files: "Files",
     settings: "Settings",
     accounts: "Accounts",

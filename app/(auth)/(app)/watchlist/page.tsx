@@ -182,7 +182,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
     items: TraktCalendarItem[];
     count: number;
 }) {
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(true);
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const sorted = useMemo(
@@ -372,18 +372,30 @@ const WatchlistPage = memo(function WatchlistPage() {
     if (!isTraktConnected) {
         return (
             <div className="space-y-6">
-                <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
+                <PageHeader
+                    icon={Bookmark}
+                    title="Watchlist"
+                    description="Trakt watchlist, favorites, and what airs next — connect Trakt to sync."
+                />
                 <div className="flex flex-col items-center justify-center py-16 space-y-4 text-center">
                     <Bookmark className="size-12 text-muted-foreground/40" strokeWidth={1} />
                     <p className="text-sm text-muted-foreground max-w-sm">
-                        Connect your Trakt account in Settings to see your watchlist and upcoming releases.
+                        Connect Trakt in Settings to sync your list and calendar. You can still browse and play from the
+                        catalog anytime.
                     </p>
-                    <Link
-                        href="/settings"
-                        className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-                        <LinkIcon className="size-3.5" />
-                        Go to Settings
-                    </Link>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                        <Link
+                            href="/discover/browse"
+                            className="inline-flex items-center gap-2 text-sm text-foreground border border-border/50 px-3 py-1.5 rounded-sm hover:bg-muted/40 transition-colors">
+                            Browse catalog
+                        </Link>
+                        <Link
+                            href="/settings"
+                            className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+                            <LinkIcon className="size-3.5" />
+                            Trakt in Settings
+                        </Link>
+                    </div>
                 </div>
             </div>
         );
@@ -394,7 +406,11 @@ const WatchlistPage = memo(function WatchlistPage() {
             "space-y-6",
             tvMode && "max-w-7xl mx-auto"
         )}>
-            <PageHeader icon={Bookmark} title="Watchlist" description="Your Trakt watchlist and upcoming calendar." />
+            <PageHeader
+                icon={Bookmark}
+                title="Watchlist"
+                description="Pick something from your list, see what aired recently, or check the calendar."
+            />
 
             {recentCount > 0 && recentEpisodes.data && (
                 <RecentlyAiredSection items={recentEpisodes.data} count={recentCount} />
