@@ -125,12 +125,17 @@ export function SearchResults({
                                     Movies & Shows
                                 </span>
                                 <div className="border border-border/50 rounded-sm overflow-hidden">
-                                    {traktResults.map((result) => {
+                                    {traktResults.map((result, idx) => {
                                         const media = result.movie || result.show;
                                         const type = result.movie ? "movie" : "show";
+                                        const rk =
+                                            media?.ids?.imdb ||
+                                            (media?.ids?.tmdb ? `tmdb-${media.ids.tmdb}` : null) ||
+                                            media?.ids?.slug ||
+                                            `i-${idx}`;
                                         return (
                                             <SearchMediaItem
-                                                key={`${type}-${media?.ids?.trakt}`}
+                                                key={`${type}-${rk}`}
                                                 result={result}
                                                 onSelect={onMediaSelect}
                                                 variant="modal"
@@ -228,12 +233,17 @@ export function SearchResults({
                         <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Movies & Shows" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
-                                {traktResults.map((result) => {
+                                {traktResults.map((result, idx) => {
                                     const media = result.movie || result.show;
                                     const type = result.movie ? "movie" : "show";
+                                    const rk =
+                                        media?.ids?.imdb ||
+                                        (media?.ids?.tmdb ? `tmdb-${media.ids.tmdb}` : null) ||
+                                        media?.ids?.slug ||
+                                        `i-${idx}`;
                                     return (
                                         <SearchMediaItem
-                                            key={`${type}-${media?.ids?.trakt}`}
+                                            key={`${type}-${rk}`}
                                             result={result}
                                             onSelect={onMediaSelect}
                                             variant="page"

@@ -1,5 +1,8 @@
+import { SUBTITLE_SYMBOL_FONT_FALLBACK } from "@/lib/utils/subtitles";
+
 export function LegacyPlayerSubtitleStyle() {
     // Styles for manual subtitle overlay (bypasses Windows OS ::cue style override)
+    const subFontStack = `system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`;
     return (
         <style jsx global>{`
             /* Manual subtitle overlay styling — default (semi-transparent background) */
@@ -7,6 +10,9 @@ export function LegacyPlayerSubtitleStyle() {
                 color: #fff;
                 text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
                 line-height: 1.4;
+                /* Musical symbols / emoji: mono/serif faces often lack these glyphs without an explicit fallback stack */
+                font-family: ${subFontStack};
+                font-variant-emoji: emoji;
             }
 
             /* Background modes */
@@ -41,6 +47,8 @@ export function LegacyPlayerSubtitleStyle() {
             .debridui-legacy-player video::cue {
                 line-height: 1.4;
                 text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+                font-family: ${subFontStack};
+                font-variant-emoji: emoji;
             }
         `}</style>
     );

@@ -351,6 +351,8 @@ function FilterPill({
 export default function BrowsePage() {
     const [genre, setGenre] = useState<Genre | null>(null);
     const [country, setCountry] = useState<Country | null>(null);
+    /** On small screens show one catalog at a time so series is reachable without infinite movie scroll */
+    const [mobileCatalog, setMobileCatalog] = useState<"movie" | "series">("movie");
     const tmdbKey = useSettingsStore((s) => s.settings.tmdbApiKey);
 
     const movies = useBrowseInfinite("movie", genre, country, tmdbKey);
@@ -389,7 +391,7 @@ export default function BrowsePage() {
             />
 
             {/* ── Filters ──────────────────────────────────────────── */}
-            <div className="sticky top-0 z-30 border-b border-border/50 bg-background/95 backdrop-blur-sm py-5 px-4 lg:px-6 space-y-5">
+            <div className="sticky top-0 z-30 border-b border-border/50 bg-background py-5 px-4 lg:px-6 space-y-5">
                 <div className="flex items-center gap-3">
                     <Compass
                         className="size-5 transition-colors duration-500"
@@ -409,6 +411,39 @@ export default function BrowsePage() {
                         {GENRES.map((g) => (
                             <FilterPill key={g.id} label={g.label} active={genre?.id === g.id} hue={g.hue} onClick={() => toggleGenre(g)} />
                         ))}
+                    </div>
+                </div>
+
+                {/* Mobile: jump between movies and series (wide layout still shows both columns) */}
+                <div className="flex xl:hidden items-center gap-2 pt-1">
+                    <span className="text-[10px] tracking-widest uppercase text-muted-foreground/70 shrink-0">Catalog</span>
+                    <div className="flex rounded-sm border border-border/50 p-0.5 bg-muted/20">
+                        <button
+                            type="button"
+                            onClick={() => setMobileCatalog("movie")}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium transition-colors",
+                                mobileCatalog === "movie"
+                                    ? "bg-background text-foreground shadow-sm border border-border/40"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <Film className="size-3.5 shrink-0 opacity-70" />
+                            Movies
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMobileCatalog("series")}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium transition-colors",
+                                mobileCatalog === "series"
+                                    ? "bg-background text-foreground shadow-sm border border-border/40"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <Tv className="size-3.5 shrink-0 opacity-70" />
+                            Series
+                        </button>
                     </div>
                 </div>
 
@@ -448,7 +483,7 @@ export default function BrowsePage() {
                 ) : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-4 items-start">
                         {/* Movies */}
-                        <section className="min-w-0">
+                        <section className={cn("min-w-0", mobileCatalog !== "movie" && "hidden xl:block")}>
                             <div className="flex items-center gap-3 px-4 lg:px-6 pb-2">
                                 <div className="h-px w-6 transition-colors duration-500"
                                     style={{ backgroundColor: hue !== null ? `hsl(${hue} 55% 45%)` : "hsl(var(--primary))" }} />
@@ -469,7 +504,7 @@ export default function BrowsePage() {
                         </section>
 
                         {/* Series */}
-                        <section className="min-w-0">
+                        <section className={cn("min-w-0", mobileCatalog !== "series" && "hidden xl:block")}>
                             <div className="flex items-center gap-3 px-4 lg:px-6 pb-2 xl:pt-0 pt-4">
                                 <div className="h-px w-6 transition-colors duration-500"
                                     style={{ backgroundColor: hue !== null ? `hsl(${hue} 55% 45%)` : "hsl(var(--primary))" }} />

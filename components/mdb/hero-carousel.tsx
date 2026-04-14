@@ -390,6 +390,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                 opts={{
                     align: "start",
                     loop: true,
+                    duration: 52,
                 }}
                 plugins={[autoplay, wheelGestures]}>
                 <CarouselContent className="-ml-0">
@@ -409,7 +410,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     onClick={scrollPrev}
                     aria-label="Previous slide"
                     data-tv-focusable
-                    className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 -translate-x-2 group-hover/hero:translate-x-0">
+                    className="size-12 rounded-full bg-background/85 border border-border/50 text-foreground hover:bg-background/95 opacity-0 group-hover/hero:opacity-100 transition-[opacity,transform,background-color] duration-300 ease-premium -translate-x-2 group-hover/hero:translate-x-0 motion-reduce:transition-none motion-reduce:translate-x-0 motion-reduce:opacity-100">
                     <ChevronLeft className="size-5" />
                 </Button>
             </div>
@@ -420,14 +421,14 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                     onClick={scrollNext}
                     aria-label="Next slide"
                     data-tv-focusable
-                    className="size-12 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 text-foreground hover:bg-background/80 opacity-0 group-hover/hero:opacity-100 transition-all duration-300 translate-x-2 group-hover/hero:translate-x-0">
+                    className="size-12 rounded-full bg-background/85 border border-border/50 text-foreground hover:bg-background/95 opacity-0 group-hover/hero:opacity-100 transition-[opacity,transform,background-color] duration-300 ease-premium translate-x-2 group-hover/hero:translate-x-0 motion-reduce:transition-none motion-reduce:translate-x-0 motion-reduce:opacity-100">
                     <ChevronRight className="size-5" />
                 </Button>
             </div>
 
             {/* Progress Indicator */}
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10">
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-background/60 backdrop-blur-sm rounded-full border border-border/30">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-background/85 rounded-full border border-border/30">
                     {Array.from({ length: count }, (_, index) => (
                         <button
                             key={index}
@@ -435,7 +436,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                             aria-label={`Go to slide ${index + 1}`}
                             data-tv-focusable
                             className={cn(
-                                "h-1 rounded-full transition-all duration-500 cursor-pointer",
+                                "h-1 rounded-full transition-[width,background-color] duration-500 ease-premium cursor-pointer motion-reduce:transition-none",
                                 index === current ? "w-6 bg-primary" : "w-1.5 bg-foreground/30 hover:bg-foreground/50"
                             )}
                         />

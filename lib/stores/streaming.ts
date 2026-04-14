@@ -794,6 +794,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const resolved = await resolveStreamUrl(source.url);
             const playUrl = resolved.url;
 
+            set({ selectedSource: source });
+
             if (syncStore.playOnTarget({
                 url: playUrl,
                 title: fileName,

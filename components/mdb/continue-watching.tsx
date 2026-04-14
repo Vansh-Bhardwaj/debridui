@@ -194,7 +194,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     return (
         <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative">
             <Link href={mediaHref} className="block focus-visible:outline-none" aria-label={title} data-tv-focusable tabIndex={0}>
-                <div className="relative overflow-hidden rounded-sm transition-transform duration-300 ease-out hover:scale-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                <div className="relative overflow-hidden rounded-sm shadow-none transition-[box-shadow] duration-500 ease-premium group-hover:shadow-md group-hover:shadow-black/15 dark:group-hover:shadow-black/35 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <div className="aspect-2/3 relative overflow-hidden bg-muted/50 rounded-sm">
                         {posterSrc ? (
                             <Image
@@ -202,7 +202,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                                 alt={title}
                                 fill
                                 sizes="(max-width: 640px) 160px, (max-width: 1280px) 192px, (max-width: 1536px) 208px, 224px"
-                                className="object-cover transition-opacity duration-300"
+                                className="object-cover scale-100 transition-transform duration-[420ms] ease-premium motion-reduce:transition-none group-hover:scale-105 motion-reduce:group-hover:scale-100"
                                 unoptimized
                                 onError={handlePosterError}
                             />
@@ -217,13 +217,13 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                         {/* Progress bar at very bottom */}
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/60">
                             <div
-                                className="h-full bg-primary transition-all duration-300"
+                                className="h-full bg-primary transition-[width] duration-300 ease-premium motion-reduce:transition-none"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
 
                         {/* Remaining time badge – bottom left above progress */}
-                        <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-[10px] font-medium text-white/90">
+                        <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/75 text-[10px] font-medium text-white/90">
                             {formatTime(remainingTime)} left
                         </div>
                     </div>
@@ -234,7 +234,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             <button
                 type="button"
                 onClick={handleRemove}
-                className="absolute top-1 right-1 p-1.5 rounded-sm bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive hover:text-white z-20"
+                className="absolute top-1 right-1 p-1.5 rounded-sm bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition-[opacity,background-color,color] duration-200 ease-premium hover:bg-destructive hover:text-white z-20"
                 aria-label="Remove from continue watching"
             >
                 <X className="size-3.5" />
@@ -244,7 +244,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
             <button
                 type="button"
                 onClick={handleResume}
-                className="absolute bottom-3 right-2 z-10 h-9 w-9 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-lg transition-all sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110 active:scale-95"
+                className="absolute bottom-3 right-2 z-10 h-9 w-9 rounded-full bg-primary/95 flex items-center justify-center shadow-lg transition-[opacity,transform,background-color] duration-200 ease-premium sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
                 aria-label={`Resume ${title}`}
             >
                 <Play className="size-4 fill-current text-primary-foreground ml-0.5" />
@@ -260,7 +260,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 >
                     <button
                         type="button"
-                        className="absolute top-1 left-1 p-1.5 rounded-sm bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-all hover:bg-primary hover:text-primary-foreground z-20"
+                        className="absolute top-1 left-1 p-1.5 rounded-sm bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition-[opacity,background-color,color] duration-200 ease-premium hover:bg-primary hover:text-primary-foreground z-20"
                         aria-label={`Play S${String(nextEpisode.season).padStart(2, "0")}E${String(nextEpisode.episode).padStart(2, "0")}`}
                     >
                         <SkipForward className="size-3.5" />

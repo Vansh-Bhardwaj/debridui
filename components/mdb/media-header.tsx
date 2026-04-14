@@ -6,6 +6,7 @@ import { MediaStats } from "./media-stats";
 import { memo } from "react";
 import { getPosterUrl, getBackdropUrl } from "@/lib/utils/media";
 import { ArrowUpRightIcon, Play, Star } from "lucide-react";
+import { YoutubeTrailerIcon } from "@/components/icons/youtube-trailer-icon";
 import { WatchButton } from "@/components/common/watch-button";
 import { usePreviewStore } from "@/lib/stores/preview";
 import { FileType } from "@/lib/types";
@@ -33,7 +34,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         <img
                             src={backdropUrl}
                             alt=""
-                            className="w-full h-full object-cover opacity-50"
+                            className="media-backdrop-kenburns w-full h-full object-cover opacity-50"
                             loading="eager"
                             decoding="async"
                         />
@@ -47,7 +48,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                         <img
                             src={posterUrl}
                             alt=""
-                            className="w-full h-full object-cover opacity-40 blur-2xl scale-110"
+                            className="media-backdrop-kenburns w-full h-full object-cover opacity-40 blur-2xl scale-110"
                             loading="eager"
                             decoding="async"
                         />
@@ -59,7 +60,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
 
             {/* Content */}
             <div className="relative pt-[12vh] sm:pt-[20vh] md:pt-[30vh] pb-8">
-                <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] xl:grid-cols-[280px_1fr] 2xl:grid-cols-[320px_1fr] gap-6 md:gap-8">
+                <div className="grid md:grid-cols-[180px_1fr] lg:grid-cols-[240px_1fr] xl:grid-cols-[280px_1fr] 2xl:grid-cols-[320px_1fr] gap-6 md:gap-8 animate-in fade-in-0 slide-in-from-bottom-6 duration-700 ease-premium motion-reduce:animate-none motion-reduce:duration-0">
                     {/* Poster Column */}
                     <div className="space-y-4 max-md:mx-auto">
                         <div className="max-md:max-w-[45vw] aspect-2/3 overflow-hidden rounded-sm bg-muted/30">
@@ -86,7 +87,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                 <Button
                                     variant="outline"
                                     size="lg"
-                                    className="w-full"
+                                    className="w-full gap-2.5 border-red-500/35 bg-background/40 text-foreground hover:bg-red-600/10 hover:border-red-500/55 hover:text-foreground dark:border-red-500/30 dark:hover:bg-red-600/15 transition-[border-color,background-color,color,box-shadow] duration-300 ease-premium"
                                     data-tv-focusable
                                     onClick={() =>
                                         openSinglePreview({
@@ -95,7 +96,8 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                             fileType: FileType.TRAILER,
                                         })
                                     }>
-                                    Watch Trailer
+                                    <YoutubeTrailerIcon className="size-5" />
+                                    Watch trailer
                                 </Button>
                             )}
                             <MediaActions media={media} type={type} variant="full" />
@@ -251,6 +253,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             {media.trailer && (
                                 <Button
                                     variant="outline"
+                                    className="gap-2 border-red-500/35 hover:bg-red-600/10 hover:border-red-500/55 dark:hover:bg-red-600/15 transition-[border-color,background-color,color] duration-300 ease-premium"
                                     onClick={() =>
                                         openSinglePreview({
                                             url: media.trailer!,
@@ -258,6 +261,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                             fileType: FileType.TRAILER,
                                         })
                                     }>
+                                    <YoutubeTrailerIcon className="size-4" />
                                     Trailer
                                 </Button>
                             )}

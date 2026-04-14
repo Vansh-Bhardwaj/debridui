@@ -274,16 +274,16 @@
 @keyframes route-enter {
     from {
         opacity: 0;
-        transform: translate3d(0, 10px, 0);
+        transform: translate3d(0, 10px, 0) scale(0.992);
     }
     to {
         opacity: 1;
-        transform: translate3d(0, 0, 0);
+        transform: translate3d(0, 0, 0) scale(1);
     }
 }
 
 .route-enter {
-    animation: route-enter 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: route-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -291,6 +291,27 @@
         animation: none;
         opacity: 1;
         transform: none;
+    }
+}
+
+/* Detail page backdrop — slow Ken Burns for cinematic depth */
+@keyframes media-backdrop-kenburns {
+    0% {
+        transform: scale(1);
+    }
+    100% {
+        transform: scale(1.08);
+    }
+}
+
+.media-backdrop-kenburns {
+    animation: media-backdrop-kenburns 36s ease-in-out infinite alternate;
+    transform-origin: center 30%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .media-backdrop-kenburns {
+        animation: none;
     }
 }
 
@@ -337,6 +358,7 @@
     .anim-ease-premium {
         animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
     }
+
 }
 
 /* Range input (volume only) — cross-browser track + thumb styling */
@@ -416,7 +438,7 @@ input[type="range"]:hover::-moz-range-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 9999px;
     overflow: hidden;
-    transition: height 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    transition: height 220ms cubic-bezier(0.16, 1, 0.3, 1);
     will-change: height;
 }
 
@@ -434,7 +456,7 @@ input[type="range"]:hover::-moz-range-thumb {
     left: 0;
     background: rgba(255, 255, 255, 0.3);
     border-radius: inherit;
-    transition: width 300ms linear;
+    transition: width 280ms linear;
 }
 
 .player-seekbar-progress {
@@ -443,6 +465,8 @@ input[type="range"]:hover::-moz-range-thumb {
     left: 0;
     background: var(--primary);
     border-radius: inherit;
+    transition: width 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 0 12px color-mix(in oklch, var(--primary) 45%, transparent);
 }
 
 /* Thumb: positioned via inline left%, uses translate to center on progress edge.
@@ -458,11 +482,13 @@ input[type="range"]:hover::-moz-range-thumb {
     /* Center horizontally on left% and vertically on track */
     transform: translate(-50%, -50%) scale(0);
     transition:
-        transform 150ms cubic-bezier(0.25, 0.1, 0.25, 1),
-        box-shadow 150ms ease;
+        transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 2;
     pointer-events: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.35),
+        0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
 .player-seekbar:hover .player-seekbar-thumb {
@@ -518,8 +544,8 @@ input[type="range"]:hover::-moz-range-thumb {
     z-index: 40;
     pointer-events: none;
     transition:
-        opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
-        transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+        opacity 320ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .player-controls-wrapper[data-visible="true"] {
@@ -529,23 +555,28 @@ input[type="range"]:hover::-moz-range-thumb {
 
 .player-controls-wrapper[data-visible="false"] {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
     transition:
-        opacity 400ms cubic-bezier(0.4, 0, 0.2, 1),
-        transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+        opacity 420ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .player-controls-inner {
     pointer-events: auto;
     background: linear-gradient(
         to top,
-        rgba(0, 0, 0, 0.92) 0%,
-        rgba(0, 0, 0, 0.7) 40%,
-        rgba(0, 0, 0, 0.3) 70%,
+        rgba(0, 0, 0, 0.96) 0%,
+        rgba(0, 0, 0, 0.78) 38%,
+        rgba(0, 0, 0, 0.35) 72%,
         transparent 100%
     );
     padding: 56px 16px 12px;
-    backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .player-controls-wrapper {
+        transition-duration: 0ms;
+    }
 }
 
 /* Player button base */
@@ -616,36 +647,190 @@ input[type="range"]:hover::-moz-range-thumb {
     z-index: 25;
 }
 
+/* Large idle play — glass + soft primary glow + pulse ring */
+@keyframes player-center-big-play-pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.55;
+    }
+    100% {
+        transform: scale(1.42);
+        opacity: 0;
+    }
+}
+
+.player-center-big-play {
+    pointer-events: auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.52);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+        0 16px 48px rgba(0, 0, 0, 0.55),
+        0 0 56px color-mix(in oklch, var(--primary) 22%, transparent);
+    transition:
+        transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 280ms cubic-bezier(0.16, 1, 0.3, 1),
+        background 200ms ease,
+        border-color 200ms ease;
+}
+
+.player-center-big-play::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in oklch, var(--primary) 45%, transparent);
+    animation: player-center-big-play-pulse 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    pointer-events: none;
+}
+
+.player-center-big-play:hover {
+    transform: scale(1.07);
+    background: rgba(0, 0, 0, 0.52);
+    border-color: rgba(255, 255, 255, 0.38);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+        0 20px 56px rgba(0, 0, 0, 0.6),
+        0 0 72px color-mix(in oklch, var(--primary) 32%, transparent);
+}
+
+.player-center-big-play:active {
+    transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .player-center-big-play::after {
+        animation: none;
+        opacity: 0;
+    }
+
+    .player-center-big-play:hover,
+    .player-center-big-play:active {
+        transform: none;
+    }
+}
+
+/* Top title gradient chrome */
+.player-top-chrome-inner {
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.88) 0%,
+        rgba(0, 0, 0, 0.5) 48%,
+        transparent 100%
+    );
+}
+
+/* Compact (mobile) center transport */
+.player-mobile-chrome-btn {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.62);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    transition:
+        transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+        background 200ms ease,
+        border-color 200ms ease,
+        box-shadow 200ms ease;
+}
+
+.player-mobile-chrome-btn:hover {
+    background: rgba(0, 0, 0, 0.58);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.player-mobile-chrome-btn:active {
+    transform: scale(0.9);
+}
+
+.player-mobile-chrome-btn--main {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.55);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+        0 12px 40px rgba(0, 0, 0, 0.5),
+        0 0 40px color-mix(in oklch, var(--primary) 18%, transparent);
+}
+
+/* Loading shell — vignette + dual-ring spinner */
+.player-loading-backdrop {
+    background:
+        radial-gradient(ellipse 80% 55% at 50% 45%, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.72) 100%),
+        rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+@keyframes player-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.player-loading-spinner-wrap {
+    width: 52px;
+    height: 52px;
+}
+
+.player-loading-spinner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary);
+    border-right-color: color-mix(in oklch, var(--primary) 55%, transparent);
+    animation: player-loading-spin 0.85s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    box-shadow: 0 0 32px color-mix(in oklch, var(--primary) 28%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .player-loading-spinner {
+        animation-duration: 1.4s;
+    }
+
+    .player-mobile-chrome-btn:active {
+        transform: none;
+    }
+}
+
 /* YouTube-style: scale-in bounce → hold → scale-up + fade-out */
 @keyframes center-action-in {
-    0% { opacity: 0; transform: scale(0.5); }
-    50% { opacity: 1; transform: scale(1.08); }
+    0% { opacity: 0; transform: scale(0.45); }
+    55% { opacity: 1; transform: scale(1.1); }
     100% { opacity: 1; transform: scale(1); }
 }
 @keyframes center-action-out {
     0% { opacity: 1; transform: scale(1); }
-    100% { opacity: 0; transform: scale(1.4); }
+    100% { opacity: 0; transform: scale(1.45); }
 }
 
 .player-center-action-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.58);
     color: white;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
     opacity: 0;
     transform: scale(0.5);
 }
 
 .player-center-action-icon[data-visible="true"] {
-    animation: center-action-in 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation: center-action-in 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .player-center-action-icon[data-visible="false"] {
-    animation: center-action-out 350ms cubic-bezier(0.4, 0, 1, 1) forwards;
+    animation: center-action-out 380ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* YouTube-style seek ripple — semicircle expand with directional text */
@@ -729,13 +914,12 @@ input[type="range"]:hover::-moz-range-thumb {
 /* Player popup menus (settings, subtitle, audio) */
 .player-popup {
     border-radius: 10px;
-    background: rgba(15, 15, 15, 0.95);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(22, 22, 22, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
     animation: player-popup-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: bottom right;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 @keyframes player-popup-in {
@@ -954,9 +1138,15 @@ input[type="range"]:hover::-moz-range-thumb {
     position: absolute;
     top: 0;
     height: 100%;
-    background: var(--primary);
+    background: linear-gradient(
+        90deg,
+        color-mix(in oklch, var(--primary) 70%, transparent) 0%,
+        var(--primary) 50%,
+        color-mix(in oklch, var(--primary) 75%, white) 100%
+    );
     border-radius: 9999px;
-    animation: player-loading-bar 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    box-shadow: 0 0 12px color-mix(in oklch, var(--primary) 45%, transparent);
+    animation: player-loading-bar 1.35s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 /* Floating CTA (skip intro, auto-next) */

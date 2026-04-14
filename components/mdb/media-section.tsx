@@ -110,7 +110,7 @@ export const MediaSection = memo(function MediaSection({
                             <button
                                 onClick={() => setPage((p) => p - 1)}
                                 disabled={page === 0}
-                                className="flex items-center justify-center size-6 rounded-sm border border-border/50 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:pointer-events-none transition-colors">
+                                className="flex items-center justify-center size-6 rounded-sm border border-border/50 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:pointer-events-none transition-[color,border-color,transform] duration-200 ease-premium active:scale-90 motion-reduce:active:scale-100">
                                 <ChevronLeftIcon className="size-3.5" />
                             </button>
                             <span className="text-xs tabular-nums text-muted-foreground/60 min-w-[3rem] text-center">
@@ -119,7 +119,7 @@ export const MediaSection = memo(function MediaSection({
                             <button
                                 onClick={() => setPage((p) => p + 1)}
                                 disabled={page >= totalPages - 1}
-                                className="flex items-center justify-center size-6 rounded-sm border border-border/50 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:pointer-events-none transition-colors">
+                                className="flex items-center justify-center size-6 rounded-sm border border-border/50 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:pointer-events-none transition-[color,border-color,transform] duration-200 ease-premium active:scale-90 motion-reduce:active:scale-100">
                                 <ChevronRightIcon className="size-3.5" />
                             </button>
                         </div>
@@ -129,7 +129,7 @@ export const MediaSection = memo(function MediaSection({
                             href={viewAllHref}
                             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
                             <span>View all</span>
-                            <ArrowRightIcon className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            <ArrowRightIcon className="size-3.5 transition-transform duration-300 ease-premium group-hover:translate-x-1 motion-reduce:transition-none" />
                         </Link>
                     )}
                 </div>

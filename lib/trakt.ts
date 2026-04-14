@@ -618,20 +618,32 @@ export class TraktClient {
     public async search(
         query: string,
         types: MediaType[] = ["movie", "show"],
-        extended = "images"
+        extended = "images",
+        /** Widen matching (title + aliases); Trakt API supports comma-separated field names */
+        fields: "title,aliases" | "title" | null = "title,aliases"
     ): Promise<TraktSearchResult[]> {
         if (!query.trim()) {
             return [];
         }
 
         const typeParam = types.join(",");
-        const endpoint = `search/${typeParam}?query=${encodeURIComponent(query)}`;
+        const run = async (fieldParam: typeof fields) => {
+            const fieldQs = fieldParam ? `&fields=${encodeURIComponent(fieldParam)}` : "";
+            const endpoint = `search/${typeParam}?query=${encodeURIComponent(query)}${fieldQs}`;
+            const results = await this.makeRequest<TraktSearchResult[]>(endpoint, {}, false, extended);
+            return results
+                .filter((result) => (result.type === "movie" && result.movie) || (result.type === "show" && result.show))
+                .sort((a, b) => b.score - a.score);
+        };
 
-        const results = await this.makeRequest<TraktSearchResult[]>(endpoint, {}, false, extended);
-
-        return results
-            .filter((result) => (result.type === "movie" && result.movie) || (result.type === "show" && result.show))
-            .sort((a, b) => b.score - a.score);
+        if (fields) {
+            try {
+                return await run(fields);
+            } catch {
+                return run(null);
+            }
+        }
+        return run(null);
     }
 
     /**

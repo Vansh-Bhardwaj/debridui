@@ -21,6 +21,7 @@ import { SplashScreen } from "@/components/auth/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
 import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { RouteTransition } from "@/components/common/route-transition";
+import { AmbientHeaderSpark } from "@/components/motion/ambient-header-spark";
 import { Keyboard } from "lucide-react";
 import { TVNavigationBar } from "@/components/tv/tv-navigation";
 import { GamepadHints } from "@/components/tv/gamepad-hints";
@@ -36,7 +37,7 @@ function ShortcutsButton() {
     return (
         <button
             onClick={open}
-            className="size-8 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+            className="size-8 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-[color,background-color,transform] duration-200 ease-premium hover:scale-105 active:scale-95 motion-reduce:transition-colors motion-reduce:hover:scale-100 motion-reduce:active:scale-100 shrink-0"
             aria-label="Keyboard shortcuts">
             <Keyboard className="size-4" />
         </button>
@@ -54,6 +55,7 @@ function StandardLayout({ children }: { children: React.ReactNode }) {
                     <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                         <SidebarTrigger className="-ml-1 shrink-0" />
                         <Separator orientation="vertical" className="h-4" />
+                        <AmbientHeaderSpark />
                         <Breadcrumbs />
                     </div>
                     <div className="flex items-center gap-1">

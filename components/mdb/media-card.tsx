@@ -79,7 +79,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, watched, c
         <Link href={linkHref} className="block group focus-visible:outline-none" aria-label={media.title} data-tv-focusable tabIndex={0}>
             <div
                 className={cn(
-                    "relative overflow-hidden rounded-sm shadow-none transition-[box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:shadow-xl group-hover:shadow-black/12 dark:group-hover:shadow-black/45 motion-reduce:transition-none motion-reduce:group-hover:shadow-none [content-visibility:auto] [contain-intrinsic-size:120px_180px] group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
+                    "relative overflow-hidden rounded-sm shadow-none transition-[box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5 group-hover:shadow-xl group-hover:shadow-black/12 dark:group-hover:shadow-black/45 motion-reduce:transition-none motion-reduce:group-hover:translate-y-0 motion-reduce:group-hover:shadow-none [content-visibility:auto] [contain-intrinsic-size:120px_180px] group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
                     className
                 )}>
                 <div className="aspect-2/3 relative overflow-hidden bg-muted/50 rounded-sm">

@@ -4,14 +4,22 @@ import React, { useCallback, useEffect, useRef, useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query";
 import Hls from "hls.js";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
-import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
+import {
+    decodeSubtitleFileBytes,
+    getLanguageDisplayName,
+    isSubtitleLanguage,
+    normalizeSubtitleCueText,
+    SUBTITLE_SYMBOL_FONT_FALLBACK,
+} from "@/lib/utils/subtitles";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { useStreamingStore } from "@/lib/stores/streaming";
+import { usePreviewStore } from "@/lib/stores/preview";
+import type { AddonSource } from "@/lib/addons/types";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -324,7 +332,8 @@ function PlayerCastButton({
     );
 }
 
-const PLAYER_BTN = "inline-flex items-center justify-center rounded-full text-white bg-transparent border-none cursor-pointer shrink-0 transition-all duration-150 hover:bg-white/15 active:scale-90 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent";
+const PLAYER_BTN =
+    "inline-flex items-center justify-center rounded-full text-white bg-transparent border-none cursor-pointer shrink-0 transition-[transform,background-color,box-shadow,color] duration-200 ease-premium hover:bg-white/18 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0 active:scale-[0.92] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:shadow-none disabled:active:scale-100";
 const PLAYER_BTN_SM = `${PLAYER_BTN} w-9 h-9`;
 const PLAYER_BTN_MD = `${PLAYER_BTN} w-10 h-10`;
 const POPUP_STYLE: React.CSSProperties = { background: "rgba(15,15,15,0.95)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.1)" };
@@ -391,6 +400,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const nextEpisodePromptSeconds = useSettingsStore((s) => s.settings.playback.nextEpisodePromptSeconds);
     // TV mode — hide fullscreen button as it's redundant in TV mode where full-screen is the default
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const allFetchedSources = useStreamingStore((s) => s.allFetchedSources);
+    const selectedSourceFromStore = useStreamingStore((s) => s.selectedSource);
+    const playSourceFromStore = useStreamingStore((s) => s.playSource);
+    const previewDirectTitle = usePreviewStore((s) => s.directTitle);
+    const previewProgressKeyStore = usePreviewStore((s) => s.progressKey);
+    const previewDirectSubs = usePreviewStore((s) => s.directSubtitles);
+    const showInlineSourcePicker =
+        allFetchedSources.length > 1 && !!(previewProgressKeyStore ?? progressKey);
     const { data: introSegments } = useIntroSegments(progressKey);
     // Track which segments have been auto-skipped (reset on new episode)
     const skippedSegmentsRef = useRef<Set<string>>(new Set());
@@ -1828,7 +1845,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [handleMobileTap, seekTo]);
 
-    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | null>(null);
+    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | "streams" | null>(null);
     const setOpenMenuTracked = useCallback((val: typeof openMenu) => {
         openMenuRef.current = val;
         setOpenMenu(val);
@@ -1852,6 +1869,32 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         fn();
         setTimeout(() => { navGuardRef.current = false; }, 1000);
     }, []);
+
+    const pickAlternateSource = useCallback(
+        (src: AddonSource) => {
+            const pk = previewProgressKeyStore ?? progressKey ?? undefined;
+            const subPick = previewDirectSubs?.length ? previewDirectSubs : subtitles;
+            void playSourceFromStore(src, previewDirectTitle || file.name, {
+                progressKey: pk,
+                subtitles: subPick?.length ? subPick : undefined,
+            });
+            setOpenMenuTracked(null);
+            toast.info("Switching stream", {
+                description: [src.resolution, src.quality, src.addonName].filter(Boolean).join(" · ") || "Alternative source",
+                duration: 2200,
+            });
+        },
+        [
+            playSourceFromStore,
+            previewDirectTitle,
+            previewProgressKeyStore,
+            previewDirectSubs,
+            progressKey,
+            subtitles,
+            file.name,
+            setOpenMenuTracked,
+        ]
+    );
 
     // When subtitle selection changes, toggle textTracks modes (also disables embedded tracks).
     useEffect(() => {
@@ -2338,11 +2381,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 // The CORS proxy may not forward charset correctly, causing
                 // UTF-8 bytes to be decoded as Latin-1 (e.g. "…" → "â€¦").
                 const buf = await res.arrayBuffer();
-                try {
-                    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
-                } catch {
-                    return new TextDecoder("windows-1252").decode(buf);
-                }
+                return decodeSubtitleFileBytes(buf);
             } catch {
                 return null;
             } finally {
@@ -2377,29 +2416,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 const end = parseTime(endRaw.split(/\s+/)[0] ?? "");
                 if (start == null || end == null) continue;
 
-                let cueText = lines.slice(timeLineIdx + 1).join("\n")
-                    // Strip SSA/ASS style tags: {\an8}, {\i1}, {\pos(x,y)}, etc.
-                    .replace(/\{\\[^}]+\}/g, "")
-                    // Strip SSA/ASS override blocks: {text} (only if it looks like a tag)
-                    .replace(/\{[^}]*\\[^}]+\}/g, "")
-                    // Strip HTML formatting tags: <i>, </i>, <b>, <font ...>, etc.
-                    .replace(/<\/?[^>]+(>|$)/g, "")
-                    .trim();
-
-                // Decode HTML entities (common in OpenSubtitles and community subs)
-                if (cueText.includes("&")) {
-                    cueText = cueText
-                        .replace(/&amp;/gi, "&")
-                        .replace(/&lt;/gi, "<")
-                        .replace(/&gt;/gi, ">")
-                        .replace(/&quot;/gi, '"')
-                        .replace(/&apos;/gi, "'")
-                        .replace(/&nbsp;/gi, " ")
-                        .replace(/&lrm;/gi, "\u200E")
-                        .replace(/&rlm;/gi, "\u200F")
-                        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-                        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
-                }
+                const cueText = normalizeSubtitleCueText(lines.slice(timeLineIdx + 1).join("\n"));
 
                 if (cueText) cues.push({ start, end, text: cueText });
             }
@@ -2543,7 +2560,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         playsInline
                         preload="metadata"
                         crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
-                        className="w-full h-full object-contain bg-black"
+                        className="w-full h-full object-contain bg-black transition-opacity duration-500 ease-premium data-[loading=true]:opacity-[0.88] motion-reduce:transition-none"
+                        data-loading={isLoading && !error ? "true" : undefined}
                         style={{ maxHeight: "100%" }}
                         onLoadedMetadata={handleLoadedMetadata}
                         onLoadedData={handleLoad}
@@ -2555,10 +2573,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div className="player-loading-bar absolute top-0 left-0 right-0 h-[3px] z-50 overflow-hidden" />
                     )}
 
-                    {/* Unified loading overlay */}
+                    {/* Unified loading overlay — vignette + branded spinner */}
                     {(isLoading && !error) && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-40">
-                            <div className="h-10 w-10 border-[2.5px] border-white/15 border-t-white rounded-full animate-spin" />
+                        <div
+                            className="player-loading-shell absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 pointer-events-none"
+                            aria-busy="true"
+                            aria-live="polite"
+                        >
+                            <div className="player-loading-backdrop absolute inset-0" aria-hidden />
+                            <div className="player-loading-spinner-wrap relative flex items-center justify-center">
+                                <div className="player-loading-spinner" />
+                            </div>
                         </div>
                     )}
 
@@ -2570,9 +2595,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 data-visible={centerAction !== null ? "true" : "false"}
                             >
                                 {centerAction === "play" ? (
-                                    <Play className="h-6 w-6 fill-current ml-0.5" />
+                                    <Play className="h-8 w-8 fill-current ml-0.5" />
                                 ) : (
-                                    <Pause className="h-6 w-6 fill-current" />
+                                    <Pause className="h-8 w-8 fill-current" />
                                 )}
                             </div>
                         </div>
@@ -2582,13 +2607,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {!isLoading && !isPlaying && centerActionDone && !useCompactControls && (
                         <div className="player-center-action">
                             <button
+                                type="button"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     togglePlay();
                                 }}
-                                className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white border border-white/10 transition-all duration-150 hover:scale-110 hover:bg-black/60 active:scale-95"
+                                className="player-center-big-play"
+                                aria-label="Play"
                             >
-                                <Play className="h-7 w-7 fill-current ml-0.5" />
+                                <Play className="relative z-[1] h-9 w-9 fill-current ml-1 drop-shadow-md" />
                             </button>
                         </div>
                     )}
@@ -2597,20 +2624,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {useCompactControls && showControls && !isLoading && (
                         <div className="absolute inset-0 z-30 flex items-center justify-center gap-10 pointer-events-none" data-player-controls>
                             <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); seekTo((videoRef.current?.currentTime ?? 0) - 10); }}
-                                className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white/80 active:scale-90 transition-transform"
+                                className="player-mobile-chrome-btn pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full text-white/90"
                             >
                                 <SkipBack className="size-5" />
                             </button>
                             <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                                className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white active:scale-90 transition-transform"
+                                className="player-mobile-chrome-btn player-mobile-chrome-btn--main pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full text-white"
                             >
                                 {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 fill-current ml-0.5" />}
                             </button>
                             <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); seekTo((videoRef.current?.currentTime ?? 0) + 10); }}
-                                className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white/80 active:scale-90 transition-transform"
+                                className="player-mobile-chrome-btn pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full text-white/90"
                             >
                                 <SkipForward className="size-5" />
                             </button>
@@ -2638,7 +2668,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 ? "opacity-100 scale-100"
                                 : "opacity-0 scale-95"
                         )}
-                        style={{ transitionDuration: osdVisible ? "150ms" : "250ms", transitionTimingFunction: "cubic-bezier(0.25, 0.1, 0.25, 1)" }}
+                        style={{
+                            transitionDuration: osdVisible ? "180ms" : "320ms",
+                            transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+                        }}
                     >
                         <div
                             className={cn(
@@ -2665,10 +2698,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Keyboard shortcuts help overlay (?key) */}
                     {showHelp && (
                         <div
-                            className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
+                            className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
                             onClick={() => setShowHelp(false)}>
                             <div
-                                className="rounded-sm border border-white/10 bg-black/90 p-6 mx-4 max-w-lg w-full"
+                                className="rounded-lg border border-white/12 bg-black/95 p-6 mx-4 max-w-lg w-full shadow-lg motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-300 motion-safe:ease-premium motion-reduce:animate-none"
                                 onClick={(e) => e.stopPropagation()}
                                 onDoubleClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-between mb-4">
@@ -2737,10 +2770,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 style={{
                                     fontSize: `${subtitleSize}px`,
                                     color: subtitleColor,
-                                    fontFamily: subtitleFont === 'mono' ? 'ui-monospace, monospace'
-                                        : subtitleFont === 'serif' ? 'ui-serif, Georgia, serif'
-                                            : subtitleFont === 'trebuchet' ? '"Trebuchet MS", sans-serif'
-                                                : undefined,
+                                    fontFamily:
+                                        subtitleFont === "mono"
+                                            ? `ui-monospace, monospace, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`
+                                            : subtitleFont === "serif"
+                                              ? `ui-serif, Georgia, "Times New Roman", serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`
+                                              : subtitleFont === "trebuchet"
+                                                ? `"Trebuchet MS", "Segoe UI", sans-serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`
+                                                : `system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`,
                                 }}
                             >
                                 {activeCueText.split("\n").map((line, i) => (
@@ -2753,16 +2790,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {/* Top title bar */}
                     <div
                         className={cn(
-                            "absolute inset-x-0 top-0 z-40 pointer-events-none transition-all duration-300 ease-out",
-                            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
+                            "player-top-chrome absolute inset-x-0 top-0 z-40 pointer-events-none transition-[opacity,transform] duration-[420ms] ease-premium motion-reduce:duration-150 motion-reduce:transition-opacity",
+                            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
                         )}
                     >
-                        <div
-                            data-player-controls
-                            className="pointer-events-auto px-4 pb-10 pt-3"
-                            style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, transparent 100%)" }}
-                        >
-                            <p className="truncate text-sm font-medium text-white drop-shadow-md">{file.name}</p>
+                        <div data-player-controls className="player-top-chrome-inner pointer-events-auto px-4 pb-12 pt-4">
+                            <p className="truncate text-sm font-medium tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+                                {file.name}
+                            </p>
                         </div>
                     </div>
 
@@ -3141,6 +3176,73 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             {sub.name ?? getLanguageDisplayName(sub.lang)}
                                                         </button>
                                                     ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
+
+                                    {/* Alternate addon streams (same title) — compact, only when multiple sources exist */}
+                                    {showInlineSourcePicker && (
+                                        <DropdownMenu
+                                            open={openMenu === "streams"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "streams" : null)}
+                                        >
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className={cn(
+                                                        PLAYER_BTN_SM,
+                                                        "relative",
+                                                        openMenu === "streams" && "text-primary"
+                                                    )}
+                                                    title="Change stream"
+                                                    aria-label="Change stream source"
+                                                    aria-expanded={openMenu === "streams"}
+                                                    data-tv-focusable
+                                                >
+                                                    <Layers className="h-5 w-5" />
+                                                    <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-[2px] bg-primary/90 text-[9px] font-semibold leading-none text-primary-foreground flex items-center justify-center tabular-nums">
+                                                        {allFetchedSources.length}
+                                                    </span>
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                <DropdownMenuContent
+                                                    data-player-controls
+                                                    align="end"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onDoubleClick={(e) => e.stopPropagation()}
+                                                    className={cn(POPUP_CLS, "min-w-[240px] max-w-[min(92vw,320px)] z-50 p-0 overflow-hidden")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Streams</div>
+                                                    <div className="max-h-[min(280px,42vh)] overflow-y-auto overflow-x-hidden py-0.5">
+                                                        {allFetchedSources.map((src, idx) => {
+                                                            const active = src.url === selectedSourceFromStore?.url;
+                                                            const line = [src.resolution, src.quality, src.size].filter(Boolean).join(" · ");
+                                                            return (
+                                                                <button
+                                                                    key={`${src.url}-${idx}`}
+                                                                    type="button"
+                                                                    onClick={() => pickAlternateSource(src)}
+                                                                    className={POPUP_ITEM}
+                                                                    data-active={active}
+                                                                    disabled={active}
+                                                                >
+                                                                    <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+                                                                        <span className="truncate text-[13px] text-white/95">
+                                                                            {src.title || src.addonName || `Source ${idx + 1}`}
+                                                                        </span>
+                                                                        <span className="truncate text-[11px] text-white/45">
+                                                                            {[src.addonName, line].filter(Boolean).join(" · ") || "Addon stream"}
+                                                                        </span>
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </DropdownMenuContent>
                                             </DropdownMenuPortal>
                                         </DropdownMenu>

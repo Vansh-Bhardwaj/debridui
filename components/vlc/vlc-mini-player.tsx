@@ -161,7 +161,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
 
     return (
         <div role="region" aria-label="Media player" className="pointer-events-auto w-full max-w-3xl mx-auto px-4 pb-2">
-            <div className="rounded-sm border border-border/50 bg-card/95 backdrop-blur-md shadow-xl overflow-hidden">
+            <div className="rounded-sm border border-border/60 bg-card shadow-md overflow-hidden">
                     {/* Collapse toggle */}
                     <button
                         onClick={() => setCollapsed((c) => !c)}

@@ -86,10 +86,15 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
     const interpolatedRef = useRef({ progress: 0, receivedAt: 0 });
     const [interpolatedTime, setInterpolatedTime] = useState(0);
 
-    // Priority: show active target, otherwise first playing device
+    // Priority: explicit target, else first device with now-playing metadata.
+    // Note: `isPlaying` is false while paused — still require `nowPlaying` so the panel
+    // does not disappear when the user hits pause (mobile remote).
     const targetDevice = activeTarget
         ? devices.find((d) => d.id === activeTarget)
-        : devices.find((d) => d.isPlaying && d.nowPlaying);
+        : (() => {
+            const withNp = devices.filter((d) => d.nowPlaying);
+            return withNp.find((d) => d.isPlaying) ?? withNp[0];
+        })();
 
     const nowPlaying = targetDevice?.nowPlaying ?? null;
     const serverProgress = nowPlaying?.progress ?? 0;
@@ -147,7 +152,10 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
         const check = (s: ReturnType<typeof useDeviceSyncStore.getState>) => {
             const target = s.activeTarget
                 ? s.devices.find((d) => d.id === s.activeTarget)
-                : s.devices.find((d) => d.isPlaying && d.nowPlaying);
+                : (() => {
+                    const withNp = s.devices.filter((d) => d.nowPlaying);
+                    return withNp.find((d) => d.isPlaying) ?? withNp[0];
+                })();
             return !!(target?.nowPlaying || s.transferPending);
         };
         let prev = check(useDeviceSyncStore.getState());
@@ -192,7 +200,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
 
     return (
         <div role="region" aria-label="Remote player" className="pointer-events-auto w-[min(32rem,calc(100dvw-1.5rem))] mx-auto pb-3 sm:pb-4">
-            <div className="rounded-sm border border-border/50 bg-card/95 backdrop-blur-md shadow-xl overflow-hidden w-full">
+            <div className="rounded-sm border border-border/60 bg-card shadow-md overflow-hidden w-full">
                 {/* Collapse toggle — title bar */}
                 <div
                     role="button"

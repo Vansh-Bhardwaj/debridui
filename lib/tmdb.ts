@@ -160,6 +160,26 @@ export interface TMDBDiscoverResponse<T> {
     results: T[];
 }
 
+/** `/search/multi` — movies + TV in one relevance-ranked list */
+export interface TMDBMultiSearchResultItem {
+    id: number;
+    media_type: "movie" | "tv" | "person" | string;
+    title?: string;
+    name?: string;
+    popularity: number;
+    poster_path: string | null;
+    backdrop_path: string | null;
+    release_date?: string;
+    first_air_date?: string;
+}
+
+export interface TMDBMultiSearchResponse {
+    page: number;
+    results: TMDBMultiSearchResultItem[];
+    total_pages: number;
+    total_results: number;
+}
+
 export interface TMDBClientConfig {
     apiKey: string;
     baseUrl?: string;
@@ -282,6 +302,18 @@ export class TMDBClient {
 
     public async getCollection(collectionId: number): Promise<TMDBCollectionDetails> {
         return this.makeRequest<TMDBCollectionDetails>(`/collection/${collectionId}`);
+    }
+
+    /** Multi search (movies + TV) — complements Trakt text search for exact-title matches */
+    public async searchMulti(
+        query: string,
+        page = 1
+    ): Promise<TMDBMultiSearchResponse> {
+        return this.makeRequest<TMDBMultiSearchResponse>("/search/multi", {
+            query,
+            page,
+            include_adult: "false",
+        });
     }
 }
 

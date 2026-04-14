@@ -6,6 +6,9 @@ import { getFindTorrentsCacheKey } from "@/lib/utils/cache-keys";
 import { type DebridFile, AccountType } from "@/lib/types";
 import { traktClient, type TraktSearchResult } from "@/lib/trakt";
 import { searchTVMaze } from "@/lib/tvmaze";
+import { createTMDBClient } from "@/lib/tmdb";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { dedupeTraktSearchResults, rankTraktSearchResults } from "@/lib/utils/trakt-search-rank";
 import type TorBoxClient from "@/lib/clients/torbox";
 import type { TorBoxSearchResult } from "@/lib/clients/torbox";
 
@@ -26,9 +29,9 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
         queryFn: async (): Promise<TraktSearchResult[]> => {
             const traktData = await traktClient.search(trimmedQuery, ["movie", "show"]);
 
-            // If Trakt returned few show results, supplement with TVMaze
+            // If Trakt returned few TV rows, supplement with TVMaze (better for non-English / niche titles)
             const showCount = traktData.filter((r) => r.show).length;
-            if (showCount < 3) {
+            if (showCount < 5) {
                 try {
                     const tvmazeResults = await searchTVMaze(trimmedQuery);
                     // Collect existing IMDb IDs to avoid duplicates
@@ -81,7 +84,44 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
                 }
             }
 
-            return traktData;
+            let merged = dedupeTraktSearchResults(traktData);
+
+            const tmdbKey = useSettingsStore.getState().settings.tmdbApiKey?.trim();
+            if (tmdbKey) {
+                const tmdb = createTMDBClient(tmdbKey);
+                if (tmdb) {
+                    try {
+                        const multi = await tmdb.searchMulti(trimmedQuery, 1);
+                        const hits = multi.results
+                            .filter((r) => r.media_type === "movie" || r.media_type === "tv")
+                            .slice(0, 14);
+
+                        const extras: TraktSearchResult[] = [];
+                        await Promise.all(
+                            hits.map(async (hit) => {
+                                try {
+                                    const type = hit.media_type === "movie" ? ("movie" as const) : ("show" as const);
+                                    const found = await traktClient.searchByTmdbId(hit.id, type, "images");
+                                    const row = found.find((x) => x.type === type && (x.movie || x.show)) ?? found[0];
+                                    if (!row?.movie && !row?.show) return;
+                                    const pop = typeof hit.popularity === "number" ? hit.popularity : 0;
+                                    extras.push({
+                                        ...row,
+                                        score: Math.max(row.score, Math.min(500, Math.round(pop * 8))),
+                                    });
+                                } catch {
+                                    /* one TMDB id can fail */
+                                }
+                            })
+                        );
+                        merged = dedupeTraktSearchResults([...merged, ...extras]);
+                    } catch {
+                        /* TMDB is optional */
+                    }
+                }
+            }
+
+            return rankTraktSearchResults(trimmedQuery, merged);
         },
         placeholderData: keepPreviousData,
         enabled: shouldSearch,

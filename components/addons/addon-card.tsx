@@ -65,7 +65,7 @@ export function AddonCard({ addon, onToggle, onToggleCatalogs, onRemove, onMoveU
     return (
         <div
             className={cn(
-                "rounded-sm border border-border/50 p-4 transition-all duration-300 space-y-3",
+                "rounded-sm border border-border/50 p-4 transition-[border-color,box-shadow,background-color] duration-200 ease-premium space-y-3",
                 addon.enabled ? "bg-card" : "bg-muted/30 opacity-75"
             )}>
             {/* Row 1: Icon + Name/Version */}

@@ -53,6 +53,8 @@ function Carousel({
 }: React.ComponentProps<"div"> & CarouselProps) {
     const [carouselRef, api] = useEmblaCarousel(
         {
+            /** Slightly longer snap scroll = softer “fling” settle (ms scale in Embla 8) */
+            duration: 36,
             ...opts,
             axis: orientation === "horizontal" ? "x" : "y",
         },
