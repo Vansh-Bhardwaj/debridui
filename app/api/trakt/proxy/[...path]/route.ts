@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CORS_PROXY_URL } from "@/lib/constants";
 
 const UPSTREAM = "https://api.trakt.tv";
+
+/** Trakt sits behind Cloudflare; Worker/datacenter fetches often get 403 — match token refresh + addon proxy behavior. */
+const UPSTREAM_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +31,7 @@ async function proxy(req: NextRequest, segments: string[]): Promise<NextResponse
     const headers = new Headers();
     headers.set("trakt-api-version", req.headers.get("trakt-api-version") ?? "2");
     headers.set("trakt-api-key", clientId);
+    headers.set("User-Agent", UPSTREAM_UA);
 
     const auth = req.headers.get("authorization");
     if (auth) headers.set("Authorization", auth);
@@ -47,13 +53,27 @@ async function proxy(req: NextRequest, segments: string[]): Promise<NextResponse
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
-        const res = await fetch(target, {
+        const init: RequestInit = {
             method,
             headers,
             body,
             redirect: "follow",
             signal: controller.signal,
-        });
+        };
+
+        let res = await fetch(target, init);
+
+        // Same pattern as TraktClient.exchangeCode / refreshToken: direct Worker→Trakt can be WAF-blocked.
+        if (res.status === 403) {
+            res.body?.cancel();
+            const proxyBase = process.env.NEXT_PUBLIC_CORS_PROXY_URL || CORS_PROXY_URL;
+            try {
+                res = await fetch(`${proxyBase}${encodeURIComponent(target)}`, init);
+            } catch (fallbackErr) {
+                console.error("[trakt/proxy] CORS proxy fallback failed", fallbackErr);
+                return NextResponse.json({ error: "Trakt upstream blocked (403)" }, { status: 502 });
+            }
+        }
 
         const outHeaders = new Headers();
         const upstreamCt = res.headers.get("content-type");
