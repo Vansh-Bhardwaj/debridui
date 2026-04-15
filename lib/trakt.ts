@@ -1134,6 +1134,11 @@ export class TraktClient {
     }
 }
 
+/** Browser calls must go through same-origin proxy — Trakt API does not send CORS headers on preflight. */
+const traktBrowserBaseUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/api/trakt/proxy` : undefined;
+
 export const traktClient = new TraktClient({
     clientId: process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID!,
+    ...(traktBrowserBaseUrl ? { baseUrl: traktBrowserBaseUrl } : {}),
 });
