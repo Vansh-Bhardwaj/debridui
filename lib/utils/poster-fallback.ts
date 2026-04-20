@@ -1,6 +1,7 @@
 import { fetchCinemetaMeta } from "@/lib/cinemeta";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { createTMDBClient } from "@/lib/tmdb";
+import { getProxyUrl } from "@/lib/utils";
 
 // Global cache for API-based poster lookups (persists across re-renders)
 const posterApiCache = new Map<string, string | null>();
@@ -39,7 +40,7 @@ export async function fetchPosterFromAPIs(
                         result.movie_results[0]?.poster_path ??
                         result.tv_results[0]?.poster_path;
                     if (posterPath) {
-                        const url = `https://image.tmdb.org/t/p/w300${posterPath}`;
+                        const url = getProxyUrl(`https://image.tmdb.org/t/p/w300${posterPath}`);
                         posterApiCache.set(imdbId, url);
                         return url;
                     }

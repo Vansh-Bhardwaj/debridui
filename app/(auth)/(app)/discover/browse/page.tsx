@@ -4,6 +4,7 @@ export const dynamic = "force-static";
 import { useState, useCallback, useRef, useEffect, memo } from "react";
 import { Compass, Film, Tv, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getProxyUrl } from "@/lib/utils";
 import { MediaCard } from "@/components/mdb/media-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -38,8 +39,8 @@ function tmdbMovieToItem(m: TMDBMovieSummary): TraktMediaItem {
         year,
         ids: { trakt: 0, slug: createSlug(m.title, year, m.id), tmdb: m.id },
         images: {
-            poster: m.poster_path ? [`${TMDB_IMG}/w500${m.poster_path}`] : [],
-            fanart: m.backdrop_path ? [`${TMDB_IMG}/w1280${m.backdrop_path}`] : [],
+            poster: m.poster_path ? [getProxyUrl(`${TMDB_IMG}/w500${m.poster_path}`)] : [],
+            fanart: m.backdrop_path ? [getProxyUrl(`${TMDB_IMG}/w1280${m.backdrop_path}`)] : [],
             logo: [], clearart: [], banner: [], thumb: [], headshot: [], screenshot: [],
         },
         rating: m.vote_average, votes: m.vote_count,
@@ -54,8 +55,8 @@ function tmdbTVToItem(m: TMDBTVSummary): TraktMediaItem {
         year,
         ids: { trakt: 0, slug: createSlug(m.name, year, m.id), tmdb: m.id },
         images: {
-            poster: m.poster_path ? [`${TMDB_IMG}/w500${m.poster_path}`] : [],
-            fanart: m.backdrop_path ? [`${TMDB_IMG}/w1280${m.backdrop_path}`] : [],
+            poster: m.poster_path ? [getProxyUrl(`${TMDB_IMG}/w500${m.poster_path}`)] : [],
+            fanart: m.backdrop_path ? [getProxyUrl(`${TMDB_IMG}/w1280${m.backdrop_path}`)] : [],
             logo: [], clearart: [], banner: [], thumb: [], headshot: [], screenshot: [],
         },
         rating: m.vote_average, votes: m.vote_count,

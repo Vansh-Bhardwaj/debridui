@@ -1,4 +1,5 @@
 // TMDB Episode Group Types
+import { getProxyUrl } from "@/lib/utils";
 export interface TMDBEpisodeGroupNetwork {
     id: number;
     logo_path: string | null;
@@ -348,8 +349,8 @@ export function tmdbToTraktMedia(
             tvdb: tv?.external_ids?.tvdb_id,
         },
         images: {
-            poster: posterPath ? [`${TMDB_IMAGE_BASE}/w500${posterPath}`] : [],
-            fanart: backdropPath ? [`${TMDB_IMAGE_BASE}/w1280${backdropPath}`] : [],
+            poster: posterPath ? [getProxyUrl(`${TMDB_IMAGE_BASE}/w500${posterPath}`)] : [],
+            fanart: backdropPath ? [getProxyUrl(`${TMDB_IMAGE_BASE}/w1280${backdropPath}`)] : [],
             logo: [],
             clearart: [],
             banner: [],

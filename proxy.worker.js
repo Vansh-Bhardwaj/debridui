@@ -9,7 +9,7 @@ https://your-worker.workers.dev/?url=https://api.example.com/endpoint
 
 // eslint-disable-next-line import/no-anonymous-default-export
 export default {
-    async fetch(request) {
+    async fetch(request, env, context) {
         // Configure allowed origins - add your domains here
         const ALLOWED_ORIGINS = [
             // "*", // Allow all origins (remove this for security)
@@ -128,10 +128,42 @@ export default {
             );
             cleanHeaders.set("accept", "application/json, text/plain, */*");
             cleanHeaders.set("accept-language", "en-US,en;q=0.9");
-            // Prevent any upstream HTTP caching — AIOStreams assembles results
-            // dynamically and cached responses may contain partial data
-            cleanHeaders.set("cache-control", "no-cache");
-            cleanHeaders.set("pragma", "no-cache");
+            // Prevent upstream caching by default (e.g. for dynamic stream searches)
+            // But allow caching for stable endpoints (catalogs, metadata, subtitles)
+            const parsedTarget = new URL(targetUrl);
+            const path = parsedTarget.pathname.toLowerCase();
+            
+            const isCatalog = path.includes("/catalog/");
+            const isMeta = path.includes("/meta/");
+            const isSubtitles = path.includes("/subtitles/");
+            const isStream = path.includes("/stream/");
+            const isTmdbImage = targetUrl.includes("image.tmdb.org");
+            
+            const isCacheable = (isCatalog || isMeta || isSubtitles || isTmdbImage) && !isStream;
+
+            if (!isCacheable) {
+                cleanHeaders.set("cache-control", "no-cache");
+                cleanHeaders.set("pragma", "no-cache");
+            }
+
+            // Define Cache API key based on the full request URL
+            const cache = caches.default;
+            const cacheKey = new Request(url.toString(), request);
+            
+            // Serve from Cloudflare Edge Cache if available
+            if (isCacheable) {
+                const cachedResponse = await cache.match(cacheKey);
+                if (cachedResponse) {
+                    // Clone the cached response to append fresh CORS headers
+                    const response = new Response(cachedResponse.body, cachedResponse);
+                    const allowOrigin = ALLOWED_ORIGINS.includes("*") ? "*" : requestOrigin;
+                    response.headers.set("Access-Control-Allow-Origin", allowOrigin);
+                    response.headers.set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+                    response.headers.set("Vary", "Origin");
+                    response.headers.set("X-Proxy-Cache", "HIT");
+                    return response;
+                }
+            }
 
             const proxyRequest = new Request(targetUrl, {
                 method: request.method,
@@ -156,12 +188,37 @@ export default {
             headers.set("Access-Control-Allow-Origin", allowOrigin);
             headers.set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
             headers.set("Vary", "Origin");
+            headers.set("X-Proxy-Cache", "MISS");
 
-            return new Response(response.body, {
+            // Apply Edge Caching logic
+            if (isCacheable && response.status === 200) {
+                let maxAge = 0;
+                if (isCatalog) maxAge = 3600; // 1 hour for catalogs
+                if (isMeta) maxAge = 86400; // 24 hours for metadata
+                if (isSubtitles) maxAge = 604800; // 7 days for subtitles
+                if (isTmdbImage) maxAge = 2592000; // 30 days for TMDB images
+
+                if (maxAge > 0) {
+                    // Tell Cloudflare Edge and the browser to cache this
+                    headers.set("Cache-Control", `public, max-age=${maxAge}, s-maxage=${maxAge}`);
+                }
+            } else {
+                headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+            }
+
+            const finalResponse = new Response(response.body, {
                 status: response.status,
                 statusText: response.statusText,
                 headers: headers,
             });
+
+            // Put in Cloudflare Cache asynchronously
+            if (isCacheable && response.status === 200) {
+                // cache.put requires a clone because the body can only be read once
+                context.waitUntil(cache.put(cacheKey, finalResponse.clone()));
+            }
+
+            return finalResponse;
         } catch (error) {
             return new Response(`Proxy error: ${error.message}`, {
                 status: 500,
