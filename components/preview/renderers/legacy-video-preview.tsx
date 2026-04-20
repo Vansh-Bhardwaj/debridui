@@ -55,6 +55,10 @@ function isIOS(): boolean {
     return false;
 }
 
+type WindowWithWebkitAudioContext = Window & typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+};
+
 function normalizeLangCode(code?: string | null): string | null {
     if (!code) return null;
     const lower = code.trim().toLowerCase();
@@ -397,6 +401,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
     const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null);
     const gainNodeRef = useRef<GainNode | null>(null);
+    const pendingNormalizationResumeRef = useRef<{ time: number; wasPlaying: boolean } | null>(null);
+    const normalizationReloadingRef = useRef(false);
+    const [audioGraphVersion, setAudioGraphVersion] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isSpeedProbeRunning, setIsSpeedProbeRunning] = useState(false);
     const [lastSpeedProbeMbps, setLastSpeedProbeMbps] = useState<number | null>(null);
@@ -749,6 +756,41 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         });
     }, []);
 
+    const toggleAudioNormalization = useCallback(() => {
+        const next = !audioNormalization;
+        const video = videoRef.current;
+
+        if (next && video && !hlsRef.current) {
+            pendingNormalizationResumeRef.current = {
+                time: Number.isFinite(video.currentTime) ? video.currentTime : 0,
+                wasPlaying: !video.paused && !video.ended,
+            };
+
+            normalizationReloadingRef.current = true;
+
+            if (audioContextRef.current) {
+                void audioContextRef.current.close().catch(() => { });
+            }
+            audioContextRef.current = null;
+            sourceNodeRef.current = null;
+            compressorNodeRef.current = null;
+            gainNodeRef.current = null;
+
+            const reloadUrl = video.currentSrc || finalUrl;
+            if (reloadUrl) {
+                video.crossOrigin = "anonymous";
+                video.src = reloadUrl;
+                video.load();
+            } else {
+                normalizationReloadingRef.current = false;
+            }
+        }
+
+        setAudioNormalization(next);
+        showOsd(next ? "Audio Normalization: On" : "Audio Normalization: Off");
+        setSettingsPanel(null);
+    }, [audioNormalization, finalUrl, showOsd]);
+
     useEffect(() => {
         if (process.env.NODE_ENV === "production") return;
         const timer = setInterval(() => {
@@ -969,7 +1011,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             el.defaultPlaybackRate = playbackRate;
             el.playbackRate = playbackRate;
             setDuration(el.duration || 0);
-            if (hasSeenkedToInitialRef.current) {
+            const pendingNormalizationResume = pendingNormalizationResumeRef.current;
+            if (pendingNormalizationResume) {
+                pendingNormalizationResumeRef.current = null;
+                normalizationReloadingRef.current = false;
+                applyResumePosition(pendingNormalizationResume.time);
+                if (pendingNormalizationResume.wasPlaying) {
+                    el.play().catch(() => { });
+                }
+                setAudioGraphVersion((prev) => prev + 1);
+            } else if (hasSeenkedToInitialRef.current) {
                 // On transcode fallback/source switch, prefer the user's current
                 // playback position over the initial resume point — the user may
                 // have watched further since the original seek.
@@ -2352,10 +2403,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
+        if (normalizationReloadingRef.current) return;
 
         // Initialize AudioContext on first need if enabled
         if (audioNormalization && !audioContextRef.current) {
-            const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+            const AudioContextClass = window.AudioContext || (window as WindowWithWebkitAudioContext).webkitAudioContext;
             if (AudioContextClass) {
                 audioContextRef.current = new AudioContextClass();
             }
@@ -2420,7 +2472,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (isPlaying && ctx.state === "suspended") {
             ctx.resume().catch(() => { });
         }
-    }, [audioNormalization, isPlaying]);
+    }, [audioNormalization, isPlaying, audioGraphVersion]);
 
     // Warm the subtitle proxy in the background, but never block first frame on it.
     useEffect(() => {
@@ -2460,6 +2512,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         const controller = new AbortController();
+            if (audioContextRef.current) {
+                void audioContextRef.current.close().catch(() => { });
+                audioContextRef.current = null;
+            }
+            sourceNodeRef.current = null;
+            compressorNodeRef.current = null;
+            gainNodeRef.current = null;
 
         const parseTime = (t: string): number | null => {
             const s = t.trim().replace(",", ".");
@@ -3456,13 +3515,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         )}
                                                         {/* Audio Normalization */}
                                                         <button
-                                                            onClick={() => {
-                                                                const next = !audioNormalization;
-                                                                setAudioNormalization(next);
-                                                                showOsd(next ? "Audio Normalization: On" : "Audio Normalization: Off");
-                                                                setOpenMenuTracked(null);
-                                                                setSettingsPanel(null);
-                                                            }}
+                                                            onClick={toggleAudioNormalization}
                                                             className={POPUP_ITEM}
                                                             data-tv-focusable
                                                         >
