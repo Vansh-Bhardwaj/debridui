@@ -293,7 +293,7 @@ function PlayerCastButton({
             <DropdownMenuContent
                 align="end"
                 side="top"
-                className="min-w-[200px] z-[100] bg-black/90 text-white border-white/10 backdrop-blur-md p-1">
+                className="min-w-[200px] z-[100] bg-black/95 text-white border-white/10 p-1">
                 <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-white/40 px-3 py-2">
                     Play on
                 </DropdownMenuLabel>
@@ -337,11 +337,8 @@ const PLAYER_BTN =
 const PLAYER_BTN_SM = `${PLAYER_BTN} w-9 h-9`;
 const PLAYER_BTN_MD = `${PLAYER_BTN} w-10 h-10`;
 const POPUP_STYLE: React.CSSProperties = {
-    background: "rgba(14, 14, 17, 0.96)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    border: "1px solid rgba(255,255,255,0.085)",
-    boxShadow: "0 18px 50px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.04)",
+    background: "rgba(18, 18, 22, 0.98)",
+    boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08) inset",
 };
 /** Radix menu adds zoom/fade; `.player-popup` supplies its own entrance — disable the duplicate. */
 const POPUP_CLS =
@@ -2005,7 +2002,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 event.preventDefault();
             }
 
-            const keepsDesktopChromeHidden = !useCompactControls && ["ArrowLeft", "ArrowRight", "j", "J", "l", "L", ",", "<", ".", ">", "[", "]"].includes(event.key);
+            const keepsDesktopChromeHidden = !useCompactControls && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "j", "J", "l", "L", "m", "M", ",", "<", ".", ">", "[", "]", "AudioVolumeUp", "AudioVolumeDown", "AudioVolumeMute"].includes(event.key);
             if (!keepsDesktopChromeHidden) {
                 resetControlsTimeout();
             }
@@ -2277,7 +2274,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (typeof delta !== "number") return;
             const cur = videoRef.current?.currentTime ?? 0;
             seekTo(cur + delta);
-            resetControlsTimeout();
             triggerSeekRipple(delta < 0 ? "left" : "right");
             const dir: 1 | -1 = delta > 0 ? 1 : -1;
             if (seekAccRef.current?.direction === dir) { seekAccRef.current.total += Math.abs(delta); }
@@ -2289,7 +2285,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (typeof delta !== "number") return;
             const video = videoRef.current;
             if (!video) return;
-            resetControlsTimeout();
             const newVol = Math.max(0, Math.min(1, video.volume + delta));
             video.volume = newVol;
             video.muted = newVol === 0;
@@ -2582,20 +2577,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div className="player-loading-bar absolute top-0 left-0 right-0 h-[3px] z-50 overflow-hidden" />
                     )}
 
-                    {/* Unified loading overlay — vignette + branded spinner */}
-                    {(isLoading && !error) && (
-                        <div
-                            className="player-loading-shell absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 pointer-events-none"
-                            aria-busy="true"
-                            aria-live="polite"
-                        >
-                            <div className="player-loading-backdrop absolute inset-0" aria-hidden />
-                            <div className="player-loading-spinner-wrap relative flex items-center justify-center">
-                                <div className="player-loading-spinner" />
-                            </div>
-                        </div>
-                    )}
-
                     {/* YouTube-style center action icon (flash on play/pause) */}
                     {centerActionTriggered && (
                         <div className="player-center-action">
@@ -2691,7 +2672,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         ? "w-[84px] px-3.5 py-1.5 text-xs font-medium tabular-nums"
                                         : "min-w-[90px] px-3.5 py-1.5 text-xs font-medium"
                             )}
-                            style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", letterSpacing: "0.03em" }}>
+                            style={{ background: "rgba(0,0,0,0.92)", letterSpacing: "0.03em" }}>
                             {osdText}
                             {hasVolumeBar && (
                                 <div className="player-osd-bar mt-2 h-1 w-full rounded-full bg-white/15 overflow-hidden">
@@ -2822,7 +2803,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 <div className="flex flex-col items-end gap-2">
                                     <div
                                         className="rounded-lg border border-white/15 overflow-hidden"
-                                        style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(16px)", maxWidth: 320 }}
+                                        style={{ background: "rgba(0,0,0,0.95)", maxWidth: 320 }}
                                     >
                                         <div className="px-4 pt-3 pb-1">
                                             <p className="text-[11px] uppercase tracking-wider text-white/40 font-medium">Up Next</p>
@@ -2862,7 +2843,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             }
                                         }}
                                         className="player-cta-btn inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white rounded-md border border-white/20 cursor-pointer transition-all hover:bg-primary hover:border-primary hover:text-primary-foreground active:scale-[0.96]"
-                                        style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)" }}
+                                        style={{ background: "rgba(0,0,0,0.92)" }}
                                     >
                                         <SkipForward className="size-4" />
                                         {activeSkipSegment === "intro" ? "Skip Intro" : activeSkipSegment === "recap" ? "Skip Recap" : "Skip Credits"}
@@ -2874,7 +2855,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             skippedSegmentsRef.current.add(activeSkipSegment);
                                             setActiveSkipSegment(null);
                                         }}
-                                        className="flex items-center justify-center rounded-md bg-black/60 backdrop-blur-sm p-2 text-white/50 transition-all hover:bg-white/10 hover:text-white active:scale-90"
+                                        className="flex items-center justify-center rounded-md bg-black/85 p-2 text-white/50 transition-all hover:bg-white/10 hover:text-white active:scale-90"
                                     >
                                         <X className="size-3" />
                                     </button>
@@ -3621,7 +3602,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleIosTapToPlay(); }}
                             className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white z-50">
-                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-md">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/15">
                                 <Play className="h-10 w-10 fill-current ml-1" />
                             </div>
                             <span className="text-sm font-medium">Tap to play</span>
@@ -3637,7 +3618,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
                     {showLoadingHint && (
-                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/90 px-4 py-3 text-center text-xs text-white backdrop-blur-md sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
+                        <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/95 px-4 py-3 text-center text-xs text-white sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">
                                 {hasCodecIssue
