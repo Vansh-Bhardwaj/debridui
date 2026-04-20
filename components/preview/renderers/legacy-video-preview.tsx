@@ -401,6 +401,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
     const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null);
     const gainNodeRef = useRef<GainNode | null>(null);
+    const rumbleCutFilterRef = useRef<BiquadFilterNode | null>(null);
+    const presenceFilterRef = useRef<BiquadFilterNode | null>(null);
+    const harshnessFilterRef = useRef<BiquadFilterNode | null>(null);
     const dryGainNodeRef = useRef<GainNode | null>(null);
     const wetGainNodeRef = useRef<GainNode | null>(null);
     const audioGraphConnectedRef = useRef(false);
@@ -713,12 +716,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setLastSpeedProbeMbps(probe.mbps);
 
             const mbpsText = `${probe.mbps.toFixed(1)} Mbps`;
-            if (auto) {
-                showOsd(`Network ${mbpsText}`, "center");
-                if (probe.mbps < 8) {
-                    showOsd(`Low throughput: ${mbpsText}`, "center");
-                }
-            } else {
+            if (!auto) {
                 showOsd(`Network ${mbpsText}`, "center");
                 toast.success(usedProxyFallback ? `Measured ${mbpsText} (proxy fallback)` : `Measured ${mbpsText}`);
             }
@@ -1347,7 +1345,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         const onWaiting = () => {
             setIsLoading(true);
-            void runBufferingSpeedProbe({ auto: true });
         };
         const onPlaying = () => {
             setIsLoading(false);
@@ -1513,6 +1510,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             sourceNodeRef.current = null;
             compressorNodeRef.current = null;
             gainNodeRef.current = null;
+            rumbleCutFilterRef.current = null;
+            presenceFilterRef.current = null;
+            harshnessFilterRef.current = null;
             dryGainNodeRef.current = null;
             wetGainNodeRef.current = null;
         };
@@ -2385,7 +2385,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (!video) return;
         if (audioSourceInitFailedRef.current) return;
 
-        const rampGain = (node: GainNode | null, value: number, context: AudioContext, duration = 0.08) => {
+        const rampGain = (node: GainNode | null, value: number, context: AudioContext, duration = 0.12) => {
             if (!node) return;
             const now = context.currentTime;
             node.gain.cancelScheduledValues(now);
@@ -2428,25 +2428,47 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const comp = ctx.createDynamicsCompressor();
             /**
              * Normalization / Night Mode settings:
-             * - Low threshold to catch most dialogue
-             * - High ratio to strongly compress loud peaks
-             * - Fast attack to prevent ear-piercing sudden sounds
-             * - Relatively slow release for natural sound
+             * - Gentle, dialogue-first dynamic control for night listening
+             * - Softer ratio/attack than a loudness maximizer to avoid sharp transients
              */
-            comp.threshold.setValueAtTime(-24, ctx.currentTime);
-            comp.knee.setValueAtTime(30, ctx.currentTime);
-            comp.ratio.setValueAtTime(12, ctx.currentTime);
-            comp.attack.setValueAtTime(0.003, ctx.currentTime);
-            comp.release.setValueAtTime(0.25, ctx.currentTime);
+            comp.threshold.setValueAtTime(-26, ctx.currentTime);
+            comp.knee.setValueAtTime(36, ctx.currentTime);
+            comp.ratio.setValueAtTime(4.5, ctx.currentTime);
+            comp.attack.setValueAtTime(0.02, ctx.currentTime);
+            comp.release.setValueAtTime(0.3, ctx.currentTime);
             compressorNodeRef.current = comp;
         }
 
         if (!gainNodeRef.current) {
             const gain = ctx.createGain();
-            // Makeup gain: compression reduces overall volume, so we boost it back up.
-            // 1.4x - 1.6x is usually a good "blend" for dialogue clarity.
-            gain.gain.setValueAtTime(1.5, ctx.currentTime);
+            // Keep makeup gain conservative to avoid "clarity boost" harshness.
+            gain.gain.setValueAtTime(1.15, ctx.currentTime);
             gainNodeRef.current = gain;
+        }
+
+        if (!rumbleCutFilterRef.current) {
+            const filter = ctx.createBiquadFilter();
+            filter.type = "highpass";
+            filter.frequency.setValueAtTime(70, ctx.currentTime);
+            filter.Q.setValueAtTime(0.707, ctx.currentTime);
+            rumbleCutFilterRef.current = filter;
+        }
+
+        if (!presenceFilterRef.current) {
+            const filter = ctx.createBiquadFilter();
+            filter.type = "peaking";
+            filter.frequency.setValueAtTime(1800, ctx.currentTime);
+            filter.Q.setValueAtTime(0.8, ctx.currentTime);
+            filter.gain.setValueAtTime(1.2, ctx.currentTime);
+            presenceFilterRef.current = filter;
+        }
+
+        if (!harshnessFilterRef.current) {
+            const filter = ctx.createBiquadFilter();
+            filter.type = "highshelf";
+            filter.frequency.setValueAtTime(4200, ctx.currentTime);
+            filter.gain.setValueAtTime(-2.4, ctx.currentTime);
+            harshnessFilterRef.current = filter;
         }
 
         if (!dryGainNodeRef.current) {
@@ -2465,7 +2487,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             source.connect(dryGainNodeRef.current);
             dryGainNodeRef.current.connect(ctx.destination);
 
-            source.connect(compressorNodeRef.current);
+            source.connect(rumbleCutFilterRef.current);
+            rumbleCutFilterRef.current.connect(presenceFilterRef.current);
+            presenceFilterRef.current.connect(harshnessFilterRef.current);
+            harshnessFilterRef.current.connect(compressorNodeRef.current);
             compressorNodeRef.current.connect(gainNodeRef.current);
             gainNodeRef.current.connect(wetGainNodeRef.current);
             wetGainNodeRef.current.connect(ctx.destination);
