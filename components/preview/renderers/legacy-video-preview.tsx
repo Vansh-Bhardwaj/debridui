@@ -1527,14 +1527,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         const video = videoRef.current;
         return () => {
-            if (!video) return;
             if (hlsRef.current) {
                 hlsRef.current.destroy();
                 hlsRef.current = null;
             }
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
+            if (video) {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+            }
+            if (audioContextRef.current) {
+                void audioContextRef.current.close().catch(() => { });
+                audioContextRef.current = null;
+            }
+            sourceNodeRef.current = null;
+            compressorNodeRef.current = null;
+            gainNodeRef.current = null;
         };
     }, []);
 
@@ -2512,13 +2520,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         const controller = new AbortController();
-            if (audioContextRef.current) {
-                void audioContextRef.current.close().catch(() => { });
-                audioContextRef.current = null;
-            }
-            sourceNodeRef.current = null;
-            compressorNodeRef.current = null;
-            gainNodeRef.current = null;
+
 
         const parseTime = (t: string): number | null => {
             const s = t.trim().replace(",", ".");
