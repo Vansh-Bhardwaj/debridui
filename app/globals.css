@@ -433,12 +433,12 @@ input[type="range"]:hover::-moz-range-thumb {
     left: 0;
     right: 0;
     top: 50%;
-    height: var(--seekbar-h);
+    height: var(--seekbar-h, 3px);
     transform: translateY(-50%);
     background: rgba(255, 255, 255, 0.2);
     border-radius: 9999px;
     overflow: hidden;
-    transition: height 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: height 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     will-change: height;
 }
 
@@ -482,8 +482,8 @@ input[type="range"]:hover::-moz-range-thumb {
     /* Center horizontally on left% and vertically on track */
     transform: translate(-50%, -50%) scale(0);
     transition:
-        transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     z-index: 2;
     pointer-events: none;
     box-shadow:
@@ -492,11 +492,11 @@ input[type="range"]:hover::-moz-range-thumb {
 }
 
 .player-seekbar:hover .player-seekbar-thumb {
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -50%) scale(1.15);
 }
 
 .player-seekbar[data-dragging="true"] .player-seekbar-thumb {
-    transform: translate(-50%, -50%) scale(1.15);
+    transform: translate(-50%, -50%) scale(1.35);
     box-shadow:
         0 0 0 4px color-mix(in oklch, var(--primary) 25%, transparent),
         0 1px 6px rgba(0, 0, 0, 0.3);
@@ -515,7 +515,8 @@ input[type="range"]:hover::-moz-range-thumb {
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 100ms ease;
+    transform: translateX(-50%) translateY(4px) scale(0.95);
+    transition: opacity 150ms ease, transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     z-index: 3;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -523,6 +524,7 @@ input[type="range"]:hover::-moz-range-thumb {
 
 .player-seekbar:hover .player-seekbar-tooltip {
     opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
 }
 
 /* Intro/recap/outro markers on seekbar */
@@ -591,7 +593,7 @@ input[type="range"]:hover::-moz-range-thumb {
     cursor: pointer;
     transition:
         background 150ms ease,
-        transform 100ms ease,
+        transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
         opacity 150ms ease;
     outline: none;
     flex-shrink: 0;
@@ -599,10 +601,12 @@ input[type="range"]:hover::-moz-range-thumb {
 
 .player-btn:hover {
     background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.1);
 }
 
 .player-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.85);
+    transition: transform 100ms ease;
 }
 
 .player-btn:disabled {
@@ -735,7 +739,7 @@ input[type="range"]:hover::-moz-range-thumb {
     background: rgba(0, 0, 0, 0.62);
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     transition:
-        transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
         background 200ms ease,
         border-color 200ms ease,
         box-shadow 200ms ease;
@@ -744,6 +748,7 @@ input[type="range"]:hover::-moz-range-thumb {
 .player-mobile-chrome-btn:hover {
     background: rgba(0, 0, 0, 0.58);
     border-color: rgba(255, 255, 255, 0.28);
+    transform: scale(1.05);
 }
 
 .player-mobile-chrome-btn:active {
@@ -830,8 +835,8 @@ input[type="range"]:hover::-moz-range-thumb {
     z-index: 40;
     pointer-events: none;
     transition:
-        opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
-        transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        opacity 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .player-osd[data-visible="true"] {
@@ -878,7 +883,7 @@ input[type="range"]:hover::-moz-range-thumb {
     background: rgba(22, 22, 22, 0.98);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    animation: player-popup-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: player-popup-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     transform-origin: bottom right;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
@@ -892,7 +897,7 @@ input[type="range"]:hover::-moz-range-thumb {
 @keyframes player-popup-in {
     from {
         opacity: 0;
-        transform: scale(0.96) translateY(4px);
+        transform: scale(0.92) translateY(8px);
     }
     to {
         opacity: 1;

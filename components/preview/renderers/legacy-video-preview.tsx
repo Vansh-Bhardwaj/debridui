@@ -3426,11 +3426,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Position</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(20, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
+                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(0, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
-                                                                onClick={() => setSubtitlePosition((s) => Math.max(20, s - 4))}
+                                                                onClick={() => setSubtitlePosition((s) => Math.max(0, s - 4))}
                                                             >
                                                                 <Minus className="h-3.5 w-3.5" />
                                                             </button>
