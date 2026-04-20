@@ -2,16 +2,14 @@ import { SUBTITLE_SYMBOL_FONT_FALLBACK } from "@/lib/utils/subtitles";
 
 export function LegacyPlayerSubtitleStyle() {
     // Styles for manual subtitle overlay (bypasses Windows OS ::cue style override)
-    const subFontStack = `"Trebuchet MS", "Segoe UI", "Avenir Next", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`;
+    const subFontStack = `system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, ${SUBTITLE_SYMBOL_FONT_FALLBACK}`;
     return (
         <style jsx global>{`
             /* Manual subtitle overlay styling — default (semi-transparent background) */
             .debridui-subtitle-text {
                 color: #fff;
-                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88), 0 0 10px rgba(0, 0, 0, 0.55);
+                text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
                 line-height: 1.4;
-                letter-spacing: 0.01em;
-                font-weight: 450;
                 /* Musical symbols / emoji: mono/serif faces often lack these glyphs without an explicit fallback stack */
                 font-family: ${subFontStack};
                 font-variant-emoji: emoji;
@@ -23,7 +21,6 @@ export function LegacyPlayerSubtitleStyle() {
             }
             .debridui-sub-bg-semi .debridui-subtitle-text {
                 background: rgba(0, 0, 0, 0.55);
-                backdrop-filter: blur(2px);
             }
             .debridui-sub-bg-outline .debridui-subtitle-text {
                 background: transparent;

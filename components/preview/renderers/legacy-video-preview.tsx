@@ -36,7 +36,6 @@ import { useIntroSegments } from "@/hooks/use-intro-segments";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
-import { easeOutCubic } from "@/lib/motion/tween-scroll";
 import { cn } from "@/lib/utils";
 
 /** Parsed subtitle cue for manual rendering */
@@ -258,7 +257,6 @@ export interface LegacyVideoPreviewProps {
 }
 
 const LOADING_HINT_AFTER_MS = 12000;
-const SUBTITLE_POSITION_MIN = 0;
 
 /** Compact device-sync cast button for the video player control bar */
 function PlayerCastButton({
@@ -450,11 +448,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [seekHoverPct, setSeekHoverPct] = useState<number | null>(null);
     // Custom seekbar drag state
     const seekbarRef = useRef<HTMLDivElement>(null);
-    const visualTimeRef = useRef(0);
-    const visualTimeTweenRef = useRef<number | null>(null);
     const [isDraggingSeekbar, setIsDraggingSeekbar] = useState(false);
     const [seekDragPreviewTime, setSeekDragPreviewTime] = useState<number | null>(null);
-    const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
     const wasPausedBeforeDragRef = useRef(false);
     // Center action icon (YouTube-style play/pause flash)
     const [centerAction, setCenterAction] = useState<"play" | "pause" | null>(null);
@@ -576,7 +571,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
-    const [visualCurrentTime, setVisualCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [volume, setVolume] = useState(1);
@@ -1652,48 +1646,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         setSeekHoverPct(null);
     }, []);
 
-    useEffect(() => {
-        const nextTime = currentTime;
-        if (visualTimeTweenRef.current) {
-            cancelAnimationFrame(visualTimeTweenRef.current);
-            visualTimeTweenRef.current = null;
-        }
-
-        const fromTime = visualTimeRef.current;
-        const delta = nextTime - fromTime;
-
-        if (isDraggingSeekbar || prefersReducedMotion || Math.abs(delta) > 18 || Math.abs(delta) < 0.04) {
-            visualTimeRef.current = nextTime;
-            setVisualCurrentTime(nextTime);
-            return;
-        }
-
-        const durationMs = Math.max(110, Math.min(260, Math.abs(delta) * 75));
-        const startedAt = performance.now();
-        const tick = (now: number) => {
-            const elapsed = now - startedAt;
-            const t = Math.min(1, elapsed / durationMs);
-            const tweened = fromTime + delta * easeOutCubic(t);
-            visualTimeRef.current = tweened;
-            setVisualCurrentTime(tweened);
-            if (t < 1) {
-                visualTimeTweenRef.current = requestAnimationFrame(tick);
-            } else {
-                visualTimeTweenRef.current = null;
-            }
-        };
-
-        visualTimeTweenRef.current = requestAnimationFrame(tick);
-
-        return () => {
-            if (visualTimeTweenRef.current) {
-                cancelAnimationFrame(visualTimeTweenRef.current);
-                visualTimeTweenRef.current = null;
-            }
-        };
-    }, [currentTime, isDraggingSeekbar, prefersReducedMotion]);
-
-    const displayedSeekbarTime = seekDragPreviewTime ?? visualCurrentTime;
+    const displayedSeekbarTime = seekDragPreviewTime ?? currentTime;
     const displayedSeekbarPct = duration > 0 ? (displayedSeekbarTime / duration) * 100 : 0;
 
     useEffect(() => {
@@ -2557,15 +2510,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return () => window.removeEventListener("resize", updateCompactMode);
     }, []);
 
-    useEffect(() => {
-        if (typeof window === "undefined") return;
-        const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const syncReducedMotion = () => setPrefersReducedMotion(media.matches);
-        syncReducedMotion();
-        media.addEventListener("change", syncReducedMotion);
-        return () => media.removeEventListener("change", syncReducedMotion);
-    }, []);
-
     const isVolumeOsd = /^(Volume \d+%|Muted|Unmuted)$/.test(osdText);
     const hasVolumeBar = /^Volume \d+%$/.test(osdText);
     const isSeekOsd = /^[«»]\s\d+s$/.test(osdText);
@@ -2841,7 +2785,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         )}
                     >
                         <div data-player-controls className="player-top-chrome-inner pointer-events-auto px-4 pb-12 pt-4">
-                            <p className="truncate text-[15px] font-light tracking-[0.015em] text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+                            <p className="truncate text-sm font-medium tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
                                 {file.name}
                             </p>
                         </div>
@@ -2929,7 +2873,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     >
                         <div
                             data-player-controls
-                            className="player-controls-panel pointer-events-auto px-4 pt-16 pb-3"
+                            className="pointer-events-auto px-4 pt-16 pb-3"
+                            style={{ background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.15) 80%, transparent 100%)" }}
                         >
                             {/* Custom seekbar */}
                             <div
@@ -3007,7 +2952,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             </div>
 
                             {/* Controls row */}
-                            <div className="player-controls-row mt-2 flex items-center gap-1 text-white" data-visible={showControls ? "true" : "false"}>
+                            <div className="mt-2 flex items-center gap-1 text-white">
                                 {/* Left: Play, Prev/Next, Time */}
                                 <div className="flex items-center gap-0.5">
                                     <button
@@ -3091,11 +3036,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         onClick={() => setShowRemainingTime((v) => !v)}
                                         title="Click to toggle remaining time"
                                     >
-                                        {formatTime(visualCurrentTime)}
+                                        {formatTime(currentTime)}
                                         <span className="text-white/35 mx-1">/</span>
                                         <span className="text-white/55">
                                             {showRemainingTime
-                                                ? `-${formatTime(Math.max(0, duration - visualCurrentTime))}`
+                                                ? `-${formatTime(Math.max(0, duration - currentTime))}`
                                                 : formatTime(duration)
                                             }
                                         </span>
@@ -3481,11 +3426,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Position</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(SUBTITLE_POSITION_MIN, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
+                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(20, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
-                                                                onClick={() => setSubtitlePosition((s) => Math.max(SUBTITLE_POSITION_MIN, s - 4))}
+                                                                onClick={() => setSubtitlePosition((s) => Math.max(20, s - 4))}
                                                             >
                                                                 <Minus className="h-3.5 w-3.5" />
                                                             </button>

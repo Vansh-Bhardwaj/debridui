@@ -573,72 +573,9 @@ input[type="range"]:hover::-moz-range-thumb {
     padding: 56px 16px 12px;
 }
 
-.player-controls-panel {
-    position: relative;
-    overflow: hidden;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background:
-        radial-gradient(120% 100% at 50% 100%, color-mix(in oklch, var(--primary) 18%, transparent) 0%, transparent 58%),
-        linear-gradient(to top, rgba(0, 0, 0, 0.94) 0%, rgba(0, 0, 0, 0.74) 46%, rgba(0, 0, 0, 0.22) 78%, transparent 100%);
-    backdrop-filter: blur(14px) saturate(125%);
-    box-shadow: 0 -22px 48px rgba(0, 0, 0, 0.52);
-}
-
-.player-controls-panel::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(
-        102deg,
-        transparent 0%,
-        transparent 36%,
-        color-mix(in oklch, white 12%, transparent) 46%,
-        transparent 56%,
-        transparent 100%
-    );
-    transform: translateX(-26%);
-    opacity: 0.38;
-    animation: player-controls-sheen 8.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-.player-controls-row > * {
-    opacity: 1;
-    transform: translateY(0);
-    transition:
-        opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
-        transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.player-controls-row[data-visible="true"] > *:nth-child(1) { transition-delay: 40ms; }
-.player-controls-row[data-visible="true"] > *:nth-child(2) { transition-delay: 80ms; }
-.player-controls-row[data-visible="true"] > *:nth-child(3) { transition-delay: 120ms; }
-
-.player-controls-row[data-visible="false"] > * {
-    opacity: 0;
-    transform: translateY(8px);
-    transition-delay: 0ms;
-}
-
-@keyframes player-controls-sheen {
-    0% { transform: translateX(-26%); opacity: 0; }
-    12% { opacity: 0.32; }
-    46% { transform: translateX(22%); opacity: 0.18; }
-    100% { transform: translateX(22%); opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
     .player-controls-wrapper {
         transition-duration: 0ms;
-    }
-
-    .player-controls-panel::before {
-        animation: none;
-        opacity: 0.1;
-    }
-
-    .player-controls-row > * {
-        transition: none;
     }
 }
 
@@ -786,12 +723,10 @@ input[type="range"]:hover::-moz-range-thumb {
 .player-top-chrome-inner {
     background: linear-gradient(
         to bottom,
-        rgba(0, 0, 0, 0.92) 0%,
-        rgba(0, 0, 0, 0.6) 42%,
+        rgba(0, 0, 0, 0.88) 0%,
+        rgba(0, 0, 0, 0.5) 48%,
         transparent 100%
     );
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px) saturate(120%);
 }
 
 /* Compact (mobile) center transport */
