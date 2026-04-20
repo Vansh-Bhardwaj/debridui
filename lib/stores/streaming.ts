@@ -814,6 +814,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
+        // Kill any existing browser video to prevent ghost audio
+        usePreviewStore.getState().closePreview();
+
         const hydrationToken = ++playSourceToken;
 
         const playbackRequest = options?.progressKey
@@ -886,6 +889,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
             // Resolve addon proxy/redirect URL to the actual debrid download link
             const resolved = await resolveStreamUrl(source.url);
+            if (hydrationToken !== playSourceToken) return;
+
             const playUrl = resolved.url;
 
             set({ selectedSource: source });
