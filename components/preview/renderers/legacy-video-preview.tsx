@@ -401,9 +401,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
     const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null);
     const gainNodeRef = useRef<GainNode | null>(null);
-    const pendingNormalizationResumeRef = useRef<{ time: number; wasPlaying: boolean } | null>(null);
-    const normalizationReloadingRef = useRef(false);
-    const [audioGraphVersion, setAudioGraphVersion] = useState(0);
+    const dryGainNodeRef = useRef<GainNode | null>(null);
+    const wetGainNodeRef = useRef<GainNode | null>(null);
+    const audioGraphConnectedRef = useRef(false);
+    const audioSourceInitFailedRef = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSpeedProbeRunning, setIsSpeedProbeRunning] = useState(false);
     const [lastSpeedProbeMbps, setLastSpeedProbeMbps] = useState<number | null>(null);
@@ -758,38 +759,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const toggleAudioNormalization = useCallback(() => {
         const next = !audioNormalization;
-        const video = videoRef.current;
-
-        if (next && video && !hlsRef.current) {
-            pendingNormalizationResumeRef.current = {
-                time: Number.isFinite(video.currentTime) ? video.currentTime : 0,
-                wasPlaying: !video.paused && !video.ended,
-            };
-
-            normalizationReloadingRef.current = true;
-
-            if (audioContextRef.current) {
-                void audioContextRef.current.close().catch(() => { });
-            }
-            audioContextRef.current = null;
-            sourceNodeRef.current = null;
-            compressorNodeRef.current = null;
-            gainNodeRef.current = null;
-
-            const reloadUrl = video.currentSrc || finalUrl;
-            if (reloadUrl) {
-                video.crossOrigin = "anonymous";
-                video.src = reloadUrl;
-                video.load();
-            } else {
-                normalizationReloadingRef.current = false;
-            }
-        }
 
         setAudioNormalization(next);
+        if (next && audioContextRef.current?.state === "suspended") {
+            audioContextRef.current.resume().catch(() => { });
+        }
         showOsd(next ? "Audio Normalization: On" : "Audio Normalization: Off");
         setSettingsPanel(null);
-    }, [audioNormalization, finalUrl, showOsd]);
+    }, [audioNormalization, showOsd]);
 
     useEffect(() => {
         if (process.env.NODE_ENV === "production") return;
@@ -1011,16 +988,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             el.defaultPlaybackRate = playbackRate;
             el.playbackRate = playbackRate;
             setDuration(el.duration || 0);
-            const pendingNormalizationResume = pendingNormalizationResumeRef.current;
-            if (pendingNormalizationResume) {
-                pendingNormalizationResumeRef.current = null;
-                normalizationReloadingRef.current = false;
-                applyResumePosition(pendingNormalizationResume.time);
-                if (pendingNormalizationResume.wasPlaying) {
-                    el.play().catch(() => { });
-                }
-                setAudioGraphVersion((prev) => prev + 1);
-            } else if (hasSeenkedToInitialRef.current) {
+            if (hasSeenkedToInitialRef.current) {
                 // On transcode fallback/source switch, prefer the user's current
                 // playback position over the initial resume point — the user may
                 // have watched further since the original seek.
@@ -1249,6 +1217,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
+        if (audioSourceInitFailedRef.current) return;
 
         const onPlay = () => {
             setIsPlaying(true);
@@ -1540,9 +1509,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 void audioContextRef.current.close().catch(() => { });
                 audioContextRef.current = null;
             }
+            audioGraphConnectedRef.current = false;
             sourceNodeRef.current = null;
             compressorNodeRef.current = null;
             gainNodeRef.current = null;
+            dryGainNodeRef.current = null;
+            wetGainNodeRef.current = null;
         };
     }, []);
 
@@ -2411,7 +2383,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
-        if (normalizationReloadingRef.current) return;
+        if (audioSourceInitFailedRef.current) return;
+
+        const rampGain = (node: GainNode | null, value: number, context: AudioContext, duration = 0.08) => {
+            if (!node) return;
+            const now = context.currentTime;
+            node.gain.cancelScheduledValues(now);
+            node.gain.setValueAtTime(node.gain.value, now);
+            node.gain.linearRampToValueAtTime(value, now + duration);
+        };
 
         // Initialize AudioContext on first need if enabled
         if (audioNormalization && !audioContextRef.current) {
@@ -2429,8 +2409,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             try {
                 sourceNodeRef.current = ctx.createMediaElementSource(video);
             } catch (e) {
-                // This can happen if the element is already connected elsewhere
-                // or if there's a CORS issue.
+                // If source creation fails, keep native media audio path untouched.
+                audioSourceInitFailedRef.current = true;
+                if (audioNormalization) {
+                    setAudioNormalization(false);
+                    showOsd("Audio normalization unavailable");
+                    toast.error("Audio normalization unavailable for this stream");
+                }
                 console.error("[legacy-player] Failed to create audio source node:", e);
                 return;
             }
@@ -2438,49 +2423,64 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         const source = sourceNodeRef.current;
 
-        if (audioNormalization) {
-            // Lazy create effect nodes
-            if (!compressorNodeRef.current) {
-                const comp = ctx.createDynamicsCompressor();
-                /**
-                 * Normalization / Night Mode settings:
-                 * - Low threshold to catch most dialogue
-                 * - High ratio to strongly compress loud peaks
-                 * - Fast attack to prevent ear-piercing sudden sounds
-                 * - Relatively slow release for natural sound
-                 */
-                comp.threshold.setValueAtTime(-24, ctx.currentTime);
-                comp.knee.setValueAtTime(30, ctx.currentTime);
-                comp.ratio.setValueAtTime(12, ctx.currentTime);
-                comp.attack.setValueAtTime(0.003, ctx.currentTime);
-                comp.release.setValueAtTime(0.25, ctx.currentTime);
-                compressorNodeRef.current = comp;
-            }
+        // Lazy create effect nodes
+        if (!compressorNodeRef.current) {
+            const comp = ctx.createDynamicsCompressor();
+            /**
+             * Normalization / Night Mode settings:
+             * - Low threshold to catch most dialogue
+             * - High ratio to strongly compress loud peaks
+             * - Fast attack to prevent ear-piercing sudden sounds
+             * - Relatively slow release for natural sound
+             */
+            comp.threshold.setValueAtTime(-24, ctx.currentTime);
+            comp.knee.setValueAtTime(30, ctx.currentTime);
+            comp.ratio.setValueAtTime(12, ctx.currentTime);
+            comp.attack.setValueAtTime(0.003, ctx.currentTime);
+            comp.release.setValueAtTime(0.25, ctx.currentTime);
+            compressorNodeRef.current = comp;
+        }
 
-            if (!gainNodeRef.current) {
-                const gain = ctx.createGain();
-                // Makeup gain: compression reduces overall volume, so we boost it back up.
-                // 1.4x - 1.6x is usually a good "blend" for dialogue clarity.
-                gain.gain.setValueAtTime(1.5, ctx.currentTime);
-                gainNodeRef.current = gain;
-            }
+        if (!gainNodeRef.current) {
+            const gain = ctx.createGain();
+            // Makeup gain: compression reduces overall volume, so we boost it back up.
+            // 1.4x - 1.6x is usually a good "blend" for dialogue clarity.
+            gain.gain.setValueAtTime(1.5, ctx.currentTime);
+            gainNodeRef.current = gain;
+        }
 
-            // Route: Source -> Compressor -> Gain -> Destination
-            source.disconnect();
+        if (!dryGainNodeRef.current) {
+            const dry = ctx.createGain();
+            dry.gain.setValueAtTime(audioNormalization ? 0 : 1, ctx.currentTime);
+            dryGainNodeRef.current = dry;
+        }
+
+        if (!wetGainNodeRef.current) {
+            const wet = ctx.createGain();
+            wet.gain.setValueAtTime(audioNormalization ? 1 : 0, ctx.currentTime);
+            wetGainNodeRef.current = wet;
+        }
+
+        if (!audioGraphConnectedRef.current) {
+            source.connect(dryGainNodeRef.current);
+            dryGainNodeRef.current.connect(ctx.destination);
+
             source.connect(compressorNodeRef.current);
             compressorNodeRef.current.connect(gainNodeRef.current);
-            gainNodeRef.current.connect(ctx.destination);
-        } else {
-            // Route: Source -> Destination (Bypass)
-            source.disconnect();
-            source.connect(ctx.destination);
+            gainNodeRef.current.connect(wetGainNodeRef.current);
+            wetGainNodeRef.current.connect(ctx.destination);
+
+            audioGraphConnectedRef.current = true;
         }
+
+        rampGain(dryGainNodeRef.current, audioNormalization ? 0 : 1, ctx);
+        rampGain(wetGainNodeRef.current, audioNormalization ? 1 : 0, ctx);
 
         // Ensure context is running if we're already playing
         if (isPlaying && ctx.state === "suspended") {
             ctx.resume().catch(() => { });
         }
-    }, [audioNormalization, isPlaying, audioGraphVersion]);
+    }, [audioNormalization, isPlaying, showOsd]);
 
     // Warm the subtitle proxy in the background, but never block first frame on it.
     useEffect(() => {
@@ -2729,7 +2729,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         autoPlay={!iosTapToPlay && !!finalUrl}
                         playsInline
                         preload="metadata"
-                        crossOrigin={isHls || isUsingTranscodedStream || audioNormalization ? "anonymous" : undefined}
+                        crossOrigin={isHls || isUsingTranscodedStream || !!finalUrl ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black transition-opacity duration-500 ease-premium data-[loading=true]:opacity-[0.88] motion-reduce:transition-none"
                         data-loading={isLoading && !error ? "true" : undefined}
                         style={{ maxHeight: "100%" }}
