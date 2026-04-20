@@ -516,7 +516,7 @@ export class TraktClient {
      */
     private async makeRequest<T>(
         endpoint: string,
-        options: RequestInit = {},
+        options: RequestInit & { keepalive?: boolean } = {},
         requiresAuth = false,
         extended?: string
     ): Promise<T> {
@@ -538,6 +538,7 @@ export class TraktClient {
                     ...this.createHeaders(requiresAuth),
                     ...options.headers,
                 },
+                keepalive: options.keepalive,
             });
 
             // Auto-refresh on 401 and retry once
@@ -1001,10 +1002,10 @@ export class TraktClient {
     /**
      * Pause scrobbling — call when playback is paused
      */
-    public async scrobblePause(request: TraktScrobbleRequest): Promise<TraktScrobbleResponse> {
+    public async scrobblePause(request: TraktScrobbleRequest, keepalive = false): Promise<TraktScrobbleResponse> {
         return this.makeRequest<TraktScrobbleResponse>(
             "scrobble/pause",
-            { method: "POST", body: JSON.stringify(request) },
+            { method: "POST", body: JSON.stringify(request), keepalive },
             true
         );
     }
@@ -1012,10 +1013,10 @@ export class TraktClient {
     /**
      * Stop scrobbling — call when playback stops. If progress >= 80%, Trakt marks it as watched.
      */
-    public async scrobbleStop(request: TraktScrobbleRequest): Promise<TraktScrobbleResponse> {
+    public async scrobbleStop(request: TraktScrobbleRequest, keepalive = false): Promise<TraktScrobbleResponse> {
         return this.makeRequest<TraktScrobbleResponse>(
             "scrobble/stop",
-            { method: "POST", body: JSON.stringify(request) },
+            { method: "POST", body: JSON.stringify(request), keepalive },
             true
         );
     }

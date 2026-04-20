@@ -134,6 +134,8 @@ export interface PlaybackSettings {
     subtitleColor: string;
     /** Subtitle font family */
     subtitleFont: 'default' | 'mono' | 'serif' | 'trebuchet';
+    /** Enable audio normalization (compress dynamic range) */
+    audioNormalization: boolean;
 }
 
 export function getActiveRange(settings: StreamingSettings): QualityRange {
@@ -273,6 +275,7 @@ const settingsConfig: SettingsConfig = {
             subtitleBackground: 'semi' as const,
             subtitleColor: '#ffffff',
             subtitleFont: 'default' as const,
+            audioNormalization: false,
         },
     },
     tmdbApiKey: {

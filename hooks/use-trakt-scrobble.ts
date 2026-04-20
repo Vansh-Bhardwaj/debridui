@@ -44,8 +44,8 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
 
             try {
                 if (action === "start") await traktClient.scrobbleStart(request);
-                else if (action === "pause") await traktClient.scrobblePause(request);
-                else await traktClient.scrobbleStop(request);
+                else if (action === "pause") await traktClient.scrobblePause(request, action === "pause");
+                else await traktClient.scrobbleStop(request, action === "stop");
 
                 // When scrobble stops at ≥80%, Trakt auto‑marks the episode as watched.
                 // Invalidate the show's watched‑progress cache so the UI reflects it.

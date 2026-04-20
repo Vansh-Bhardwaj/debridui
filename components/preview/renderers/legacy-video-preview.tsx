@@ -390,6 +390,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [playbackRate, setPlaybackRate] = useState(
         () => useSettingsStore.getState().settings.playback.playbackSpeed
     );
+    const [audioNormalization, setAudioNormalization] = useState(
+        () => useSettingsStore.getState().settings.playback.audioNormalization
+    );
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null);
+    const gainNodeRef = useRef<GainNode | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSpeedProbeRunning, setIsSpeedProbeRunning] = useState(false);
     const [lastSpeedProbeMbps, setLastSpeedProbeMbps] = useState<number | null>(null);
@@ -540,7 +547,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [triedTranscodeFallback, setTriedTranscodeFallback] = useState(false);
     const [useDirectUrl, _setUseDirectUrl] = useState(false);
 
-    // Track if we've tried server-side URL resolution (for addon redirect URLs)
+    // Track if we've emitted history for the current session to avoid duplicates
+    // Server-side URL resolution (for addon redirect URLs)
     const triedUrlResolveRef = useRef(false);
 
     // Final URL: if user requested direct, use download URL; otherwise use smart selection
@@ -794,6 +802,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             keepalive: eventType === "session_end" || eventType === "stop" || eventType === "complete",
         }).catch(() => { });
     }, [progressKey, file.name]);
+
+    const markCurrentAsCompleted = useCallback(() => {
+        if (!progressKey || hasMarkedCompletedRef.current) return;
+        hasMarkedCompletedRef.current = true;
+        markCompleted();
+        emitHistory("complete", true);
+    }, [progressKey, markCompleted, emitHistory]);
 
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
@@ -1268,11 +1283,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 updateProgress(time, dur);
             }
 
-            // Mark completed at 95% — only if the user has genuinely watched
+            // Mark completed at 85% — only if the user has genuinely watched
             // at least 30% of the total duration (guards against a simple seek-to-end).
             // onEnded always marks complete regardless of this threshold.
-            if (progressKey && dur > 0 && time / dur > 0.95 && !hasMarkedCompletedRef.current) {
-                if (watchedTimeRef.current >= dur * COMPLETION_MIN_WATCH_FRACTION) {
+            const currentWatchTime = watchedTimeRef.current + (watchStartRef.current ? (Date.now() - watchStartRef.current) / 1000 : 0);
+            if (progressKey && dur > 0 && time / dur > 0.85 && !hasMarkedCompletedRef.current) {
+                if (currentWatchTime >= dur * COMPLETION_MIN_WATCH_FRACTION) {
                     hasMarkedCompletedRef.current = true;
                     markCompleted();
                     emitHistory("complete", true);
@@ -1429,8 +1445,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.removeEventListener("ended", onEnded);
             document.removeEventListener("visibilitychange", onVisibilityChange);
             window.removeEventListener("pagehide", onPageHide);
+            const ct = video.currentTime;
+            const dur = video.duration;
+            const progressPct = dur > 0 ? (ct / dur) * 100 : 0;
+
             forceSync("play_stop", "unmount");
             emitHistory("stop", true);
+            if (progressPct > 0) {
+                void scrobble("stop", progressPct);
+            }
             if (pendingSeekSyncTimerRef.current) {
                 clearTimeout(pendingSeekSyncTimerRef.current);
                 pendingSeekSyncTimerRef.current = null;
@@ -1563,6 +1586,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const togglePlay = useCallback(() => {
         const el = videoRef.current;
         if (!el) return;
+
+        if (audioContextRef.current?.state === "suspended") {
+            audioContextRef.current.resume().catch(() => { });
+        }
+
         if (el.paused || el.ended) {
             showCenterAction("play");
             void el.play();
@@ -2030,6 +2058,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     // Quick-action: click the visible skip/next button
                     if (autoNextCountdown !== null && onNext) {
                         event.preventDefault();
+                        markCurrentAsCompleted();
                         cancelAutoNext();
                         guardedNav(onNext);
                     } else if (activeSkipSegment && !autoSkipIntro) {
@@ -2140,6 +2169,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 case "N":
                     if (event.shiftKey && onNextRef.current) {
                         event.preventDefault();
+                        if (autoNextCountdown !== null) markCurrentAsCompleted();
                         cancelAutoNext();
                         onNextRef.current();
                     }
@@ -2245,7 +2275,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls, markCurrentAsCompleted]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -2310,12 +2340,87 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             subtitleBackground,
             subtitleColor,
             subtitleFont,
+            audioNormalization,
         });
-    }, [subtitleSize, subtitlePosition, playbackRate, subtitleBackground, subtitleColor, subtitleFont]);
+    }, [subtitleSize, subtitlePosition, playbackRate, subtitleBackground, subtitleColor, subtitleFont, audioNormalization]);
     // Apply loop flag to the video element
     useEffect(() => {
         if (videoRef.current) videoRef.current.loop = loop;
     }, [loop]);
+
+    // Audio Normalization Pipeline (Web Audio API)
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        // Initialize AudioContext on first need if enabled
+        if (audioNormalization && !audioContextRef.current) {
+            const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+            if (AudioContextClass) {
+                audioContextRef.current = new AudioContextClass();
+            }
+        }
+
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+
+        // Source node is tied to the element, create only once
+        if (!sourceNodeRef.current) {
+            try {
+                sourceNodeRef.current = ctx.createMediaElementSource(video);
+            } catch (e) {
+                // This can happen if the element is already connected elsewhere
+                // or if there's a CORS issue.
+                console.error("[legacy-player] Failed to create audio source node:", e);
+                return;
+            }
+        }
+
+        const source = sourceNodeRef.current;
+
+        if (audioNormalization) {
+            // Lazy create effect nodes
+            if (!compressorNodeRef.current) {
+                const comp = ctx.createDynamicsCompressor();
+                /**
+                 * Normalization / Night Mode settings:
+                 * - Low threshold to catch most dialogue
+                 * - High ratio to strongly compress loud peaks
+                 * - Fast attack to prevent ear-piercing sudden sounds
+                 * - Relatively slow release for natural sound
+                 */
+                comp.threshold.setValueAtTime(-24, ctx.currentTime);
+                comp.knee.setValueAtTime(30, ctx.currentTime);
+                comp.ratio.setValueAtTime(12, ctx.currentTime);
+                comp.attack.setValueAtTime(0.003, ctx.currentTime);
+                comp.release.setValueAtTime(0.25, ctx.currentTime);
+                compressorNodeRef.current = comp;
+            }
+
+            if (!gainNodeRef.current) {
+                const gain = ctx.createGain();
+                // Makeup gain: compression reduces overall volume, so we boost it back up.
+                // 1.4x - 1.6x is usually a good "blend" for dialogue clarity.
+                gain.gain.setValueAtTime(1.5, ctx.currentTime);
+                gainNodeRef.current = gain;
+            }
+
+            // Route: Source -> Compressor -> Gain -> Destination
+            source.disconnect();
+            source.connect(compressorNodeRef.current);
+            compressorNodeRef.current.connect(gainNodeRef.current);
+            gainNodeRef.current.connect(ctx.destination);
+        } else {
+            // Route: Source -> Destination (Bypass)
+            source.disconnect();
+            source.connect(ctx.destination);
+        }
+
+        // Ensure context is running if we're already playing
+        if (isPlaying && ctx.state === "suspended") {
+            ctx.resume().catch(() => { });
+        }
+    }, [audioNormalization, isPlaying]);
 
     // Warm the subtitle proxy in the background, but never block first frame on it.
     useEffect(() => {
@@ -2563,7 +2668,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         autoPlay={!iosTapToPlay && !!finalUrl}
                         playsInline
                         preload="metadata"
-                        crossOrigin={isHls || isUsingTranscodedStream ? "anonymous" : undefined}
+                        crossOrigin={isHls || isUsingTranscodedStream || audioNormalization ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black transition-opacity duration-500 ease-premium data-[loading=true]:opacity-[0.88] motion-reduce:transition-none"
                         data-loading={isLoading && !error ? "true" : undefined}
                         style={{ maxHeight: "100%" }}
@@ -2810,7 +2915,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => { cancelAutoNext(); guardedNav(onNext); }}
+                                            onClick={() => { markCurrentAsCompleted(); cancelAutoNext(); guardedNav(onNext); }}
                                             className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-white/5 active:scale-[0.98]"
                                         >
                                             <svg width="28" height="28" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
@@ -2980,7 +3085,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     </button>
                                     <button
                                         className={PLAYER_BTN_SM}
-                                        onClick={(e) => { e.stopPropagation(); guardedNav(onNext); }}
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            if (autoNextCountdown !== null) markCurrentAsCompleted();
+                                            guardedNav(onNext); 
+                                        }}
                                         disabled={!onNext}
                                         title="Next episode"
                                         data-tv-focusable
@@ -3345,6 +3454,30 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                                 <PictureInPicture2 className="size-3.5 opacity-60" /> Picture in Picture
                                                             </button>
                                                         )}
+                                                        {/* Audio Normalization */}
+                                                        <button
+                                                            onClick={() => {
+                                                                const next = !audioNormalization;
+                                                                setAudioNormalization(next);
+                                                                showOsd(next ? "Audio Normalization: On" : "Audio Normalization: Off");
+                                                                setOpenMenuTracked(null);
+                                                                setSettingsPanel(null);
+                                                            }}
+                                                            className={POPUP_ITEM}
+                                                            data-tv-focusable
+                                                        >
+                                                            <Volume2 className={cn("size-3.5 opacity-60", audioNormalization && "text-primary opacity-100")} />
+                                                            <span className="flex-1">Normalize audio</span>
+                                                            <div className={cn(
+                                                                "w-6 h-3 rounded-full relative transition-colors duration-200",
+                                                                audioNormalization ? "bg-primary" : "bg-white/10"
+                                                            )}>
+                                                                <div className={cn(
+                                                                    "absolute top-0.5 w-2 h-2 rounded-full bg-white transition-transform duration-200",
+                                                                    audioNormalization ? "translate-x-3.5" : "translate-x-0.5"
+                                                                )} />
+                                                            </div>
+                                                        </button>
                                                         <button
                                                             onClick={() => {
                                                                 void runBufferingSpeedProbe({ auto: false });
