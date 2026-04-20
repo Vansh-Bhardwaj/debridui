@@ -26,6 +26,8 @@ export interface TitleMemoryEntry {
     lastSeason?: number;
     lastEpisode?: number;
     bingeScore?: number;
+    /** Stremio bingeGroup identifier for same-pack affinity across episodes */
+    preferredBingeGroup?: string;
     updatedAt: number;
 }
 

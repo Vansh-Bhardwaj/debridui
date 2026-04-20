@@ -1,6 +1,7 @@
 import { type AddonSource } from "@/lib/addons/types";
 import { getResolutionIndex, getSourceQualityIndex } from "@/lib/addons/parser";
 import { type QualityRange, type StreamingSettings, getActiveRange } from "@/lib/stores/settings";
+import { type CodecSupport } from "@/lib/utils/codec-support";
 
 const LANGUAGE_PATTERNS: Record<string, RegExp> = {
     english: /\b(eng|english|en)\b/i,
@@ -54,6 +55,111 @@ function detectLanguage(source: AddonSource): string | null {
     return null;
 }
 
+// ── Codec Detection from Source Titles ─────────────────────────────────
+// Many torrent/debrid sources advertise codecs in the release title.
+// We detect these to penalize sources the browser can't play.
+
+type DetectedAudioCodec = "dts" | "truehd" | "eac3" | "ac3" | "aac" | "opus" | "flac" | null;
+type DetectedVideoCodec = "hevc" | "av1" | "h264" | null;
+
+const AUDIO_CODEC_PATTERNS: [DetectedAudioCodec, RegExp][] = [
+    // Order matters: more specific patterns first
+    ["truehd", /\b(truehd|true[\s._-]?hd|mlp)\b/i],
+    ["dts", /\b(dts[\s._-]?(?:hd|x|ma|hd[\s._-]?ma)?|dts)\b/i],
+    ["eac3", /\b(e[\s._-]?ac[\s._-]?3|eac3|dd[\s._-]?\+|ddp(?:5\.1|7\.1|atmos)?|dolby[\s._-]?digital[\s._-]?plus|atmos)\b/i],
+    ["ac3", /\b(ac[\s._-]?3|dd[\s._-]?(?:5\.1|7\.1|2\.0)|dolby[\s._-]?digital(?![\s._-]?plus))\b/i],
+    ["flac", /\b(flac)\b/i],
+    ["opus", /\b(opus)\b/i],
+    ["aac", /\b(aac(?:[\s._-]?(?:2\.0|5\.1|lc))?)\b/i],
+];
+
+const VIDEO_CODEC_PATTERNS: [DetectedVideoCodec, RegExp][] = [
+    ["hevc", /\b(hevc|h[\s._-]?265|x[\s._-]?265)\b/i],
+    ["av1", /\b(av1|av01)\b/i],
+    ["h264", /\b(h[\s._-]?264|x[\s._-]?264|avc)\b/i],
+];
+
+/** Detect audio codec from source title/description. Returns null if ambiguous. */
+export function detectAudioCodec(source: AddonSource): DetectedAudioCodec {
+    const text = `${source.title || ""} ${source.description || ""}`;
+    for (const [codec, pattern] of AUDIO_CODEC_PATTERNS) {
+        if (pattern.test(text)) return codec;
+    }
+    return null;
+}
+
+/** Detect video codec from source title/description. Returns null if ambiguous. */
+export function detectVideoCodec(source: AddonSource): DetectedVideoCodec {
+    const text = `${source.title || ""} ${source.description || ""}`;
+    for (const [codec, pattern] of VIDEO_CODEC_PATTERNS) {
+        if (pattern.test(text)) return codec;
+    }
+    return null;
+}
+
+/**
+ * Calculate codec compatibility penalty.
+ * Higher = worse (incompatible). 0 = fine or unknown.
+ * Deliberately high values so incompatible sources sink below compatible ones,
+ * but never filtered out entirely (so you're not stuck with "no sources").
+ */
+function codecPenalty(source: AddonSource, support: CodecSupport | undefined): number {
+    if (!support) return 0; // No codec info (e.g. external player target) → no penalty
+
+    let penalty = 0;
+
+    // ── Audio codec penalty ──
+    const audio = detectAudioCodec(source);
+    switch (audio) {
+        case "dts":
+            if (!support.dts) penalty += 100;
+            break;
+        case "truehd":
+            if (!support.truehd) penalty += 100;
+            break;
+        case "eac3":
+            if (!support.eac3) penalty += 80;
+            break;
+        case "ac3":
+            if (!support.ac3) penalty += 80;
+            break;
+        case "aac":
+            // AAC is universally supported — give a small bonus
+            penalty -= 5;
+            break;
+        case "opus":
+            if (!support.opus) penalty += 40;
+            break;
+        case "flac":
+            if (!support.flac) penalty += 40;
+            break;
+        case null:
+            // Unknown audio codec — no penalty, no bonus (ambiguous)
+            break;
+    }
+
+    // ── Video codec penalty ──
+    const video = detectVideoCodec(source);
+    switch (video) {
+        case "hevc":
+            if (!support.hevc) penalty += 60;
+            break;
+        case "av1":
+            if (!support.av1) penalty += 60;
+            break;
+        case "h264":
+            // H.264 is universally supported — small bonus
+            penalty -= 3;
+            break;
+        case null:
+            break;
+    }
+
+    return penalty;
+}
+
+// ── Source title affinity (fingerprint matching) ───────────────────────
+
 const SOURCE_NOISE_TOKENS = new Set([
     "the", "and", "for", "with", "from", "1080p", "2160p", "720p", "480p", "x264", "x265",
     "hevc", "h264", "web", "webrip", "webdl", "bluray", "remux", "proper", "repack", "aac", "ac3",
@@ -102,6 +208,8 @@ function calculateScore(
         preferredSourceResolution?: string;
         preferredSourceQuality?: string;
         originalLanguage?: string;
+        codecSupport?: CodecSupport;
+        preferredBingeGroup?: string;
     } = {}
 ): number {
     let score = 0;
@@ -115,6 +223,15 @@ function calculateScore(
     // Cached bonus (-50 points)
     if (source.isCached && options.preferCached !== false) {
         score -= 50;
+    }
+
+    // ── Binge pack affinity (-60 points) ──
+    // When binge-watching, strongly prefer sources from the same torrent pack.
+    // This guarantees same codec, same quality, same audio across a whole season.
+    if (options.preferredBingeGroup && source.bingeGroup) {
+        if (source.bingeGroup === options.preferredBingeGroup) {
+            score -= 60;
+        }
     }
 
     // Preferred language bonus (-20 points)
@@ -168,6 +285,11 @@ function calculateScore(
         }
     }
 
+    // ── Codec compatibility penalty ──
+    // Heavily penalize sources the browser can't play (DTS, AC3, HEVC on unsupported devices).
+    // This is applied last so it acts as a strong override without interfering with other factors.
+    score += codecPenalty(source, options.codecSupport);
+
     return score;
 }
 
@@ -188,6 +310,10 @@ export interface SelectionOptions {
     preferredSourceResolution?: string;
     preferredSourceQuality?: string;
     originalLanguage?: string;
+    /** Browser codec support — pass undefined to skip codec penalties (e.g. external player). */
+    codecSupport?: CodecSupport;
+    /** Stremio bingeGroup from the previously played episode for same-pack affinity. */
+    preferredBingeGroup?: string;
 }
 
 export function selectBestSource(
@@ -300,4 +426,3 @@ export function formatSourceLabel(source: AddonSource): string {
 
     return parts.join(" • ") || source.title || "Unknown Source";
 }
-

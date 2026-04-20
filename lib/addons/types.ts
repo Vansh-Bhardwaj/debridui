@@ -124,6 +124,8 @@ export interface AddonSource {
     addonName: string;
     /** Inline subtitles provided by the stream (Stremio protocol). */
     inlineSubtitles?: AddonSubtitle[];
+    /** Stremio bingeGroup identifier — groups episodes from the same torrent pack. */
+    bingeGroup?: string;
 }
 
 export interface Addon {

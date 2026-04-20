@@ -3,9 +3,9 @@ import { type Addon, type AddonSource, type AddonSubtitle, type TvSearchParams, 
 import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
-import { selectBestSource } from "@/lib/streaming/source-selector";
+import { selectBestSource, detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
 import { queryClient } from "@/lib/query-client";
-import { detectCodecSupport } from "@/lib/utils/codec-support";
+import { detectCodecSupport, type CodecSupport } from "@/lib/utils/codec-support";
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
@@ -77,6 +77,26 @@ let requestId = 0;
 let preloadRequestId = 0;
 /** Bumps on each `playSource` call so late source hydration does not overwrite a newer play. */
 let playSourceToken = 0;
+
+/**
+ * Cached browser codec support detection.
+ * Called once per session and reused everywhere to avoid repeated DOM probing.
+ * Returns undefined when targeting an external player (VLC, MPV, etc.) that can play everything.
+ */
+let _cachedCodecSupport: CodecSupport | undefined;
+function getBrowserCodecSupport(): CodecSupport {
+    if (!_cachedCodecSupport) {
+        _cachedCodecSupport = detectCodecSupport();
+    }
+    return _cachedCodecSupport;
+}
+
+/** Returns codec support only when playing in browser; undefined for external players. */
+function getCodecSupportForPlayer(player: string | undefined): CodecSupport | undefined {
+    if (!player || player === MediaPlayer.BROWSER) return getBrowserCodecSupport();
+    // External players (VLC, MPV, Kodi, etc.) can play everything — no penalties
+    return undefined;
+}
 
 const USER_ADDONS_QUERY_KEY = ["user-addons"] as const;
 
@@ -440,6 +460,11 @@ async function preloadEpisodeTarget(
         || "english";
     const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
 
+    // Determine codec support based on the target player
+    const mediaPlayer = titleMemory?.preferredPlayer
+        ?? useSettingsStore.getState().get("mediaPlayer");
+    const codecSupport = getCodecSupportForPlayer(mediaPlayer);
+
     const baseSettings = await getEffectiveStreamingSettings();
     const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
     const result = selectBestSource(allSources, streamingSettings, {
@@ -449,6 +474,8 @@ async function preloadEpisodeTarget(
         preferredSourceTitle: titleMemory?.preferredSourceTitle,
         preferredSourceResolution: titleMemory?.preferredSourceResolution,
         preferredSourceQuality: titleMemory?.preferredSourceQuality,
+        codecSupport,
+        preferredBingeGroup: titleMemory?.preferredBingeGroup,
     });
 
     if (!result.source) return null;
@@ -712,16 +739,22 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const currentIndex = allFetchedSources.findIndex((s) => s.url === selectedSource.url);
         if (currentIndex === -1 || currentIndex >= allFetchedSources.length - 1) return false;
 
-        const support = detectCodecSupport();
+        const support = getBrowserCodecSupport();
 
-        // 1. Try to find the next best source that matches our codec health
+        // 1. Try to find the next best source that matches our codec support
         for (let i = currentIndex + 1; i < allFetchedSources.length; i++) {
             const candidate = allFetchedSources[i];
-            const text = (candidate.title || candidate.description || "").toLowerCase();
 
             let isSupported = true;
-            if (!support.hevc && (text.includes("hevc") || text.includes("h265") || text.includes("x265"))) isSupported = false;
-            if (!support.ac3 && !support.eac3 && !support.dts && (text.includes("ac3") || text.includes("eac3") || text.includes("dd5.1") || text.includes("dd+") || text.includes("dts"))) isSupported = false;
+            const audio = detectAudioCodec(candidate);
+            if (audio === "dts" && !support.dts) isSupported = false;
+            if (audio === "truehd" && !support.truehd) isSupported = false;
+            if (audio === "ac3" && !support.ac3) isSupported = false;
+            if (audio === "eac3" && !support.eac3) isSupported = false;
+
+            const video = detectVideoCodec(candidate);
+            if (video === "hevc" && !support.hevc) isSupported = false;
+            if (video === "av1" && !support.av1) isSupported = false;
 
             if (isSupported) {
                 playAlternativeSource(candidate);
@@ -879,6 +912,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         preferredSourceTitle: source.title,
                         preferredSourceResolution: source.resolution,
                         preferredSourceQuality: source.quality,
+                        preferredBingeGroup: source.bingeGroup,
                         ...getBingeMemoryPatch(options.progressKey),
                     });
                 }
@@ -910,6 +944,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     preferredSourceTitle: source.title,
                     preferredSourceResolution: source.resolution,
                     preferredSourceQuality: source.quality,
+                    preferredBingeGroup: source.bingeGroup,
                     ...getBingeMemoryPatch(options.progressKey),
                 });
             }
@@ -1066,6 +1101,12 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
             const baseSettings = await getEffectiveStreamingSettings();
             const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
+
+            // Determine codec support based on the target player
+            const mediaPlayer = titleMemory?.preferredPlayer
+                ?? useSettingsStore.getState().get("mediaPlayer");
+            const codecSupport = getCodecSupportForPlayer(mediaPlayer);
+
             const result = selectBestSource(allSources, streamingSettings, {
                 preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
                 preferredAddon: titleMemory?.preferredAddonId,
@@ -1074,6 +1115,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 preferredSourceResolution: titleMemory?.preferredSourceResolution,
                 preferredSourceQuality: titleMemory?.preferredSourceQuality,
                 originalLanguage,
+                codecSupport,
+                preferredBingeGroup: titleMemory?.preferredBingeGroup,
             });
             timer.step("selected-source", {
                 hasMatches: result.hasMatches,

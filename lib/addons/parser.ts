@@ -212,6 +212,9 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
     // Carry inline subtitles from the stream (Stremio protocol)
     const inlineSubtitles = stream.subtitles?.filter((s) => s?.url && s?.lang);
 
+    // Preserve binge group identifier for same-pack affinity across episodes
+    const bingeGroup = stream.behaviorHints?.bingeGroup || undefined;
+
     return {
         title: name,
         description: combinedDescription,
@@ -225,6 +228,7 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
         addonId,
         addonName,
         ...(inlineSubtitles?.length ? { inlineSubtitles } : {}),
+        ...(bingeGroup ? { bingeGroup } : {}),
     };
 }
 
