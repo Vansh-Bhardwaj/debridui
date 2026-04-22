@@ -325,8 +325,14 @@ export interface TraktCheckinResponse {
     show?: TraktMedia;
 }
 
-interface SyncIds { imdb?: string; trakt?: number }
-interface SyncItems { movies?: { ids: SyncIds }[]; shows?: { ids: SyncIds }[] }
+interface SyncIds {
+    imdb?: string;
+    trakt?: number;
+}
+interface SyncItems {
+    movies?: { ids: SyncIds }[];
+    shows?: { ids: SyncIds }[];
+}
 interface SyncRatingItems {
     movies?: { ids: SyncIds; rating: number }[];
     shows?: { ids: SyncIds; rating: number }[];
@@ -557,7 +563,11 @@ export class TraktClient {
             }
 
             if (!response.ok) {
-                throw new TraktError(`API request failed: ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`, response.status, endpoint);
+                throw new TraktError(
+                    `API request failed: ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+                    response.status,
+                    endpoint
+                );
             }
 
             // Handle empty responses (204 No Content)
@@ -633,7 +643,9 @@ export class TraktClient {
             const endpoint = `search/${typeParam}?query=${encodeURIComponent(query)}${fieldQs}`;
             const results = await this.makeRequest<TraktSearchResult[]>(endpoint, {}, false, extended);
             return results
-                .filter((result) => (result.type === "movie" && result.movie) || (result.type === "show" && result.show))
+                .filter(
+                    (result) => (result.type === "movie" && result.movie) || (result.type === "show" && result.show)
+                )
                 .sort((a, b) => b.score - a.score);
         };
 
@@ -682,12 +694,7 @@ export class TraktClient {
         limit = 5,
         extended = "full,images"
     ): Promise<TraktMediaItem[]> {
-        const raw = await this.makeRequest<TraktMedia[]>(
-            `recommendations/${type}?limit=${limit}`,
-            {},
-            true,
-            extended
-        );
+        const raw = await this.makeRequest<TraktMedia[]>(`recommendations/${type}?limit=${limit}`, {}, true, extended);
         return raw.map((item) => (type === "movies" ? { movie: item } : { show: item }));
     }
 
@@ -865,10 +872,7 @@ export class TraktClient {
     // ── Ratings Methods (require auth) ───────────────────────────────────
 
     /** Get user's ratings */
-    public async getRatings(
-        type: "movies" | "shows" = "movies",
-        extended = "full,images"
-    ): Promise<TraktRatingItem[]> {
+    public async getRatings(type: "movies" | "shows" = "movies", extended = "full,images"): Promise<TraktRatingItem[]> {
         return this.makeRequest<TraktRatingItem[]>(`sync/ratings/${type}`, {}, true, extended);
     }
 
@@ -886,7 +890,11 @@ export class TraktClient {
 
     /** Get watched progress for a show — which episodes the user has seen */
     public async getShowWatchedProgress(id: string): Promise<TraktShowWatchedProgress> {
-        return this.makeRequest<TraktShowWatchedProgress>(`shows/${id}/progress/watched?hidden=false&specials=true&count_specials=false`, {}, true);
+        return this.makeRequest<TraktShowWatchedProgress>(
+            `shows/${id}/progress/watched?hidden=false&specials=true&count_specials=false`,
+            {},
+            true
+        );
     }
 
     // ── History Methods (require auth) ───────────────────────────────────
@@ -903,40 +911,59 @@ export class TraktClient {
 
     /** Add episodes to watched history using show ID + season/episode numbers */
     public async addEpisodesToHistory(showIds: SyncIds, season: number, episodeNumbers: number[]) {
-        return this.makeRequest("sync/history", {
-            method: "POST",
-            body: JSON.stringify({
-                shows: [{
-                    ids: showIds,
-                    seasons: [{
-                        number: season,
-                        episodes: episodeNumbers.map((n) => ({ number: n })),
-                    }],
-                }],
-            }),
-        }, true);
+        return this.makeRequest(
+            "sync/history",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    shows: [
+                        {
+                            ids: showIds,
+                            seasons: [
+                                {
+                                    number: season,
+                                    episodes: episodeNumbers.map((n) => ({ number: n })),
+                                },
+                            ],
+                        },
+                    ],
+                }),
+            },
+            true
+        );
     }
 
     /** Remove episodes from watched history using show ID + season/episode numbers */
     public async removeEpisodesFromHistory(showIds: SyncIds, season: number, episodeNumbers: number[]) {
-        return this.makeRequest("sync/history/remove", {
-            method: "POST",
-            body: JSON.stringify({
-                shows: [{
-                    ids: showIds,
-                    seasons: [{
-                        number: season,
-                        episodes: episodeNumbers.map((n) => ({ number: n })),
-                    }],
-                }],
-            }),
-        }, true);
+        return this.makeRequest(
+            "sync/history/remove",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    shows: [
+                        {
+                            ids: showIds,
+                            seasons: [
+                                {
+                                    number: season,
+                                    episodes: episodeNumbers.map((n) => ({ number: n })),
+                                },
+                            ],
+                        },
+                    ],
+                }),
+            },
+            true
+        );
     }
 
     // ── Checkin Methods (require auth) ───────────────────────────────────
 
     /** Check into a movie or episode */
-    public async checkin(item: { movie?: { ids: SyncIds }; episode?: { ids: SyncIds } }): Promise<TraktCheckinResponse> {
+    public async checkin(item: {
+        movie?: { ids: SyncIds };
+        episode?: { ids: SyncIds };
+    }): Promise<TraktCheckinResponse> {
         return this.makeRequest<TraktCheckinResponse>("checkin", { method: "POST", body: JSON.stringify(item) }, true);
     }
 
@@ -964,24 +991,27 @@ export class TraktClient {
         type: "movie" | "show" = "movie",
         extended = "images"
     ): Promise<TraktSearchResult[]> {
-        return this.makeRequest<TraktSearchResult[]>(
-            `search/${idType}/${id}?type=${type}`,
-            {},
-            false,
-            extended
-        );
+        return this.makeRequest<TraktSearchResult[]>(`search/${idType}/${id}?type=${type}`, {}, false, extended);
     }
 
     // ── Calendar Methods (require auth) ─────────────────────────────────
 
     /** Get user's personalized calendar — upcoming episodes for shows they watch */
-    public async getCalendarShows(startDate?: string, days = 14, extended = "full,images"): Promise<TraktCalendarItem[]> {
+    public async getCalendarShows(
+        startDate?: string,
+        days = 14,
+        extended = "full,images"
+    ): Promise<TraktCalendarItem[]> {
         const start = startDate || new Date().toISOString().slice(0, 10);
         return this.makeRequest<TraktCalendarItem[]>(`calendars/my/shows/${start}/${days}`, {}, true, extended);
     }
 
     /** Get user's personalized calendar — upcoming movie releases */
-    public async getCalendarMovies(startDate?: string, days = 30, extended = "full,images"): Promise<TraktCalendarItem[]> {
+    public async getCalendarMovies(
+        startDate?: string,
+        days = 30,
+        extended = "full,images"
+    ): Promise<TraktCalendarItem[]> {
         const start = startDate || new Date().toISOString().slice(0, 10);
         return this.makeRequest<TraktCalendarItem[]>(`calendars/my/movies/${start}/${days}`, {}, true, extended);
     }
@@ -1060,7 +1090,7 @@ export class TraktClient {
         const url = "https://api.trakt.tv/oauth/token";
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            Accept: "application/json",
             "User-Agent": "DebridUI/1.0 (+https://github.com/Vansh-Bhardwaj/debridui)",
             "trakt-api-version": "2",
             "trakt-api-key": clientId,
@@ -1082,10 +1112,7 @@ export class TraktClient {
 
         if (!res.ok) {
             const text = await res.text().catch(() => "");
-            throw new TraktError(
-                `Token exchange failed: ${res.status} ${res.statusText} — ${text}`,
-                res.status
-            );
+            throw new TraktError(`Token exchange failed: ${res.status} ${res.statusText} — ${text}`, res.status);
         }
         return res.json() as Promise<TraktTokenResponse>;
     }
@@ -1104,7 +1131,7 @@ export class TraktClient {
         const url = "https://api.trakt.tv/oauth/token";
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            Accept: "application/json",
             "User-Agent": "DebridUI/1.0 (+https://github.com/Vansh-Bhardwaj/debridui)",
             "trakt-api-version": "2",
             "trakt-api-key": clientId,
@@ -1126,20 +1153,47 @@ export class TraktClient {
 
         if (!res.ok) {
             const text = await res.text().catch(() => "");
-            throw new TraktError(
-                `Token refresh failed: ${res.status} ${res.statusText} — ${text}`,
-                res.status
-            );
+            throw new TraktError(`Token refresh failed: ${res.status} ${res.statusText} — ${text}`, res.status);
         }
         return res.json() as Promise<TraktTokenResponse>;
     }
 }
 
 /** Browser calls must go through same-origin proxy — Trakt API does not send CORS headers on preflight. */
-const traktBrowserBaseUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/api/trakt/proxy` : undefined;
+const traktBrowserBaseUrl = typeof window !== "undefined" ? `${window.location.origin}/api/trakt/proxy` : undefined;
 
 export const traktClient = new TraktClient({
     clientId: process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID!,
     ...(traktBrowserBaseUrl ? { baseUrl: traktBrowserBaseUrl } : {}),
 });
+
+// ── Watchlist maintenance helper ────────────────────────────────────────
+// Trakt auto-removes shows from the watchlist whenever any episode is added
+// to the watched history. That produces a jarring UX where a show disappears
+// from "watchlist" the moment the first episode starts. To honour the rule
+// "don't remove a series until all seasons/episodes are completed or manually
+// removed", we re-add the show after a history/scrobble mutation UNLESS all
+// aired episodes are now watched (i.e. the series is naturally complete).
+//
+// This function is defensive — any failure is silent because watchlist
+// restoration is best-effort and should never disrupt playback or mark-watched.
+export async function maintainShowOnWatchlist(
+    showIds: { imdb?: string; trakt?: number },
+    progressLookupId: string
+): Promise<void> {
+    if (!showIds.imdb && showIds.trakt == null) return;
+    try {
+        let fullyCompleted = false;
+        try {
+            const progress = await traktClient.getShowWatchedProgress(progressLookupId);
+            fullyCompleted = progress.aired > 0 && progress.completed >= progress.aired;
+        } catch {
+            // If we can't read progress (network/auth), default to re-adding.
+            fullyCompleted = false;
+        }
+        if (fullyCompleted) return;
+        await traktClient.addToWatchlist({ shows: [{ ids: showIds }] });
+    } catch {
+        // Best-effort; ignore.
+    }
+}

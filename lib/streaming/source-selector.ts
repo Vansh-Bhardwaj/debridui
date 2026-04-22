@@ -66,7 +66,10 @@ const AUDIO_CODEC_PATTERNS: [DetectedAudioCodec, RegExp][] = [
     // Order matters: more specific patterns first
     ["truehd", /\b(truehd|true[\s._-]?hd|mlp)\b/i],
     ["dts", /\b(dts[\s._-]?(?:hd|x|ma|hd[\s._-]?ma)?|dts)\b/i],
-    ["eac3", /\b(e[\s._-]?ac[\s._-]?3|eac3|dd[\s._-]?\+|ddp(?:5\.1|7\.1|atmos)?|dolby[\s._-]?digital[\s._-]?plus|atmos)\b/i],
+    [
+        "eac3",
+        /\b(e[\s._-]?ac[\s._-]?3|eac3|dd[\s._-]?\+|ddp(?:5\.1|7\.1|atmos)?|dolby[\s._-]?digital[\s._-]?plus|atmos)\b/i,
+    ],
     ["ac3", /\b(ac[\s._-]?3|dd[\s._-]?(?:5\.1|7\.1|2\.0)|dolby[\s._-]?digital(?![\s._-]?plus))\b/i],
     ["flac", /\b(flac)\b/i],
     ["opus", /\b(opus)\b/i],
@@ -161,8 +164,28 @@ function codecPenalty(source: AddonSource, support: CodecSupport | undefined): n
 // ── Source title affinity (fingerprint matching) ───────────────────────
 
 const SOURCE_NOISE_TOKENS = new Set([
-    "the", "and", "for", "with", "from", "1080p", "2160p", "720p", "480p", "x264", "x265",
-    "hevc", "h264", "web", "webrip", "webdl", "bluray", "remux", "proper", "repack", "aac", "ac3",
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "1080p",
+    "2160p",
+    "720p",
+    "480p",
+    "x264",
+    "x265",
+    "hevc",
+    "h264",
+    "web",
+    "webrip",
+    "webdl",
+    "bluray",
+    "remux",
+    "proper",
+    "repack",
+    "aac",
+    "ac3",
 ]);
 
 function tokenizeSourceTitle(text: string): string[] {
@@ -278,7 +301,7 @@ function calculateScore(
             let sizeGB = parseFloat(sizeMatch[1]);
             const unit = (sizeMatch[2] || "GB").toUpperCase();
             if (unit === "MB") sizeGB /= 1024;
-            if (unit === "KB") sizeGB /= (1024 * 1024);
+            if (unit === "KB") sizeGB /= 1024 * 1024;
             if (sizeGB > 0) {
                 score -= Math.min(Math.log2(sizeGB + 1) * 0.5, 3);
             }
@@ -331,9 +354,23 @@ export function selectBestSource(
             matchesSourceQualityRange(source, range)
     );
 
+    // ── Codec compatibility hard-gate ──
+    // When browser codec support is known, strongly prefer sources the browser can play.
+    // Bonuses (binge-group affinity, preferred source title, cached, etc.) can stack high
+    // enough to outweigh a soft penalty — so we hard-filter incompatible sources whenever
+    // at least one compatible source is available. This keeps "just play what works" as the
+    // primary invariant across episodes without leaving the user stuck if nothing is compatible.
+    let selectable = matchingSources;
+    if (options.codecSupport && matchingSources.length > 0) {
+        const compatible = matchingSources.filter((s) => codecPenalty(s, options.codecSupport) <= 0);
+        if (compatible.length > 0) {
+            selectable = compatible;
+        }
+    }
+
     // Separate cached and uncached
-    const cachedMatches = matchingSources.filter((s) => s.isCached);
-    const uncachedMatches = matchingSources.filter((s) => !s.isCached);
+    const cachedMatches = selectable.filter((s) => s.isCached);
+    const uncachedMatches = selectable.filter((s) => !s.isCached);
 
     const scoreCache = new Map<string, number>();
     const getScore = (source: AddonSource) => {
@@ -353,7 +390,10 @@ export function selectBestSource(
     cachedMatches.sort(sortByScore);
     uncachedMatches.sort(sortByScore);
 
-    // All sources sorted by score (cached bonus naturally ranks them higher)
+    // All sources sorted by score (cached bonus naturally ranks them higher).
+    // We include every matching source (even codec-incompatible ones) so the in-player
+    // "alternative sources" picker still surfaces the full list; selection for auto-play
+    // has already been narrowed to `selectable` above.
     const allSorted = [...matchingSources].sort(sortByScore);
 
     // Prefer cached sources
@@ -404,9 +444,7 @@ export function selectAlternativeSources(
     const result = selectBestSource(sources, settings, options);
 
     // Filter out current source and return alternatives
-    return result.allSorted
-        .filter((s) => s.url !== currentSourceUrl)
-        .slice(0, limit);
+    return result.allSorted.filter((s) => s.url !== currentSourceUrl).slice(0, limit);
 }
 
 /**

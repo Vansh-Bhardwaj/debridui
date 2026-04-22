@@ -1,5 +1,13 @@
 import { create } from "zustand";
-import { type Addon, type AddonSource, type AddonSubtitle, type TvSearchParams, type AddonManifest, addonSupportsStreams, addonSupportsSubtitles } from "@/lib/addons/types";
+import {
+    type Addon,
+    type AddonSource,
+    type AddonSubtitle,
+    type TvSearchParams,
+    type AddonManifest,
+    addonSupportsStreams,
+    addonSupportsSubtitles,
+} from "@/lib/addons/types";
 import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
@@ -9,7 +17,13 @@ import { detectCodecSupport, type CodecSupport } from "@/lib/utils/codec-support
 import { toast } from "sonner";
 import { FileType, MediaPlayer } from "@/lib/types";
 import { openInPlayer } from "@/lib/utils/media-player";
-import { useSettingsStore, QUALITY_PROFILES, type StreamingSettings, type PlaybackSettings, type TitleMemoryEntry } from "./settings";
+import {
+    useSettingsStore,
+    QUALITY_PROFILES,
+    type StreamingSettings,
+    type PlaybackSettings,
+    type TitleMemoryEntry,
+} from "./settings";
 import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
@@ -60,10 +74,24 @@ interface StreamingState {
     preloadedData: PreloadedData[];
     preloadNextEpisode: (addons: { id: string; url: string; name: string }[]) => Promise<void>;
 
-    play: (request: StreamingRequest, addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
-    playSource: (source: AddonSource, title: string, options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }) => Promise<void>;
-    playNextEpisode: (addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
-    playPreviousEpisode: (addons: { id: string; url: string; name: string }[], options?: { forceAutoPlay?: boolean }) => Promise<void>;
+    play: (
+        request: StreamingRequest,
+        addons: { id: string; url: string; name: string }[],
+        options?: { forceAutoPlay?: boolean }
+    ) => Promise<void>;
+    playSource: (
+        source: AddonSource,
+        title: string,
+        options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }
+    ) => Promise<void>;
+    playNextEpisode: (
+        addons: { id: string; url: string; name: string }[],
+        options?: { forceAutoPlay?: boolean }
+    ) => Promise<void>;
+    playPreviousEpisode: (
+        addons: { id: string; url: string; name: string }[],
+        options?: { forceAutoPlay?: boolean }
+    ) => Promise<void>;
     setEpisodeContext: (context: EpisodeContext | null) => void;
     cancel: () => void;
     dismiss: () => void;
@@ -182,20 +210,23 @@ async function getEffectiveStreamingSettings(): Promise<StreamingSettings> {
     }
 
     // Build StreamingSettings from the target device's prefs
-    const profileId = (QUALITY_PROFILES.some((p) => p.id === prefs.profileId) || prefs.profileId === "custom")
-        ? prefs.profileId as StreamingSettings["profileId"]
-        : localSettings.profileId;
+    const profileId =
+        QUALITY_PROFILES.some((p) => p.id === prefs.profileId) || prefs.profileId === "custom"
+            ? (prefs.profileId as StreamingSettings["profileId"])
+            : localSettings.profileId;
 
     return {
         ...localSettings,
         profileId,
         customRange: prefs.customRange
             ? {
-                minResolution: prefs.customRange.minResolution as StreamingSettings["customRange"]["minResolution"],
-                maxResolution: prefs.customRange.maxResolution as StreamingSettings["customRange"]["maxResolution"],
-                minSourceQuality: prefs.customRange.minSourceQuality as StreamingSettings["customRange"]["minSourceQuality"],
-                maxSourceQuality: prefs.customRange.maxSourceQuality as StreamingSettings["customRange"]["maxSourceQuality"],
-            }
+                  minResolution: prefs.customRange.minResolution as StreamingSettings["customRange"]["minResolution"],
+                  maxResolution: prefs.customRange.maxResolution as StreamingSettings["customRange"]["maxResolution"],
+                  minSourceQuality: prefs.customRange
+                      .minSourceQuality as StreamingSettings["customRange"]["minSourceQuality"],
+                  maxSourceQuality: prefs.customRange
+                      .maxSourceQuality as StreamingSettings["customRange"]["maxSourceQuality"],
+              }
             : localSettings.customRange,
         allowUncached: prefs.allowUncached,
         preferredLanguage: prefs.preferredLanguage,
@@ -244,7 +275,10 @@ type SubtitleQueryResult = {
 };
 
 function combineSubtitles(results: SubtitleQueryResult[], preferredLangOverride?: string): AddonSubtitle[] {
-    const preferredLang = preferredLangOverride || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage || "english";
+    const preferredLang =
+        preferredLangOverride ||
+        (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage ||
+        "english";
     const byKey = new Map<string, AddonSubtitle>();
 
     for (const { addonName, subtitles } of results) {
@@ -277,10 +311,13 @@ async function fetchSubtitlesForMedia(
     imdbId: string,
     type: "movie" | "show",
     tvParams?: TvSearchParams,
-    preferredLanguage?: string,
+    preferredLanguage?: string
 ): Promise<AddonSubtitle[]> {
     try {
-        const addons = queryClient.getQueryData<{ id: string; url: string; name: string; enabled: boolean; order: number }[]>(["user-addons"]) ?? [];
+        const addons =
+            queryClient.getQueryData<{ id: string; url: string; name: string; enabled: boolean; order: number }[]>([
+                "user-addons",
+            ]) ?? [];
         const enabled = addons
             .filter((a) => a.enabled)
             .sort((a, b) => a.order - b.order)
@@ -305,12 +342,12 @@ async function fetchSubtitlesForMedia(
                             staleTime: 5 * 60 * 1000,
                         }),
                         PER_ADDON_TIMEOUT,
-                        { addonName: addon.name, subtitles: [] } as SubtitleQueryResult,
+                        { addonName: addon.name, subtitles: [] } as SubtitleQueryResult
                     );
                 } catch {
                     return { addonName: addon.name, subtitles: [] };
                 }
-            }),
+            })
         );
 
         return combineSubtitles(results, preferredLanguage);
@@ -330,9 +367,16 @@ function getPreloadKey(imdbId: string, season: number, episode: number): string 
     return `${imdbId}:s${season}e${episode}`;
 }
 
-function isSequentialEpisode(prevSeason: number, prevEpisode: number, nextSeason: number, nextEpisode: number): boolean {
-    return (nextSeason === prevSeason && nextEpisode === prevEpisode + 1)
-        || (nextSeason === prevSeason + 1 && nextEpisode === 1);
+function isSequentialEpisode(
+    prevSeason: number,
+    prevEpisode: number,
+    nextSeason: number,
+    nextEpisode: number
+): boolean {
+    return (
+        (nextSeason === prevSeason && nextEpisode === prevEpisode + 1) ||
+        (nextSeason === prevSeason + 1 && nextEpisode === 1)
+    );
 }
 
 function getBingeMemoryPatch(progressKey: ProgressKey): Partial<TitleMemoryEntry> {
@@ -342,10 +386,13 @@ function getBingeMemoryPatch(progressKey: ProgressKey): Partial<TitleMemoryEntry
 
     const existing = getTitleMemory(progressKey.imdbId);
     const now = Date.now();
-    const hoursSinceLastPlay = existing?.lastPlayedAt ? (now - existing.lastPlayedAt) / 3_600_000 : Number.POSITIVE_INFINITY;
-    const sequential = existing?.lastSeason != null
-        && existing?.lastEpisode != null
-        && isSequentialEpisode(existing.lastSeason, existing.lastEpisode, progressKey.season, progressKey.episode);
+    const hoursSinceLastPlay = existing?.lastPlayedAt
+        ? (now - existing.lastPlayedAt) / 3_600_000
+        : Number.POSITIVE_INFINITY;
+    const sequential =
+        existing?.lastSeason != null &&
+        existing?.lastEpisode != null &&
+        isSequentialEpisode(existing.lastSeason, existing.lastEpisode, progressKey.season, progressKey.episode);
 
     let bingeScore = existing?.bingeScore ?? 0;
 
@@ -380,7 +427,10 @@ function getPrefetchDepth(memory: TitleMemoryEntry | null): number {
     return 1;
 }
 
-async function buildPreloadTargets(episodeContext: EpisodeContext, depth: number): Promise<Array<{ season: number; episode: number; title: string }>> {
+async function buildPreloadTargets(
+    episodeContext: EpisodeContext,
+    depth: number
+): Promise<Array<{ season: number; episode: number; title: string }>> {
     const { traktClient } = await import("@/lib/trakt");
     const seasonCache = new Map<number, Awaited<ReturnType<typeof traktClient.getShowEpisodes>>>();
 
@@ -428,14 +478,17 @@ async function preloadEpisodeTarget(
     addons: { id: string; url: string; name: string }[],
     imdbId: string,
     target: { season: number; episode: number; title: string },
-    titleMemory: TitleMemoryEntry | null,
+    titleMemory: TitleMemoryEntry | null
 ): Promise<PreloadedData | null> {
     const { streamAddons, subtitleAddons } = await classifyAddons(addons);
 
     const subtitlePromises = subtitleAddons.map(async (addon): Promise<SubtitleQueryResult> => {
         try {
             const client = new AddonClient({ url: addon.url });
-            const response = await client.fetchSubtitles(imdbId, "show", { season: target.season, episode: target.episode });
+            const response = await client.fetchSubtitles(imdbId, "show", {
+                season: target.season,
+                episode: target.episode,
+            });
             return { addonName: addon.name, subtitles: response.subtitles || [] };
         } catch {
             return { addonName: addon.name, subtitles: [] };
@@ -455,14 +508,14 @@ async function preloadEpisodeTarget(
         }
     }
 
-    const subtitleLanguage = titleMemory?.preferredLanguage
-        || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
-        || "english";
+    const subtitleLanguage =
+        titleMemory?.preferredLanguage ||
+        (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage ||
+        "english";
     const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
 
     // Determine codec support based on the target player
-    const mediaPlayer = titleMemory?.preferredPlayer
-        ?? useSettingsStore.getState().get("mediaPlayer");
+    const mediaPlayer = titleMemory?.preferredPlayer ?? useSettingsStore.getState().get("mediaPlayer");
     const codecSupport = getCodecSupportForPlayer(mediaPlayer);
 
     const baseSettings = await getEffectiveStreamingSettings();
@@ -537,11 +590,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
     let timer: ReturnType<typeof setTimeout>;
     return Promise.race([
         promise,
-        new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), ms); }),
+        new Promise<T>((resolve) => {
+            timer = setTimeout(() => resolve(fallback), ms);
+        }),
     ]).finally(() => clearTimeout(timer!));
 }
 
-async function classifyAddons(addons: AddonInfo[]): Promise<{ streamAddons: AddonInfo[]; subtitleAddons: AddonInfo[] }> {
+async function classifyAddons(
+    addons: AddonInfo[]
+): Promise<{ streamAddons: AddonInfo[]; subtitleAddons: AddonInfo[] }> {
     const manifests = await Promise.all(
         addons.map(async (addon): Promise<AddonManifest | null> => {
             try {
@@ -582,7 +639,7 @@ async function fetchStreamSourcesFlat(
     imdbId: string,
     type: "movie" | "show",
     tvParams: TvSearchParams | undefined,
-    streamAddons: AddonInfo[],
+    streamAddons: AddonInfo[]
 ): Promise<AddonSource[]> {
     const sourcePromises = streamAddons.map(async (addon) => {
         const queryKey = ["addon", addon.id, "sources", imdbId, type, tvParams] as const;
@@ -674,7 +731,16 @@ async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: str
     return resolvePromise;
 }
 
-function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onPlay, otherSourcesCount, onPickSource }: ShowSourceToastParams) {
+function showSourceToast({
+    source,
+    title,
+    isCached,
+    autoPlay,
+    allowUncached,
+    onPlay,
+    otherSourcesCount,
+    onPickSource,
+}: ShowSourceToastParams) {
     if (autoPlay && (isCached || allowUncached)) {
         dismissToast();
         onPlay();
@@ -685,9 +751,10 @@ function showSourceToast({ source, title, isCached, autoPlay, allowUncached, onP
     const cacheStatus = isCached ? "Cached" : "Not cached";
     const description = `${meta} · ${cacheStatus}`.replace(/^ · /, "");
 
-    const cancelObj = otherSourcesCount && otherSourcesCount > 0 && onPickSource
-        ? { label: `${otherSourcesCount} more`, onClick: onPickSource }
-        : undefined;
+    const cancelObj =
+        otherSourcesCount && otherSourcesCount > 0 && onPickSource
+            ? { label: `${otherSourcesCount} more`, onClick: onPickSource }
+            : undefined;
 
     if (isCached || allowUncached) {
         toast.success(title, {
@@ -814,14 +881,21 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playSource: async (source, title, options) => {
         if (!source.url) return;
 
-        // Kill any existing browser video to prevent ghost audio
-        usePreviewStore.getState().closePreview();
+        // If a single-mode preview is already open (user is mid-playback and switching
+        // source / going to next episode), keep it open: we'll swap URL in place to
+        // preserve fullscreen, avoid the unmount-remount, and skip the "Preparing
+        // playback…" loader flash. If no preview is open, fall through to the normal
+        // open-then-resolve flow below.
+        const previewSnapshot = usePreviewStore.getState();
+        const reuseOpenPreview = previewSnapshot.isOpen && previewSnapshot.mode === "single";
+        if (!reuseOpenPreview) {
+            // Not reusing → kill any stale browser video to prevent ghost audio
+            usePreviewStore.getState().closePreview();
+        }
 
         const hydrationToken = ++playSourceToken;
 
-        const playbackRequest = options?.progressKey
-            ? buildRequestFromProgressKey(options.progressKey, title)
-            : null;
+        const playbackRequest = options?.progressKey ? buildRequestFromProgressKey(options.progressKey, title) : null;
 
         set({ currentProgressKey: options?.progressKey ?? null });
 
@@ -854,9 +928,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const subtitles = options?.subtitles;
             if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
                 const pk = options.progressKey;
-                const tvParams = pk.season != null && pk.episode != null
-                    ? { season: pk.season, episode: pk.episode }
-                    : undefined;
+                const tvParams =
+                    pk.season != null && pk.episode != null ? { season: pk.season, episode: pk.episode } : undefined;
                 // Non-blocking: fetch in background, populate preview store when ready
                 fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
                     if (fetched.length > 0) {
@@ -871,20 +944,34 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const { useDeviceSyncStore } = await import("@/lib/stores/device-sync");
             const syncStore = useDeviceSyncStore.getState();
 
-            const mediaPlayer = !syncStore.activeTarget && titleMemory?.preferredPlayer
-                ? titleMemory.preferredPlayer
-                : useSettingsStore.getState().get("mediaPlayer");
+            const mediaPlayer =
+                !syncStore.activeTarget && titleMemory?.preferredPlayer
+                    ? titleMemory.preferredPlayer
+                    : useSettingsStore.getState().get("mediaPlayer");
 
             // For browser playback, open the preview dialog immediately (loading state)
             // before resolving the URL, so the user sees instant feedback.
             if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
-                usePreviewStore.getState().openSinglePreview({
-                    url: "", // Empty → shows loading spinner in dialog
-                    title: fileName,
-                    fileType: FileType.VIDEO,
-                    subtitles,
-                    progressKey: options?.progressKey,
-                });
+                if (reuseOpenPreview) {
+                    // Keep existing video element mounted (keeps fullscreen alive).
+                    // Just refresh title/subtitles/progressKey. URL is left untouched
+                    // until we resolve the real one a moment below, so the old stream
+                    // keeps playing without a loader flash.
+                    usePreviewStore.getState().updateSingleSource({
+                        title: fileName,
+                        subtitles,
+                        progressKey: options?.progressKey,
+                        fileType: FileType.VIDEO,
+                    });
+                } else {
+                    usePreviewStore.getState().openSinglePreview({
+                        url: "", // Empty → shows loading spinner in dialog
+                        title: fileName,
+                        fileType: FileType.VIDEO,
+                        subtitles,
+                        progressKey: options?.progressKey,
+                    });
+                }
             }
 
             // Resolve addon proxy/redirect URL to the actual debrid download link
@@ -895,15 +982,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
             set({ selectedSource: source });
 
-            if (syncStore.playOnTarget({
-                url: playUrl,
-                title: fileName,
-                imdbId: options?.progressKey?.imdbId,
-                mediaType: options?.progressKey?.type,
-                season: options?.progressKey?.season,
-                episode: options?.progressKey?.episode,
-                subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
-            })) {
+            if (
+                syncStore.playOnTarget({
+                    url: playUrl,
+                    title: fileName,
+                    imdbId: options?.progressKey?.imdbId,
+                    mediaType: options?.progressKey?.type,
+                    season: options?.progressKey?.season,
+                    episode: options?.progressKey?.episode,
+                    subtitles: options?.subtitles?.map((s) => ({ url: s.url, lang: s.lang, name: s.name })),
+                })
+            ) {
                 // Sent to remote device — close any loading preview
                 usePreviewStore.getState().closePreview();
                 if (options?.progressKey?.imdbId) {
@@ -935,7 +1024,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     cacheSource(options.progressKey, playUrl, title);
                 }
             } else {
-                openInPlayer({ url: playUrl, fileName, player: mediaPlayer, subtitles: options?.subtitles?.map((s) => s.url), progressKey: options?.progressKey });
+                openInPlayer({
+                    url: playUrl,
+                    fileName,
+                    player: mediaPlayer,
+                    subtitles: options?.subtitles?.map((s) => s.url),
+                    progressKey: options?.progressKey,
+                });
             }
 
             if (options?.progressKey?.imdbId) {
@@ -981,7 +1076,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
         } finally {
             if (playbackRequest) {
-                set((state) => state.activeRequest === playbackRequest ? { activeRequest: null } : {});
+                set((state) => (state.activeRequest === playbackRequest ? { activeRequest: null } : {}));
             }
         }
     },
@@ -1011,7 +1106,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const e = tvParams.episode.toString().padStart(2, "0");
             const seasonTag = `S${s}E${e}`;
 
-            // If title matches "Show Name", append suffix. 
+            // If title matches "Show Name", append suffix.
             if (cleanShowTitle(rawTitle) === rawTitle && !rawTitle.includes(seasonTag)) {
                 displayTitle = `${rawTitle} ${seasonTag}`;
             }
@@ -1056,7 +1151,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         (async () => {
                             const client = new AddonClient({ url: addon.url });
                             const response = await client.fetchSubtitles(imdbId, type, tvParams);
-                            return { addonName: addon.name, subtitles: response.subtitles || [] } as SubtitleQueryResult;
+                            return {
+                                addonName: addon.name,
+                                subtitles: response.subtitles || [],
+                            } as SubtitleQueryResult;
                         })(),
                         PER_ADDON_TIMEOUT,
                         { addonName: addon.name, subtitles: [] } as SubtitleQueryResult
@@ -1070,9 +1168,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const originalLanguagePromise = (async (): Promise<string | undefined> => {
                 try {
                     const { traktClient } = await import("@/lib/trakt");
-                    const media = type === "movie"
-                        ? await traktClient.getMovie(imdbId)
-                        : await traktClient.getShow(imdbId);
+                    const media =
+                        type === "movie" ? await traktClient.getMovie(imdbId) : await traktClient.getShow(imdbId);
                     return media.language ?? undefined;
                 } catch {
                     return undefined;
@@ -1094,9 +1191,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
 
             const titleMemory = getTitleMemory(imdbId);
-            const subtitleLanguage = titleMemory?.preferredLanguage
-                || (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage
-                || "english";
+            const subtitleLanguage =
+                titleMemory?.preferredLanguage ||
+                (useSettingsStore.getState().get("playback") as PlaybackSettings).subtitleLanguage ||
+                "english";
 
             const subtitles = combineSubtitles([...subtitleResults, ...inlineSubResults], subtitleLanguage);
             timer.step("fetched-stream-data", {
@@ -1108,8 +1206,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
 
             // Determine codec support based on the target player
-            const mediaPlayer = titleMemory?.preferredPlayer
-                ?? useSettingsStore.getState().get("mediaPlayer");
+            const mediaPlayer = titleMemory?.preferredPlayer ?? useSettingsStore.getState().get("mediaPlayer");
             const codecSupport = getCodecSupportForPlayer(mediaPlayer);
 
             const result = selectBestSource(allSources, streamingSettings, {
@@ -1224,7 +1321,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             set({ preloadedData: nextQueue });
 
             if (process.env.NODE_ENV === "development" && nextQueue.length > 0) {
-                console.log("Preloaded episodes:", nextQueue.map((entry) => entry.title));
+                console.log(
+                    "Preloaded episodes:",
+                    nextQueue.map((entry) => entry.title)
+                );
             }
         } catch (error) {
             console.error("Preload failed", error);
@@ -1234,7 +1334,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     playNextEpisode: async (addons, options) => {
         const { episodeContext, play, preloadedData, playSource } = get();
         if (!episodeContext) {
-            toast.error("No episode context", { description: "Cannot navigate to next episode", position: TOAST_POSITION });
+            toast.error("No episode context", {
+                description: "Cannot navigate to next episode",
+                position: TOAST_POSITION,
+            });
             return;
         }
 
@@ -1242,10 +1345,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         let targetSeason = episodeContext.season;
         let targetEpisode = nextEpisode;
 
-        const preloadedEntry = preloadedData.find((entry) =>
-            entry.imdbId === episodeContext.imdbId
-            && ((entry.season === episodeContext.season && entry.episode === nextEpisode)
-                || (entry.season === episodeContext.season + 1 && entry.episode === 1))
+        const preloadedEntry = preloadedData.find(
+            (entry) =>
+                entry.imdbId === episodeContext.imdbId &&
+                ((entry.season === episodeContext.season && entry.episode === nextEpisode) ||
+                    (entry.season === episodeContext.season + 1 && entry.episode === 1))
         );
 
         if (preloadedEntry) {
@@ -1270,7 +1374,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     subtitles: preloadedEntry.subtitles,
                     progressKey,
                 },
-                preloadedData: preloadedData.filter((entry) => getPreloadKey(entry.imdbId, entry.season, entry.episode) !== getPreloadKey(preloadedEntry.imdbId, preloadedEntry.season, preloadedEntry.episode)),
+                preloadedData: preloadedData.filter(
+                    (entry) =>
+                        getPreloadKey(entry.imdbId, entry.season, entry.episode) !==
+                        getPreloadKey(preloadedEntry.imdbId, preloadedEntry.season, preloadedEntry.episode)
+                ),
             });
 
             playSource(preloadedEntry.source, preloadedEntry.title, {
@@ -1299,15 +1407,22 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
                     const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${titleSuffix}`;
 
-                    await play({
-                        imdbId: episodeContext.imdbId,
-                        type: "show",
-                        title: nextTitle,
-                        tvParams: { season: targetSeason, episode: 1 },
-                    }, addons, options);
+                    await play(
+                        {
+                            imdbId: episodeContext.imdbId,
+                            type: "show",
+                            title: nextTitle,
+                            tvParams: { season: targetSeason, episode: 1 },
+                        },
+                        addons,
+                        options
+                    );
                     return;
                 } catch {
-                    toast.info("End of series", { description: "You've reached the last episode", position: TOAST_POSITION });
+                    toast.info("End of series", {
+                        description: "You've reached the last episode",
+                        position: TOAST_POSITION,
+                    });
                     return;
                 }
             }
@@ -1316,27 +1431,38 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
             const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${titleSuffix}`;
 
-            await play({
-                imdbId: episodeContext.imdbId,
-                type: "show",
-                title: nextTitle,
-                tvParams: { season: targetSeason, episode: targetEpisode },
-            }, addons, options);
+            await play(
+                {
+                    imdbId: episodeContext.imdbId,
+                    type: "show",
+                    title: nextTitle,
+                    tvParams: { season: targetSeason, episode: targetEpisode },
+                },
+                addons,
+                options
+            );
         } catch (error) {
             console.error("Failed to navigate/fetch metadata:", error);
-            await play({
-                imdbId: episodeContext.imdbId,
-                type: "show",
-                title: episodeContext.title,
-                tvParams: { season: targetSeason, episode: targetEpisode },
-            }, addons, options);
+            await play(
+                {
+                    imdbId: episodeContext.imdbId,
+                    type: "show",
+                    title: episodeContext.title,
+                    tvParams: { season: targetSeason, episode: targetEpisode },
+                },
+                addons,
+                options
+            );
         }
     },
 
     playPreviousEpisode: async (addons, options) => {
         const { episodeContext, play } = get();
         if (!episodeContext) {
-            toast.error("No episode context", { description: "Cannot navigate to previous episode", position: TOAST_POSITION });
+            toast.error("No episode context", {
+                description: "Cannot navigate to previous episode",
+                position: TOAST_POSITION,
+            });
             return;
         }
 
@@ -1395,7 +1521,15 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         // Increment requestId to invalidate in-flight fetches
         requestId++;
         dismissToast();
-        set({ activeRequest: null, currentProgressKey: null, selectedSource: null, allFetchedSources: [], pendingPlayContext: null, sourcePickerOpen: false, preloadedData: [] });
+        set({
+            activeRequest: null,
+            currentProgressKey: null,
+            selectedSource: null,
+            allFetchedSources: [],
+            pendingPlayContext: null,
+            sourcePickerOpen: false,
+            preloadedData: [],
+        });
     },
 
     dismiss: () => {

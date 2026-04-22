@@ -23,12 +23,7 @@ export function PreviewDialog() {
     const previousButtonRef = useRef<HTMLButtonElement>(null);
     const nextButtonRef = useRef<HTMLButtonElement>(null);
 
-    const {
-        episodeContext,
-        playNextEpisode,
-        playPreviousEpisode,
-        preloadNextEpisode
-    } = useStreamingStore();
+    const { episodeContext, playNextEpisode, playPreviousEpisode, preloadNextEpisode } = useStreamingStore();
     const { data: addons = [] } = useUserAddons();
 
     const {
@@ -67,10 +62,14 @@ export function PreviewDialog() {
                 if (match) break;
             }
 
-            if (match && parseInt(match[1]) === episodeContext.season && parseInt(match[2]) === episodeContext.episode) {
+            if (
+                match &&
+                parseInt(match[1]) === episodeContext.season &&
+                parseInt(match[2]) === episodeContext.episode
+            ) {
                 return {
                     imdbId: episodeContext.imdbId,
-                    type: 'show',
+                    type: "show",
                     season: episodeContext.season,
                     episode: episodeContext.episode,
                 };
@@ -78,7 +77,7 @@ export function PreviewDialog() {
 
             return {
                 imdbId: episodeContext.imdbId,
-                type: 'show',
+                type: "show",
                 season: episodeContext.season,
                 episode: episodeContext.episode,
             };
@@ -86,11 +85,24 @@ export function PreviewDialog() {
         return progressKey ?? undefined;
     }, [progressKey, isSingleMode, episodeContext, currentFile]);
 
-    // Create mock file node for single mode
+    // Create mock file node for single mode.
+    // The id is intentionally stable per media item (imdbId+type) rather than per URL
+    // so the React tree is NOT remounted when the URL changes (e.g. switching stream
+    // source or advancing to the next episode). That preserves fullscreen state,
+    // player UI state, and avoids a loader flash between sources.
+    const singleFileId = useMemo(() => {
+        if (!isSingleMode) return null;
+        if (progressKey) {
+            // Stable across episodes of the same show and across source switches of the same media
+            return `single:${progressKey.type}:${progressKey.imdbId}`;
+        }
+        return "single:anonymous";
+    }, [isSingleMode, progressKey]);
+
     const singleFileNode = useMemo<DebridFileNode | null>(() => {
         if (!isSingleMode || !directTitle) return null;
-        return { id: directUrl || "loading", name: directTitle, size: undefined, type: "file", children: [] };
-    }, [isSingleMode, directUrl, directTitle]);
+        return { id: singleFileId || "loading", name: directTitle, size: undefined, type: "file", children: [] };
+    }, [isSingleMode, directTitle, singleFileId]);
 
     // Fetch download link for current file (gallery mode only)
     const { data: linkInfo, isLoading } = useQuery({
@@ -202,7 +214,17 @@ export function PreviewDialog() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isOpen, isSingleMode, episodeContext, handleNext, handlePrev, closePreview, fileType, directTitle, currentFile]);
+    }, [
+        isOpen,
+        isSingleMode,
+        episodeContext,
+        handleNext,
+        handlePrev,
+        closePreview,
+        fileType,
+        directTitle,
+        currentFile,
+    ]);
 
     const handleDownload = useCallback(() => {
         if (linkInfo) {
@@ -219,16 +241,19 @@ export function PreviewDialog() {
     if (!activeFile) return null;
 
     const hasNav = (!isSingleMode && previewableFiles.length > 1) || (isSingleMode && !!episodeContext);
-    const position = isSingleMode && episodeContext
-        ? `S${episodeContext.season} E${episodeContext.episode}`
-        : `${currentIndex + 1} / ${previewableFiles.length}`;
+    const position =
+        isSingleMode && episodeContext
+            ? `S${episodeContext.season} E${episodeContext.episode}`
+            : `${currentIndex + 1} / ${previewableFiles.length}`;
 
     return (
         <Dialog open={isOpen} onOpenChange={closePreview}>
             <DialogContent
-                className={tvMode
-                    ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-screen p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%]"
-                    : "sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"}
+                className={
+                    tvMode
+                        ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-screen p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%]"
+                        : "sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"
+                }
                 overlayClassName="bg-black/70 backdrop-blur-none sm:bg-black/65"
                 showCloseButton={false}
                 aria-describedby="preview-dialog-description">
@@ -238,53 +263,56 @@ export function PreviewDialog() {
                 </p>
                 {/* Header — hidden in TV mode for immersive playback */}
                 {!tvMode && (
-                <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
-                    <div className="flex-1 min-w-0 mr-4">
-                        <h2 className="text-lg font-light truncate">{activeTitle}</h2>
-                        {/* Meta info: size, position */}
-                        <div className="flex items-center gap-2 mt-1">
-                            {!isSingleMode && activeFile.size && (
-                                <span className="text-sm text-muted-foreground">{formatSize(activeFile.size)}</span>
-                            )}
-                            {hasNav && (
-                                <>
-                                    {!isSingleMode && activeFile.size && <span className="text-muted-foreground">&middot;</span>}
-                                    <span className="text-xs text-muted-foreground">
-                                        {position}
-                                    </span>
-                                </>
-                            )}
+                    <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
+                        <div className="flex-1 min-w-0 mr-4">
+                            <h2 className="text-lg font-light truncate">{activeTitle}</h2>
+                            {/* Meta info: size, position */}
+                            <div className="flex items-center gap-2 mt-1">
+                                {!isSingleMode && activeFile.size && (
+                                    <span className="text-sm text-muted-foreground">{formatSize(activeFile.size)}</span>
+                                )}
+                                {hasNav && (
+                                    <>
+                                        {!isSingleMode && activeFile.size && (
+                                            <span className="text-muted-foreground">&middot;</span>
+                                        )}
+                                        <span className="text-xs text-muted-foreground">{position}</span>
+                                    </>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                        {!isSingleMode && (
+                        <div className="flex items-center gap-2">
+                            {!isSingleMode && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleDownload}
+                                    disabled={!linkInfo}
+                                    title="Download"
+                                    aria-label="Download file">
+                                    <Download className="h-4 w-4" />
+                                </Button>
+                            )}
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={handleDownload}
-                                disabled={!linkInfo}
-                                title="Download"
-                                aria-label="Download file">
-                                <Download className="h-4 w-4" />
+                                onClick={closePreview}
+                                title="Close (Esc)"
+                                aria-label="Close preview (Esc)">
+                                <X className="h-4 w-4" />
                             </Button>
-                        )}
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={closePreview}
-                            title="Close (Esc)"
-                            aria-label="Close preview (Esc)">
-                            <X className="h-4 w-4" />
-                        </Button>
+                        </div>
                     </div>
-                </div>
                 )}
 
-                {/* Preview Content */}
+                {/* Preview Content
+                    Key is stable for single-mode (per media item) so switching stream
+                    source or next episode does NOT unmount the player subtree —
+                    that's what preserves fullscreen across source changes. */}
                 <div
                     className="flex-1 relative overflow-hidden min-h-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none"
-                    key={isSingleMode ? directUrl : currentFile?.id}>
+                    key={isSingleMode ? (singleFileId ?? "single") : currentFile?.id}>
                     {!isSingleMode && isLoading ? (
                         <div className="flex items-center justify-center h-full">
                             <Loader2 className="h-8 w-8 animate-spin" />

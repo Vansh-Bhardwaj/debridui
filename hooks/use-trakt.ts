@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
-import { traktClient, TraktError, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
+import { traktClient, TraktError, maintainShowOnWatchlist, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { createTMDBClient, tmdbToTraktMedia } from "@/lib/tmdb";
@@ -189,11 +189,11 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
                 try {
                     const searchResults = await traktClient.searchByTmdbId(tmdbId, type);
                     const item = type === "movie" ? searchResults[0]?.movie : searchResults[0]?.show;
-                    
+
                     if (item?.ids?.slug) {
                         // Success! Re-route the fetch using the official Trakt slug to get Cast & Crew, Seasons, Related, etc.
-                        return await (type === "movie" 
-                            ? traktClient.getMovie(item.ids.slug) 
+                        return await (type === "movie"
+                            ? traktClient.getMovie(item.ids.slug)
                             : traktClient.getShow(item.ids.slug));
                     }
                 } catch {
@@ -204,9 +204,8 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
                 if (tmdbApiKey) {
                     const client = createTMDBClient(tmdbApiKey);
                     if (client) {
-                        const detail = type === "movie"
-                            ? await client.getMovieDetails(tmdbId)
-                            : await client.getTVDetails(tmdbId);
+                        const detail =
+                            type === "movie" ? await client.getMovieDetails(tmdbId) : await client.getTVDetails(tmdbId);
                         return tmdbToTraktMedia(detail, type);
                     }
                 }
@@ -463,8 +462,14 @@ export function useAddToHistory() {
             if (params.traktId) ids.trakt = params.traktId;
             return traktClient.addToHistory({ [key]: [{ ids }] });
         },
-        onSuccess: () => {
+        onSuccess: async (_data, params) => {
+            // For shows, counter Trakt's auto-removal from watchlist unless fully completed.
+            if (params.type === "show" && (params.imdbId || params.traktId != null)) {
+                const lookupId = params.imdbId ?? String(params.traktId!);
+                await maintainShowOnWatchlist({ imdb: params.imdbId, trakt: params.traktId }, lookupId);
+            }
             queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
         },
     });
 }
@@ -474,28 +479,29 @@ export function useMarkEpisodeWatched() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
-            traktClient.addEpisodesToHistory(
-                { trakt: params.showTraktId },
-                params.season,
-                params.episodes
-            ),
+            traktClient.addEpisodesToHistory({ trakt: params.showTraktId }, params.season, params.episodes),
         onMutate: async (params) => {
             // Optimistic update: mark episodes as watched immediately
             await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
             const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
-            queryClient.setQueryData(["trakt", "show", "progress", params.showId], (old: Record<string, unknown> | undefined) => {
-                if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
-                const seasons = (old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }).seasons.map((s) => {
-                    if (s.number !== params.season) return s;
-                    return {
-                        ...s,
-                        episodes: s.episodes.map((ep) =>
-                            params.episodes.includes(ep.number) ? { ...ep, completed: true } : ep
-                        ),
-                    };
-                });
-                return { ...old, seasons };
-            });
+            queryClient.setQueryData(
+                ["trakt", "show", "progress", params.showId],
+                (old: Record<string, unknown> | undefined) => {
+                    if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
+                    const seasons = (
+                        old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }
+                    ).seasons.map((s) => {
+                        if (s.number !== params.season) return s;
+                        return {
+                            ...s,
+                            episodes: s.episodes.map((ep) =>
+                                params.episodes.includes(ep.number) ? { ...ep, completed: true } : ep
+                            ),
+                        };
+                    });
+                    return { ...old, seasons };
+                }
+            );
             return { prev };
         },
         onError: (_err, params, ctx) => {
@@ -510,12 +516,9 @@ export function useMarkEpisodeWatched() {
             );
 
             // Trakt auto-removes shows from watchlist when episodes are added to history.
-            // Re-add the show to the watchlist to counteract this side-effect.
-            try {
-                await traktClient.addToWatchlist({ shows: [{ ids: { trakt: params.showTraktId } }] });
-            } catch {
-                // Silently ignore — watchlist restoration is best-effort
-            }
+            // Re-add the show only if the series is NOT yet fully watched, so it stays on
+            // the watchlist for the rest of the run and only disappears on natural completion.
+            await maintainShowOnWatchlist({ trakt: params.showTraktId }, params.showId);
 
             // Delay invalidation slightly — Trakt needs a moment to process
             // The optimistic update already shows the correct state instantly
@@ -535,27 +538,28 @@ export function useUnmarkEpisodeWatched() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
-            traktClient.removeEpisodesFromHistory(
-                { trakt: params.showTraktId },
-                params.season,
-                params.episodes
-            ),
+            traktClient.removeEpisodesFromHistory({ trakt: params.showTraktId }, params.season, params.episodes),
         onMutate: async (params) => {
             await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
             const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
-            queryClient.setQueryData(["trakt", "show", "progress", params.showId], (old: Record<string, unknown> | undefined) => {
-                if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
-                const seasons = (old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }).seasons.map((s) => {
-                    if (s.number !== params.season) return s;
-                    return {
-                        ...s,
-                        episodes: s.episodes.map((ep) =>
-                            params.episodes.includes(ep.number) ? { ...ep, completed: false } : ep
-                        ),
-                    };
-                });
-                return { ...old, seasons };
-            });
+            queryClient.setQueryData(
+                ["trakt", "show", "progress", params.showId],
+                (old: Record<string, unknown> | undefined) => {
+                    if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
+                    const seasons = (
+                        old as { seasons: { number: number; episodes: { number: number; completed: boolean }[] }[] }
+                    ).seasons.map((s) => {
+                        if (s.number !== params.season) return s;
+                        return {
+                            ...s,
+                            episodes: s.episodes.map((ep) =>
+                                params.episodes.includes(ep.number) ? { ...ep, completed: false } : ep
+                            ),
+                        };
+                    });
+                    return { ...old, seasons };
+                }
+            );
             return { prev };
         },
         onError: (_err, params, ctx) => {
@@ -610,7 +614,7 @@ export function useTraktShowProgress(showId: string) {
         queryKey: ["trakt", "show", "progress", showId],
         queryFn: () => traktClient.getShowWatchedProgress(showId),
         staleTime: CACHE_DURATION.INSTANT, // Refetch on every page visit — watched status must feel instant
-        gcTime: CACHE_DURATION.STANDARD,   // Keep in cache for reuse but always revalidate
+        gcTime: CACHE_DURATION.STANDARD, // Keep in cache for reuse but always revalidate
         enabled: !!showId && hasAuth,
         retry: 1,
     });

@@ -39,6 +39,13 @@ interface PreviewState {
     // Actions
     openPreview: (file: DebridFileNode, allFiles: DebridFileNode[], fileId: string) => void;
     openSinglePreview: (options: SinglePreviewOptions) => void;
+    /**
+     * Update a single-mode preview in place (URL / title / subtitles / progressKey)
+     * WITHOUT resetting React state or stopping the video element. Use this when
+     * switching source or advancing to the next episode while keeping fullscreen
+     * and avoiding an unmount-remount of the player subtree.
+     */
+    updateSingleSource: (options: Partial<SinglePreviewOptions>) => void;
     /** Update the URL for a single-mode preview (e.g. after resolving a redirect) */
     setDirectUrl: (url: string) => void;
     /** Update streaming links for a single-mode preview */
@@ -73,9 +80,7 @@ const initialState = {
 function _stopActiveVideo() {
     if (typeof document === "undefined") return;
     // Find any video element inside the preview dialog and fully release it
-    const videos = document.querySelectorAll<HTMLVideoElement>(
-        "[role='dialog'] video, .debridui-legacy-player video"
-    );
+    const videos = document.querySelectorAll<HTMLVideoElement>("[role='dialog'] video, .debridui-legacy-player video");
     for (const video of videos) {
         video.pause();
         video.removeAttribute("src");
@@ -125,6 +130,34 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
             previewableFiles: [],
             fileId: null,
         });
+    },
+
+    updateSingleSource: (options) => {
+        const state = get();
+        if (!state.isOpen || state.mode !== "single") {
+            // Fall back to opening fresh if preview isn't already active
+            if (options.url !== undefined && options.title !== undefined) {
+                get().openSinglePreview({
+                    url: options.url,
+                    title: options.title,
+                    fileType: options.fileType,
+                    subtitles: options.subtitles,
+                    progressKey: options.progressKey,
+                    streamingLinks: options.streamingLinks,
+                });
+            }
+            return;
+        }
+        const patch: Partial<PreviewState> = {};
+        if (options.url !== undefined) patch.directUrl = options.url || null;
+        if (options.title !== undefined) patch.directTitle = options.title;
+        if (options.fileType !== undefined) patch.fileType = options.fileType ?? null;
+        if (options.subtitles !== undefined) patch.directSubtitles = options.subtitles ?? [];
+        if (options.streamingLinks !== undefined) patch.directStreamingLinks = options.streamingLinks;
+        if (options.progressKey !== undefined) patch.progressKey = options.progressKey ?? null;
+        // Reset redirect chain for the new source
+        patch.redirectChain = undefined;
+        set(patch);
     },
 
     setDirectUrl: (url) => set({ directUrl: url }),

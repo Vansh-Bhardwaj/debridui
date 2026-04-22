@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { traktClient, TraktClient } from "@/lib/trakt";
+import { traktClient, TraktClient, maintainShowOnWatchlist } from "@/lib/trakt";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { useUserSettings } from "@/hooks/use-user-settings";
 
@@ -47,11 +47,15 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                 else if (action === "pause") await traktClient.scrobblePause(request, action === "pause");
                 else await traktClient.scrobbleStop(request, action === "stop");
 
-                // When scrobble stops at ≥80%, Trakt auto‑marks the episode as watched.
-                // Invalidate the show's watched‑progress cache so the UI reflects it.
+                // When scrobble stops at ≥80%, Trakt auto‑marks the episode as watched
+                // and also auto-removes the show from the user's watchlist. Counter that
+                // removal unless the show is now fully watched.
                 if (action === "stop" && progressPercent >= 80 && progressKey.type === "show") {
-                    setTimeout(() => {
+                    // Give Trakt a moment to register the history write before we check progress
+                    setTimeout(async () => {
+                        await maintainShowOnWatchlist({ imdb: progressKey.imdbId }, progressKey.imdbId);
                         queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                        queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
                     }, 2000);
                 }
             } catch (e) {
@@ -62,19 +66,26 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                 ) {
                     try {
                         if (progressKey.type === "show" && progressKey.season != null && progressKey.episode != null) {
-                            await traktClient.addEpisodesToHistory(
-                                { imdb: progressKey.imdbId },
-                                progressKey.season,
-                                [progressKey.episode]
-                            );
+                            await traktClient.addEpisodesToHistory({ imdb: progressKey.imdbId }, progressKey.season, [
+                                progressKey.episode,
+                            ]);
                         } else if (progressKey.type === "movie") {
                             await traktClient.addToHistory({ movies: [{ ids: { imdb: progressKey.imdbId } }] });
                         }
 
                         fallbackMarkedRef.current = progressIdentity;
-                        setTimeout(() => {
-                            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
-                        }, 2000);
+                        // Counter Trakt's watchlist auto-removal unless fully watched.
+                        if (progressKey.type === "show") {
+                            setTimeout(async () => {
+                                await maintainShowOnWatchlist({ imdb: progressKey.imdbId }, progressKey.imdbId);
+                                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                                queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+                            }, 2000);
+                        } else {
+                            setTimeout(() => {
+                                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                            }, 2000);
+                        }
                     } catch (historyError) {
                         console.error("[trakt-history-fallback]", historyError);
                     }
