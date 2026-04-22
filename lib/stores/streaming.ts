@@ -11,7 +11,12 @@ import {
 import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
-import { selectBestSource, detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
+import {
+    selectBestSource,
+    selectBestSourceForBinge,
+    detectAudioCodec,
+    detectVideoCodec,
+} from "@/lib/streaming/source-selector";
 import { queryClient } from "@/lib/query-client";
 import { detectCodecSupport, type CodecSupport } from "@/lib/utils/codec-support";
 import { toast } from "sonner";
@@ -77,7 +82,15 @@ interface StreamingState {
     play: (
         request: StreamingRequest,
         addons: { id: string; url: string; name: string }[],
-        options?: { forceAutoPlay?: boolean }
+        options?: {
+            forceAutoPlay?: boolean;
+            /**
+             * When true, use binge-priority source selection: hard-prefer the same
+             * bingeGroup/pack the user was last watching before falling back to normal
+             * settings-based selection.  Set for next/previous episode navigation.
+             */
+            isBinge?: boolean;
+        }
     ) => Promise<void>;
     playSource: (
         source: AddonSource,
@@ -520,7 +533,10 @@ async function preloadEpisodeTarget(
 
     const baseSettings = await getEffectiveStreamingSettings();
     const streamingSettings = applyTitleMemorySettings(baseSettings, titleMemory);
-    const result = selectBestSource(allSources, streamingSettings, {
+
+    // Preloading is always for the next episode — use the binge-priority selector
+    // so the same pack is preferred over a generic "best by settings" match.
+    const selectionOptions = {
         preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
         preferredAddon: titleMemory?.preferredAddonId,
         preferCached: streamingSettings.preferCached,
@@ -529,7 +545,8 @@ async function preloadEpisodeTarget(
         preferredSourceQuality: titleMemory?.preferredSourceQuality,
         codecSupport,
         preferredBingeGroup: titleMemory?.preferredBingeGroup,
-    });
+    };
+    const result = selectBestSourceForBinge(allSources, streamingSettings, selectionOptions);
 
     if (!result.source) return null;
 
@@ -918,9 +935,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         try {
             const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
 
+            // Strip any previously appended [meta] bracket suffix so repeated stream
+            // switches don't produce "Show S01E01 [1080p] [1080p BluRay]" accumulation.
+            const cleanTitle = title.replace(/(\s*\[[^\]]*\])+$/, "").trim();
+
             // Build descriptive filename with source metadata
             const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
-            const fileName = meta ? `${title} [${meta}]` : title;
+            const fileName = meta ? `${cleanTitle} [${meta}]` : cleanTitle;
 
             // ── Auto-fetch subtitles when none provided ────────────────────
             // Ensures every play path (continue watching, source picker, etc.)
@@ -1083,6 +1104,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
     play: async (request, addons, options) => {
         const forceAutoPlay = options?.forceAutoPlay ?? false;
+        const isBinge = options?.isBinge ?? false;
         const timer = createDevTimer("streaming.play", {
             imdbId: request.imdbId,
             type: request.type,
@@ -1209,7 +1231,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const mediaPlayer = titleMemory?.preferredPlayer ?? useSettingsStore.getState().get("mediaPlayer");
             const codecSupport = getCodecSupportForPlayer(mediaPlayer);
 
-            const result = selectBestSource(allSources, streamingSettings, {
+            const sourceSelectionOptions = {
                 preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
                 preferredAddon: titleMemory?.preferredAddonId,
                 preferCached: streamingSettings.preferCached,
@@ -1219,7 +1241,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 originalLanguage,
                 codecSupport,
                 preferredBingeGroup: titleMemory?.preferredBingeGroup,
-            });
+            };
+
+            // For binge-watching (next episode navigation), hard-prefer the same
+            // pack/bingeGroup the user was watching.  For first plays, use standard selection.
+            const result = isBinge
+                ? selectBestSourceForBinge(allSources, streamingSettings, sourceSelectionOptions)
+                : selectBestSource(allSources, streamingSettings, sourceSelectionOptions);
             timer.step("selected-source", {
                 hasMatches: result.hasMatches,
                 cachedMatches: result.cachedMatches.length,
@@ -1415,7 +1443,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: targetSeason, episode: 1 },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                     return;
                 } catch {
@@ -1439,7 +1467,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     tvParams: { season: targetSeason, episode: targetEpisode },
                 },
                 addons,
-                options
+                { ...options, isBinge: true }
             );
         } catch (error) {
             console.error("Failed to navigate/fetch metadata:", error);
@@ -1451,7 +1479,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     tvParams: { season: targetSeason, episode: targetEpisode },
                 },
                 addons,
-                options
+                { ...options, isBinge: true }
             );
         }
     },
@@ -1484,7 +1512,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: prevSeason, episode: lastEpisode },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                 } catch {
                     // Fallback to episode 1 if metadata fetch fails
@@ -1496,7 +1524,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: prevSeason, episode: 1 },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                 }
                 return;
@@ -1513,7 +1541,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 tvParams: { season: episodeContext.season, episode: prevEpisode },
             },
             addons,
-            options
+            { ...options, isBinge: true }
         );
     },
 
