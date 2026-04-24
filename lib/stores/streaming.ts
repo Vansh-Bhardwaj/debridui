@@ -908,6 +908,14 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         if (!reuseOpenPreview) {
             // Not reusing → kill any stale browser video to prevent ghost audio
             usePreviewStore.getState().closePreview();
+        } else if (source.url === get().selectedSource?.url) {
+            // Ignore duplicate click on the already-playing source
+            return;
+        } else {
+            // Flip the switching overlay immediately so the user sees feedback
+            // before we round-trip to resolve the new URL. The dialog pauses the
+            // old video and shows a spinner; setDirectUrl() later clears it.
+            usePreviewStore.getState().setSwitchingSource(true);
         }
 
         const hydrationToken = ++playSourceToken;
@@ -1095,9 +1103,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     }
                 })();
             }
+        } catch (error) {
+            // Ensure the switching overlay never gets stuck on failure
+            usePreviewStore.getState().setSwitchingSource(false);
+            throw error;
         } finally {
             if (playbackRequest) {
                 set((state) => (state.activeRequest === playbackRequest ? { activeRequest: null } : {}));
+            }
+            // Defensive: if setDirectUrl never fires (e.g. remote device path), clear the flag
+            if (usePreviewStore.getState().isSwitchingSource && hydrationToken === playSourceToken) {
+                usePreviewStore.getState().setSwitchingSource(false);
             }
         }
     },
@@ -1111,6 +1127,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             addonCount: addons.length,
         });
         set({ preloadedData: [] });
+
+        // If a single-mode preview is already open (in-player next/prev episode),
+        // flip the switching overlay so the old video pauses and the user sees
+        // a loader during the stream-fetch + resolution window. Cleared when
+        // setDirectUrl fires later (inside playSource).
+        {
+            const snap = usePreviewStore.getState();
+            if (snap.isOpen && snap.mode === "single" && !snap.isSwitchingSource) {
+                snap.setSwitchingSource(true);
+            }
+        }
 
         const { imdbId, type, title: rawTitle, tvParams } = request;
 
@@ -1264,6 +1291,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
             if (!result.hasMatches) {
                 set({ activeRequest: null });
+                usePreviewStore.getState().setSwitchingSource(false);
                 toast.error("No sources found", {
                     id: toastId ?? undefined,
                     position: TOAST_POSITION,
@@ -1311,6 +1339,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 });
                 set({ activeRequest: null });
             }
+            usePreviewStore.getState().setSwitchingSource(false);
             timer.end({ status: "error" });
         }
     },

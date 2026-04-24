@@ -771,6 +771,7 @@ export function LegacyVideoPreview({
             skippedSegmentsRef.current = new Set();
             hasMarkedCompletedRef.current = false;
             hasShownResumeToastRef.current = false;
+            hasPreloaded.current = false;
             historySessionIdRef.current =
                 typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
             lastHistoryEmitRef.current = null;
@@ -2186,6 +2187,27 @@ export function LegacyVideoPreview({
 
     const pickAlternateSource = useCallback(
         (src: AddonSource) => {
+            // Ignore clicks on the already-active source (dropdown also disables it,
+            // but guard here too against double-taps / keyboard).
+            if (src.url === selectedSourceFromStore?.url) {
+                setOpenMenuTracked(null);
+                return;
+            }
+            // Debounce via the same nav guard used for prev/next episode — one
+            // switch at a time, 1 s cooldown, no stacked pipelines on rapid clicks.
+            if (navGuardRef.current) return;
+            navGuardRef.current = true;
+            setTimeout(() => {
+                navGuardRef.current = false;
+            }, 1000);
+
+            // Immediate visual feedback: pause the current video so the old stream
+            // isn't audibly playing while the new URL resolves. The preview store
+            // flips `isSwitchingSource` inside playSource which overlays a loader.
+            const v = videoRef.current;
+            if (v && !v.paused) v.pause();
+            setIsLoading(true);
+
             const pk = previewProgressKeyStore ?? progressKey ?? undefined;
             const subPick = previewDirectSubs?.length ? previewDirectSubs : subtitles;
             void playSourceFromStore(src, previewDirectTitle || file.name, {
@@ -2193,11 +2215,6 @@ export function LegacyVideoPreview({
                 subtitles: subPick?.length ? subPick : undefined,
             });
             setOpenMenuTracked(null);
-            toast.info("Switching stream", {
-                description:
-                    [src.resolution, src.quality, src.addonName].filter(Boolean).join(" · ") || "Alternative source",
-                duration: 2200,
-            });
         },
         [
             playSourceFromStore,
@@ -2208,6 +2225,7 @@ export function LegacyVideoPreview({
             subtitles,
             file.name,
             setOpenMenuTracked,
+            selectedSourceFromStore,
         ]
     );
 

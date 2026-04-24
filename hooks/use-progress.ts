@@ -32,7 +32,11 @@ interface SyncMeta {
 
 const RESUME_MIN_SECONDS = 10;
 const RESUME_MIN_PERCENT = 1;
-const CONTINUE_MAX_PERCENT = 95;
+// Movies are dropped from the shelf once fully watched. Shows keep their
+// completed episode on the shelf so the series can offer the next unwatched
+// episode — the shelf card pivots to it instead of replaying the finished one.
+const CONTINUE_MAX_PERCENT_MOVIE = 95;
+const CONTINUE_MAX_PERCENT_SHOW = 100;
 
 // Sync interval in milliseconds (15 seconds)
 const SYNC_INTERVAL = 15_000;
@@ -45,9 +49,20 @@ function getProgressPercent(progressSeconds: number, durationSeconds: number): n
     return (progressSeconds / durationSeconds) * 100;
 }
 
-function isResumeEligible(progressSeconds: number, durationSeconds: number): boolean {
+/** Used to decide whether to seek the <video> to the stored position on resume. */
+function isResumeSeekEligible(progressSeconds: number, durationSeconds: number): boolean {
     const percent = getProgressPercent(progressSeconds, durationSeconds);
-    return (progressSeconds >= RESUME_MIN_SECONDS || percent >= RESUME_MIN_PERCENT) && percent <= CONTINUE_MAX_PERCENT;
+    return (
+        (progressSeconds >= RESUME_MIN_SECONDS || percent >= RESUME_MIN_PERCENT) &&
+        percent <= CONTINUE_MAX_PERCENT_MOVIE
+    );
+}
+
+/** Used to decide whether an item stays on the Continue Watching shelf. */
+function isShelfEligible(progressSeconds: number, durationSeconds: number, type: "movie" | "show"): boolean {
+    const percent = getProgressPercent(progressSeconds, durationSeconds);
+    const cap = type === "show" ? CONTINUE_MAX_PERCENT_SHOW : CONTINUE_MAX_PERCENT_MOVIE;
+    return (progressSeconds >= RESUME_MIN_SECONDS || percent >= RESUME_MIN_PERCENT) && percent <= cap;
 }
 
 /**
@@ -118,7 +133,7 @@ async function syncToServer(key: ProgressKey, data: ProgressData, meta?: SyncMet
 
 /**
  * Hook for tracking playback progress with optimized DB sync
- * 
+ *
  * Features:
  * - Writes to localStorage on every update (fast, no network)
  * - Syncs to DB during playback heartbeat + pause/background/unmount
@@ -133,7 +148,7 @@ export function useProgress(key: ProgressKey | null) {
     const [initialProgress, setInitialProgress] = useState<number | null>(() => {
         if (!key) return null;
         const local = readLocalProgress(key);
-        if (local && local.progressSeconds > 0 && isResumeEligible(local.progressSeconds, local.durationSeconds)) {
+        if (local && local.progressSeconds > 0 && isResumeSeekEligible(local.progressSeconds, local.durationSeconds)) {
             return local.progressSeconds;
         }
         return null;
@@ -149,11 +164,14 @@ export function useProgress(key: ProgressKey | null) {
     // (the handler captures key from the effect closure, which may be stale
     // during rapid episode transitions).
     const keyRef = useRef(key);
-    useEffect(() => { keyRef.current = key; }, [key]);
+    useEffect(() => {
+        keyRef.current = key;
+    }, [key]);
 
     useEffect(() => {
         if (sessionIdRef.current !== "sess_init") return;
-        sessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+        sessionIdRef.current =
+            typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
     }, []);
 
     // Re-compute initial progress when key identity changes
@@ -172,11 +190,16 @@ export function useProgress(key: ProgressKey | null) {
         lastSyncRef.current = 0;
         lastSyncedProgressRef.current = 0;
         sequenceRef.current = 0;
-        sessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+        sessionIdRef.current =
+            typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
 
         const local = readLocalProgress(key);
         if (local && local.progressSeconds > 0) {
-            queueMicrotask(() => setInitialProgress(isResumeEligible(local.progressSeconds, local.durationSeconds) ? local.progressSeconds : null));
+            queueMicrotask(() =>
+                setInitialProgress(
+                    isResumeSeekEligible(local.progressSeconds, local.durationSeconds) ? local.progressSeconds : null
+                )
+            );
         } else {
             queueMicrotask(() => setInitialProgress(null));
         }
@@ -187,29 +210,32 @@ export function useProgress(key: ProgressKey | null) {
         if (key) queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
     }, [key, queryClient]);
 
-    const syncNow = useCallback((force = false, eventType: ProgressEventType = "play_progress", reason?: string) => {
-        if (!key || !isLoggedIn || !lastProgressRef.current) return;
+    const syncNow = useCallback(
+        (force = false, eventType: ProgressEventType = "play_progress", reason?: string) => {
+            if (!key || !isLoggedIn || !lastProgressRef.current) return;
 
-        const data = lastProgressRef.current;
-        const now = Date.now();
-        const elapsed = now - lastSyncRef.current;
-        const progressDelta = Math.abs(data.progressSeconds - lastSyncedProgressRef.current);
+            const data = lastProgressRef.current;
+            const now = Date.now();
+            const elapsed = now - lastSyncRef.current;
+            const progressDelta = Math.abs(data.progressSeconds - lastSyncedProgressRef.current);
 
-        if (!force && elapsed < SYNC_INTERVAL && progressDelta < MIN_SYNC_PROGRESS_DELTA_SECONDS) {
-            return;
-        }
+            if (!force && elapsed < SYNC_INTERVAL && progressDelta < MIN_SYNC_PROGRESS_DELTA_SECONDS) {
+                return;
+            }
 
-        const seq = ++sequenceRef.current;
-        const idempotencyKey = `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}:${sessionIdRef.current}:${eventType}:${seq}`;
-        syncToServer(key, data, {
-            eventType,
-            reason,
-            sessionId: sessionIdRef.current,
-            idempotencyKey,
-        });
-        lastSyncRef.current = now;
-        lastSyncedProgressRef.current = data.progressSeconds;
-    }, [key, isLoggedIn]);
+            const seq = ++sequenceRef.current;
+            const idempotencyKey = `${key.imdbId}:${key.type}:${key.season ?? "_"}:${key.episode ?? "_"}:${sessionIdRef.current}:${eventType}:${seq}`;
+            syncToServer(key, data, {
+                eventType,
+                reason,
+                sessionId: sessionIdRef.current,
+                idempotencyKey,
+            });
+            lastSyncRef.current = now;
+            lastSyncedProgressRef.current = data.progressSeconds;
+        },
+        [key, isLoggedIn]
+    );
 
     // Sync to server periodically + on tab hide
     useEffect(() => {
@@ -267,7 +293,7 @@ export function useProgress(key: ProgressKey | null) {
                     reason: "pagehide",
                 }),
                 keepalive: true,
-            }).catch(() => { });
+            }).catch(() => {});
         };
 
         syncIntervalRef.current = setInterval(doSync, SYNC_INTERVAL);
@@ -313,10 +339,14 @@ export function useProgress(key: ProgressKey | null) {
                         durationSeconds: srv.durationSeconds,
                         updatedAt: srvUpdatedAt,
                     });
-                    setInitialProgress(isResumeEligible(srv.progressSeconds, srv.durationSeconds) ? srv.progressSeconds : null);
+                    setInitialProgress(
+                        isResumeSeekEligible(srv.progressSeconds, srv.durationSeconds) ? srv.progressSeconds : null
+                    );
                 }
             })
-            .catch(() => { /* aborted or network error — local data is fine */ })
+            .catch(() => {
+                /* aborted or network error — local data is fine */
+            })
             .finally(() => clearTimeout(timeout));
 
         return () => {
@@ -328,55 +358,65 @@ export function useProgress(key: ProgressKey | null) {
     /**
      * Update progress (called on timeupdate, throttled by caller)
      */
-    const updateProgress = useCallback((progressSeconds: number, durationSeconds: number) => {
-        if (!key) return;
+    const updateProgress = useCallback(
+        (progressSeconds: number, durationSeconds: number) => {
+            if (!key) return;
 
-        if (!Number.isFinite(progressSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-            return;
-        }
+            if (!Number.isFinite(progressSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+                return;
+            }
 
-        const data: ProgressData = {
-            progressSeconds: Math.max(0, progressSeconds),
-            durationSeconds: Math.max(0, durationSeconds),
-            updatedAt: Date.now(),
-        };
+            const data: ProgressData = {
+                progressSeconds: Math.max(0, progressSeconds),
+                durationSeconds: Math.max(0, durationSeconds),
+                updatedAt: Date.now(),
+            };
 
-        // Always write to localStorage
-        writeLocalProgress(key, data);
-        lastProgressRef.current = data;
-    }, [key]);
+            // Always write to localStorage
+            writeLocalProgress(key, data);
+            lastProgressRef.current = data;
+        },
+        [key]
+    );
 
     /**
      * Force sync to server (call on pause or video end)
      */
-    const forceSync = useCallback((eventType: ProgressEventType = "play_pause", reason?: string) => {
-        if (!key || !isLoggedIn || !lastProgressRef.current) return;
-        syncNow(true, eventType, reason);
-    }, [key, isLoggedIn, syncNow]);
+    const forceSync = useCallback(
+        (eventType: ProgressEventType = "play_pause", reason?: string) => {
+            if (!key || !isLoggedIn || !lastProgressRef.current) return;
+            syncNow(true, eventType, reason);
+        },
+        [key, isLoggedIn, syncNow]
+    );
 
     /**
-     * Mark as completed (clears from continue watching)
+     * Mark as completed.
+     * - Movies: drop from Continue Watching (local + server).
+     * - Shows: KEEP the episode row so the series stays on the shelf. The shelf
+     *   card will switch its resume target to the next unwatched episode. The
+     *   series only leaves via manual remove or finishing the last aired episode.
      */
     const markCompleted = useCallback(() => {
         if (!key || completedRef.current) return;
         completedRef.current = true;
 
-        // Remove from localStorage
-        try {
-            localStorage.removeItem(getStorageKey(key));
-        } catch { }
+        if (key.type === "movie") {
+            try {
+                localStorage.removeItem(getStorageKey(key));
+            } catch {}
 
-        // Delete from server if logged in
-        if (isLoggedIn) {
-            const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
-            if (key.season != null) params.set("season", String(key.season));
-            if (key.episode != null) params.set("episode", String(key.episode));
-            params.set("mode", "delete");
+            if (isLoggedIn) {
+                const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
+                if (key.season != null) params.set("season", String(key.season));
+                if (key.episode != null) params.set("episode", String(key.episode));
+                params.set("mode", "delete");
 
-            fetchWithTimeout(`/api/progress?${params}`, { method: "DELETE" }, 8000).catch(() => { });
+                fetchWithTimeout(`/api/progress?${params}`, { method: "DELETE" }, 8000).catch(() => {});
+            }
         }
 
-        // Invalidate cache so the dashboard removes this item immediately
+        // Invalidate cache so the dashboard reflects the new state immediately
         queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
     }, [key, isLoggedIn, queryClient]);
 
@@ -432,19 +472,17 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                         }
                     }
 
-                    const percent = data.durationSeconds > 0
-                        ? (data.progressSeconds / data.durationSeconds) * 100
-                        : 0;
-                    if ((data.progressSeconds >= RESUME_MIN_SECONDS || percent >= RESUME_MIN_PERCENT) && percent <= CONTINUE_MAX_PERCENT) {
+                    const type: "movie" | "show" = season !== undefined ? "show" : "movie";
+                    if (isShelfEligible(data.progressSeconds, data.durationSeconds, type)) {
                         localItems.push({
                             imdbId,
-                            type: season !== undefined ? "show" : "movie",
+                            type,
                             season,
                             episode,
                             ...data,
                         });
                     }
-                } catch { }
+                } catch {}
             }
         } catch (e) {
             console.warn("[continue-watching] localStorage access failed:", e);
@@ -454,22 +492,36 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
     if (isLoggedIn) {
         try {
             const res = await fetchWithTimeout("/api/progress", { cache: "no-store" }, 10000);
-            if (handleUnauthorizedResponse(res, { redirect: false, toastMessage: "Session expired. Showing local progress only." })) {
+            if (
+                handleUnauthorizedResponse(res, {
+                    redirect: false,
+                    toastMessage: "Session expired. Showing local progress only.",
+                })
+            ) {
                 throw new Error("Unauthorized");
             }
             if (res.ok) {
-                const { progress: serverProgress } = await res.json() as { progress: Array<ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }> };
+                const { progress: serverProgress } = (await res.json()) as {
+                    progress: Array<
+                        ProgressKey & { progressSeconds: number; durationSeconds: number; updatedAt: string }
+                    >;
+                };
 
                 const merged = new Map<string, ProgressKey & ProgressData>();
 
                 // Server items are sorted by updatedAt DESC — keep the first (newest) per key
                 for (const item of serverProgress) {
-                    const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
+                    const key: ProgressKey = {
+                        imdbId: item.imdbId,
+                        type: item.type,
+                        season: item.season,
+                        episode: item.episode,
+                    };
                     const storageKey = getStorageKey(key);
                     // Skip duplicates (from NULL unique index bug) — first entry is newest
                     if (merged.has(storageKey)) continue;
                     const serverUpdatedAt = new Date(item.updatedAt).getTime();
-                    if (isResumeEligible(item.progressSeconds, item.durationSeconds)) {
+                    if (isShelfEligible(item.progressSeconds, item.durationSeconds, item.type)) {
                         merged.set(storageKey, {
                             ...key,
                             progressSeconds: item.progressSeconds,
@@ -488,8 +540,7 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     }
                 }
 
-                const sorted = Array.from(merged.values())
-                    .sort((a, b) => b.updatedAt - a.updatedAt);
+                const sorted = Array.from(merged.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 
                 const seen = new Set<string>();
                 return sorted.filter((item) => {
@@ -531,7 +582,9 @@ function scanWatchedIds(): string[] {
                     watched.push(imdbId);
                 }
             }
-        } catch { /* ignore malformed entries */ }
+        } catch {
+            /* ignore malformed entries */
+        }
     }
     return watched;
 }

@@ -42,6 +42,7 @@ export function PreviewDialog() {
         navigateNext,
         navigatePrevious,
         progressKey,
+        isSwitchingSource,
     } = usePreviewStore();
 
     const isSingleMode = mode === "single";
@@ -337,6 +338,15 @@ export function PreviewDialog() {
                     ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground">
                             <p>Unable to load preview</p>
+                        </div>
+                    )}
+
+                    {/* In-place switching overlay — source change / next episode while
+                        the player subtree stays mounted (preserves fullscreen). */}
+                    {isSingleMode && isSwitchingSource && (
+                        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-[1px] animate-in fade-in-0 duration-150 pointer-events-none">
+                            <Loader2 className="h-10 w-10 animate-spin text-white/90" />
+                            <p className="text-sm font-medium text-white/80">Loading stream…</p>
                         </div>
                     )}
 

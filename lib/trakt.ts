@@ -537,29 +537,37 @@ export class TraktClient {
             url = `${url}${separator}extended=${extended}`;
         }
 
-        try {
-            let response = await fetch(url, {
+        const doFetch = async (authHeader: HeadersInit) =>
+            fetch(url, {
                 ...options,
                 headers: {
-                    ...this.createHeaders(requiresAuth),
+                    ...authHeader,
                     ...options.headers,
                 },
                 keepalive: options.keepalive,
             });
+
+        try {
+            let response = await doFetch(this.createHeaders(requiresAuth));
 
             // Auto-refresh on 401 and retry once
             if (response.status === 401 && requiresAuth && this.refreshHandler) {
                 const newToken = await this.doRefresh();
                 if (newToken) {
                     this.accessToken = newToken;
-                    response = await fetch(url, {
-                        ...options,
-                        headers: {
-                            ...this.createHeaders(true),
-                            ...options.headers,
-                        },
-                    });
+                    response = await doFetch(this.createHeaders(true));
                 }
+            }
+
+            // Rate-limit backoff: respect Retry-After (seconds, capped) and retry once.
+            // Anything beyond 2 s is surfaced as an error so the UI doesn't hang.
+            if (response.status === 429) {
+                const retryAfterHeader = response.headers.get("retry-after");
+                const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+                const waitMs = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 2000) : 750;
+                response.body?.cancel();
+                await new Promise((r) => setTimeout(r, waitMs));
+                response = await doFetch(this.createHeaders(requiresAuth));
             }
 
             if (!response.ok) {
@@ -1177,11 +1185,23 @@ export const traktClient = new TraktClient({
 //
 // This function is defensive — any failure is silent because watchlist
 // restoration is best-effort and should never disrupt playback or mark-watched.
+// Coalesce rapid repeat calls for the same show (binge sessions trigger this
+// on every episode finish from multiple paths). A 60 s window is enough to
+// dedupe scrobble-stop + history-write + watchlist-maintain cascades without
+// preventing later sessions from re-arming the watchlist.
+const _maintainCache = new Map<string, number>();
+const MAINTAIN_COOLDOWN_MS = 60_000;
+
 export async function maintainShowOnWatchlist(
     showIds: { imdb?: string; trakt?: number },
     progressLookupId: string
 ): Promise<void> {
     if (!showIds.imdb && showIds.trakt == null) return;
+    const cacheKey = showIds.imdb ?? `trakt:${showIds.trakt}`;
+    const last = _maintainCache.get(cacheKey);
+    if (last && Date.now() - last < MAINTAIN_COOLDOWN_MS) return;
+    _maintainCache.set(cacheKey, Date.now());
+
     try {
         let fullyCompleted = false;
         try {

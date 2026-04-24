@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { traktClient, TraktClient, maintainShowOnWatchlist } from "@/lib/trakt";
+import { traktClient, TraktClient, TraktError, maintainShowOnWatchlist } from "@/lib/trakt";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { useUserSettings } from "@/hooks/use-user-settings";
 
@@ -59,7 +59,14 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                     }, 2000);
                 }
             } catch (e) {
+                // Skip the history-write fallback on transient rate-limit / auth
+                // errors — firing another Trakt call immediately just multiplies
+                // the rate hit. On 4xx except 401, let Trakt cool down.
+                const status = e instanceof TraktError ? e.status : undefined;
+                const isRateOrBlocked = status === 429 || status === 403 || status === 502;
+
                 if (
+                    !isRateOrBlocked &&
                     action === "stop" &&
                     progressPercent >= WATCHED_FALLBACK_THRESHOLD &&
                     fallbackMarkedRef.current !== progressIdentity

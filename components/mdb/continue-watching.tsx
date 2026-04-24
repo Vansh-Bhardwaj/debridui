@@ -29,7 +29,7 @@ function useNextEpisode(
     imdbId: string,
     type: "movie" | "show",
     season?: number,
-    episode?: number,
+    episode?: number
 ): TvSearchParams | null {
     const { data: seasons } = useQuery({
         queryKey: ["trakt", "show", "seasons", imdbId],
@@ -71,9 +71,8 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     });
     const _episodeTitle = episodes?.find((e) => e.number === item.episode)?.title;
 
-    const progressPercent = item.durationSeconds > 0
-        ? Math.min(Math.round((item.progressSeconds / item.durationSeconds) * 100), 100)
-        : 0;
+    const progressPercent =
+        item.durationSeconds > 0 ? Math.min(Math.round((item.progressSeconds / item.durationSeconds) * 100), 100) : 0;
 
     const formatTime = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -84,63 +83,77 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 
     const remainingTime = Math.max(0, item.durationSeconds - item.progressSeconds);
 
-    const handleRemove = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRemove(item);
-    }, [item, onRemove]);
+    const handleRemove = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(item);
+        },
+        [item, onRemove]
+    );
 
     const { data: addons = [] } = useUserAddons();
     const play = useStreamingStore((s) => s.play);
 
     const activeRequest = useStreamingStore((s) => s.activeRequest);
 
-    const handleResume = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (activeRequest) return;
-
-        const cached = getCachedSource(item);
-        const progressKey = {
-            imdbId: item.imdbId,
-            type: item.type,
-            ...(item.season !== undefined && item.episode !== undefined
-                ? { season: item.season, episode: item.episode }
-                : {}),
-        };
-
-        if (cached) {
-            // Instant resume — use cached URL directly
-            const addonSource = { url: cached.url, title: cached.title, addonId: "cache", addonName: "Cache" } as import("@/lib/addons/types").AddonSource;
-            useStreamingStore.getState().playSource(addonSource, cached.title, { progressKey });
-        } else {
-            // No cache — fall back to Watch Now flow
-            const enabledAddons = addons
-                .filter((a: Addon) => a.enabled)
-                .sort((a: Addon, b: Addon) => a.order - b.order)
-                .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
-
-            const title = media?.title || "Unknown";
-            const tvParams = item.type === "show" && item.season !== undefined && item.episode !== undefined
-                ? { season: item.season, episode: item.episode }
-                : undefined;
-
-            play(
-                { imdbId: item.imdbId, type: item.type, title, tvParams },
-                enabledAddons,
-                { forceAutoPlay: true },
-            );
-        }
-    }, [item, addons, play, media]);
-
     const nextEpisode = useNextEpisode(item.imdbId, item.type, item.season, item.episode);
+
+    // If the stored episode is already completed, pivot to the next unwatched
+    // episode on resume. Keeps the shelf useful across a full series arc.
+    const isCurrentCompleted = progressPercent >= 95;
+    const shouldPlayNext = item.type === "show" && isCurrentCompleted && !!nextEpisode;
+
+    const handleResume = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (activeRequest) return;
+
+            const targetSeason = shouldPlayNext ? nextEpisode!.season : item.season;
+            const targetEpisode = shouldPlayNext ? nextEpisode!.episode : item.episode;
+
+            const progressKey = {
+                imdbId: item.imdbId,
+                type: item.type,
+                ...(targetSeason !== undefined && targetEpisode !== undefined
+                    ? { season: targetSeason, episode: targetEpisode }
+                    : {}),
+            };
+
+            // Cached-URL quick-resume only applies to the same episode the user left on.
+            const cached = shouldPlayNext ? null : getCachedSource(item);
+
+            if (cached) {
+                const addonSource = {
+                    url: cached.url,
+                    title: cached.title,
+                    addonId: "cache",
+                    addonName: "Cache",
+                } as import("@/lib/addons/types").AddonSource;
+                useStreamingStore.getState().playSource(addonSource, cached.title, { progressKey });
+            } else {
+                const enabledAddons = addons
+                    .filter((a: Addon) => a.enabled)
+                    .sort((a: Addon, b: Addon) => a.order - b.order)
+                    .map((a: Addon) => ({ id: a.id, url: a.url, name: a.name }));
+
+                const title = media?.title || "Unknown";
+                const tvParams =
+                    item.type === "show" && targetSeason !== undefined && targetEpisode !== undefined
+                        ? { season: targetSeason, episode: targetEpisode }
+                        : undefined;
+
+                play({ imdbId: item.imdbId, type: item.type, title, tvParams }, enabledAddons, { forceAutoPlay: true });
+            }
+        },
+        [item, addons, play, media, shouldPlayNext, nextEpisode, activeRequest]
+    );
     // Poster fallback chain: primary → metahub → RPDB → API-based → CSS placeholder
     const primaryPoster = getPosterUrl(media?.images);
     const imdbId = item.imdbId;
-    const metahub = imdbId.startsWith("tt")
-        ? `https://images.metahub.space/poster/medium/${imdbId}/img`
-        : null;
+    const metahub = imdbId.startsWith("tt") ? `https://images.metahub.space/poster/medium/${imdbId}/img` : null;
     const rpdb = imdbId.startsWith("tt")
         ? `https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/${imdbId}.jpg`
         : null;
@@ -191,13 +204,28 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
         );
     }
 
+    // Series fully caught up → no next episode left to resume. Drop the tile
+    // so the shelf only shows items the user can actually continue.
+    if (item.type === "show" && isCurrentCompleted && !nextEpisode) {
+        return null;
+    }
+
     const title = media?.title || "Unknown";
     const mediaSlug = media?.ids?.slug || media?.ids?.imdb;
     const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
 
+    // When pivoting to the next episode, hide stale per-episode progress UI.
+    const displayedProgressPercent = shouldPlayNext ? 0 : progressPercent;
+    const displayedRemaining = shouldPlayNext ? null : remainingTime;
+
     return (
         <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative">
-            <Link href={mediaHref} className="block focus-visible:outline-none" aria-label={title} data-tv-focusable tabIndex={0}>
+            <Link
+                href={mediaHref}
+                className="block focus-visible:outline-none"
+                aria-label={title}
+                data-tv-focusable
+                tabIndex={0}>
                 <div className="relative overflow-hidden rounded-sm shadow-none transition-[box-shadow] duration-500 ease-premium group-hover:shadow-md group-hover:shadow-black/15 dark:group-hover:shadow-black/35 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <div className="aspect-2/3 relative overflow-hidden bg-muted/50 rounded-sm">
                         {posterSrc ? (
@@ -222,13 +250,15 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/60">
                             <div
                                 className="h-full bg-primary transition-[width] duration-300 ease-premium motion-reduce:transition-none"
-                                style={{ width: `${progressPercent}%` }}
+                                style={{ width: `${displayedProgressPercent}%` }}
                             />
                         </div>
 
-                        {/* Remaining time badge – bottom left above progress */}
+                        {/* Status badge — remaining time, or "Up Next" pointer when pivoting to next episode */}
                         <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/75 text-[10px] font-medium text-white/90">
-                            {formatTime(remainingTime)} left
+                            {shouldPlayNext
+                                ? `Up Next · S${String(nextEpisode!.season).padStart(2, "0")}E${String(nextEpisode!.episode).padStart(2, "0")}`
+                                : `${formatTime(displayedRemaining ?? 0)} left`}
                         </div>
                     </div>
                 </div>
@@ -239,8 +269,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 type="button"
                 onClick={handleRemove}
                 className="absolute top-1 right-1 p-1.5 rounded-sm bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition-[opacity,background-color,color] duration-200 ease-premium hover:bg-destructive hover:text-white z-20"
-                aria-label="Remove from continue watching"
-            >
+                aria-label="Remove from continue watching">
                 <X className="size-3.5" />
             </button>
 
@@ -249,24 +278,17 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 type="button"
                 onClick={handleResume}
                 className="absolute bottom-3 right-2 z-10 h-9 w-9 rounded-full bg-primary/95 flex items-center justify-center shadow-lg transition-[opacity,transform,background-color] duration-200 ease-premium sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
-                aria-label={`Resume ${title}`}
-            >
+                aria-label={`Resume ${title}`}>
                 <Play className="size-4 fill-current text-primary-foreground ml-0.5" />
             </button>
 
             {/* Next episode button */}
             {nextEpisode && (
-                <WatchButton
-                    imdbId={item.imdbId}
-                    mediaType={item.type}
-                    title={title}
-                    tvParams={nextEpisode}
-                >
+                <WatchButton imdbId={item.imdbId} mediaType={item.type} title={title} tvParams={nextEpisode}>
                     <button
                         type="button"
                         className="absolute top-1 left-1 p-1.5 rounded-sm bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition-[opacity,background-color,color] duration-200 ease-premium hover:bg-primary hover:text-primary-foreground z-20"
-                        aria-label={`Play S${String(nextEpisode.season).padStart(2, "0")}E${String(nextEpisode.episode).padStart(2, "0")}`}
-                    >
+                        aria-label={`Play S${String(nextEpisode.season).padStart(2, "0")}E${String(nextEpisode.episode).padStart(2, "0")}`}>
                         <SkipForward className="size-3.5" />
                     </button>
                 </WatchButton>
@@ -282,36 +304,42 @@ export function ContinueWatching() {
 
     // Compute items during render — filter out optimistically removed entries
     const items = progress.filter((item) => {
-        const id = item.type === "show" && item.season !== undefined && item.episode !== undefined
-            ? `${item.imdbId}:s${item.season}e${item.episode}`
-            : item.imdbId;
+        const id =
+            item.type === "show" && item.season !== undefined && item.episode !== undefined
+                ? `${item.imdbId}:s${item.season}e${item.episode}`
+                : item.imdbId;
         return !removedIds.has(id);
     });
 
-    const handleRemove = useCallback((key: ProgressKey) => {
-        // Optimistic removal from UI immediately
-        const id = key.type === "show" && key.season !== undefined && key.episode !== undefined
-            ? `${key.imdbId}:s${key.season}e${key.episode}`
-            : key.imdbId;
-        setRemovedIds((prev) => new Set([...prev, id]));
+    const handleRemove = useCallback(
+        (key: ProgressKey) => {
+            // Optimistic removal from UI immediately
+            const id =
+                key.type === "show" && key.season !== undefined && key.episode !== undefined
+                    ? `${key.imdbId}:s${key.season}e${key.episode}`
+                    : key.imdbId;
+            setRemovedIds((prev) => new Set([...prev, id]));
 
-        // Remove from localStorage
-        const storageKey = key.type === "show" && key.season !== undefined && key.episode !== undefined
-            ? `progress:${key.imdbId}:s${key.season}e${key.episode}`
-            : `progress:${key.imdbId}`;
-        try {
-            localStorage.removeItem(storageKey);
-        } catch { }
+            // Remove from localStorage
+            const storageKey =
+                key.type === "show" && key.season !== undefined && key.episode !== undefined
+                    ? `progress:${key.imdbId}:s${key.season}e${key.episode}`
+                    : `progress:${key.imdbId}`;
+            try {
+                localStorage.removeItem(storageKey);
+            } catch {}
 
-        // Remove from server, then invalidate cache so other components reflect the deletion
-        const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
-        if (key.season != null && !isNaN(key.season)) params.set("season", String(key.season));
-        if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
-        params.set("mode", "hide");
-        fetch(`/api/progress?${params}`, { method: "DELETE" })
-            .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching"] }))
-            .catch(() => { });
-    }, [queryClient]);
+            // Remove from server, then invalidate cache so other components reflect the deletion
+            const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
+            if (key.season != null && !isNaN(key.season)) params.set("season", String(key.season));
+            if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
+            params.set("mode", "hide");
+            fetch(`/api/progress?${params}`, { method: "DELETE" })
+                .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching"] }))
+                .catch(() => {});
+        },
+        [queryClient]
+    );
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const scrollingRef = useRef(false);
@@ -326,11 +354,15 @@ export function ContinueWatching() {
         if (e.key === "ArrowRight") {
             scrollingRef.current = true;
             viewport.scrollBy({ left: scrollAmount, behavior: "smooth" });
-            setTimeout(() => { scrollingRef.current = false; }, 300);
+            setTimeout(() => {
+                scrollingRef.current = false;
+            }, 300);
         } else if (e.key === "ArrowLeft") {
             scrollingRef.current = true;
             viewport.scrollBy({ left: -scrollAmount, behavior: "smooth" });
-            setTimeout(() => { scrollingRef.current = false; }, 300);
+            setTimeout(() => {
+                scrollingRef.current = false;
+            }, 300);
         }
     }, []);
 
@@ -339,7 +371,6 @@ export function ContinueWatching() {
             <section className="mb-8">
                 <h2 className="text-sm tracking-widest uppercase text-muted-foreground">Continue Watching</h2>
                 <div className="relative mt-4">
-
                     <ScrollCarousel className="-mx-4 px-4 lg:mx-0 lg:px-0">
                         <div className="flex snap-x snap-mandatory gap-4 pb-2">
                             {[1, 2, 3].map((i) => (
@@ -392,14 +423,10 @@ export function ContinueWatching() {
                         role="region"
                         aria-label="Continue watching"
                         onKeyDown={handleScrollKeyDown}
-                        className="flex snap-x snap-mandatory gap-4 pb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-                    >
+                        className="flex snap-x snap-mandatory gap-4 pb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
                         {items.map((item) => (
                             <div key={`${item.imdbId}-${item.season}-${item.episode}`} className="snap-start">
-                                <ContinueWatchingItem
-                                    item={item}
-                                    onRemove={handleRemove}
-                                />
+                                <ContinueWatchingItem item={item} onRemove={handleRemove} />
                             </div>
                         ))}
                     </div>
