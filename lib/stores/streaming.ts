@@ -1170,6 +1170,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         });
         set({ preloadedData: [] });
 
+        // Track whether this `play()` call flipped the switching overlay,
+        // so we can clear it on failure paths that never reach playSource.
+        let flippedOverlay = false;
+
         // If a single-mode preview is already open (in-player next/prev episode),
         // flip the switching overlay so the old video pauses and the user sees
         // a loader during the stream-fetch + resolution window. Cleared when
@@ -1178,8 +1182,15 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const snap = usePreviewStore.getState();
             if (snap.isOpen && snap.mode === "single" && !snap.isSwitchingSource) {
                 snap.setSwitchingSource(true);
+                flippedOverlay = true;
             }
         }
+
+        const clearOverlayOnFailure = () => {
+            if (flippedOverlay && usePreviewStore.getState().isSwitchingSource) {
+                usePreviewStore.getState().setSwitchingSource(false);
+            }
+        };
 
         const { imdbId, type, title: rawTitle, tvParams } = request;
 
@@ -1187,6 +1198,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             toast.error("No addons enabled", {
                 description: "Configure addons in settings to fetch sources",
             });
+            clearOverlayOnFailure();
             return;
         }
 
@@ -1448,20 +1460,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         }
 
         // ── Single-flight guard ──────────────────────────────────────────
-        // If a transition is already running, silently ignore this call.
-        // The overlay is already visible so the user knows navigation is underway.
         const previewStore = usePreviewStore.getState();
         if (previewStore.isSwitchingSource) return;
-
-        // ── Instant feedback ─────────────────────────────────────────────
-        // Flip the switching overlay synchronously BEFORE any await so the
-        // user sees feedback immediately (and the old video pauses via the
-        // player's effect). No more dead-waiting while trakt fetches episodes.
         previewStore.setSwitchingSource(true);
 
-        // Capture a token. Any late async result with a stale token is discarded.
         const tok = ++navigationToken;
         const isStale = () => tok !== navigationToken;
+        const clearIfStillSet = () => {
+            if (usePreviewStore.getState().isSwitchingSource) {
+                usePreviewStore.getState().setSwitchingSource(false);
+            }
+        };
 
         try {
             // ── Fast path: preloaded ─────────────────────────────────────
@@ -1474,6 +1483,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             );
 
             if (preloadedEntry) {
+                if (isStale()) {
+                    clearIfStillSet();
+                    return;
+                }
                 const progressKey = {
                     imdbId: episodeContext.imdbId,
                     type: "show" as const,
@@ -1502,9 +1515,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     ),
                 });
 
-                // playSource takes over isSwitchingSource lifecycle from here.
-                // When the pre-resolved URL is supplied, playSource clears the
-                // overlay the moment it calls setDirectUrl on the preview store.
+                // playSource owns the isSwitchingSource lifecycle from here.
+                // setDirectUrl clears it when the URL reaches the player; the
+                // error handler clears it on failure.
                 await playSource(preloadedEntry.source, preloadedEntry.title, {
                     subtitles: preloadedEntry.subtitles,
                     progressKey,
@@ -1515,6 +1528,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
 
             // ── Slow path: fetch metadata + fresh streams ────────────────
+            // IMPORTANT: play() fires showSourceToast.onPlay() → playSource()
+            // as fire-and-forget. play() returns immediately, but playSource
+            // keeps running in the background and will clear isSwitchingSource
+            // when setDirectUrl fires (or on error). We must NOT clear the
+            // flag in a finally block — let playSource own it.
             const { traktClient } = await import("@/lib/trakt");
             let targetSeason = episodeContext.season;
             let targetEpisode = nextEpisode;
@@ -1524,7 +1542,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             } catch {
                 episodes = [];
             }
-            if (isStale()) return;
+            if (isStale()) {
+                clearIfStillSet();
+                return;
+            }
 
             // Season rollover
             if (nextEpisode > episodes.length) {
@@ -1536,14 +1557,18 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 } catch {
                     nextSeasonEpisodes = [];
                 }
-                if (isStale()) return;
+                if (isStale()) {
+                    clearIfStillSet();
+                    return;
+                }
 
                 if (nextSeasonEpisodes.length === 0) {
                     toast.info("End of series", {
                         description: "You've reached the last episode",
                         position: TOAST_POSITION,
                     });
-                    return; // finally clears the overlay
+                    clearIfStillSet();
+                    return;
                 }
 
                 const epData = nextSeasonEpisodes.find((entry) => entry.number === 1);
@@ -1560,6 +1585,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     addons,
                     { ...options, isBinge: true }
                 );
+                // play() fires playSource() as fire-and-forget; playSource
+                // owns the isSwitchingSource flag from here. Don't clear it.
                 return;
             }
 
@@ -1577,16 +1604,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 addons,
                 { ...options, isBinge: true }
             );
+            // playSource owns the flag from here.
         } catch (error) {
             console.error("playNextEpisode failed:", error);
             toast.error("Couldn't load next episode", { position: TOAST_POSITION });
-        } finally {
-            // Ensure the overlay is cleared if we bailed before playSource took over.
-            // playSource itself owns the flag while it runs; only clear if this
-            // navigation is still the latest one AND playSource didn't already clear it.
-            if (!isStale() && usePreviewStore.getState().isSwitchingSource) {
-                usePreviewStore.getState().setSwitchingSource(false);
-            }
+            clearIfStillSet();
         }
     },
 
@@ -1600,13 +1622,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             return;
         }
 
-        // Single-flight: same guard as playNextEpisode
         const previewStore = usePreviewStore.getState();
         if (previewStore.isSwitchingSource) return;
         previewStore.setSwitchingSource(true);
 
         const tok = ++navigationToken;
         const isStale = () => tok !== navigationToken;
+        const clearIfStillSet = () => {
+            if (usePreviewStore.getState().isSwitchingSource) {
+                usePreviewStore.getState().setSwitchingSource(false);
+            }
+        };
 
         try {
             const prevEpisode = episodeContext.episode - 1;
@@ -1618,6 +1644,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         description: "You're at the first episode",
                         position: TOAST_POSITION,
                     });
+                    clearIfStillSet();
                     return;
                 }
 
@@ -1628,7 +1655,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 } catch {
                     prevSeasonEpisodes = [];
                 }
-                if (isStale()) return;
+                if (isStale()) {
+                    clearIfStillSet();
+                    return;
+                }
 
                 const lastEpisode = prevSeasonEpisodes.length > 0 ? prevSeasonEpisodes.length : 1;
                 await play(
@@ -1657,10 +1687,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         } catch (error) {
             console.error("playPreviousEpisode failed:", error);
             toast.error("Couldn't load previous episode", { position: TOAST_POSITION });
-        } finally {
-            if (!isStale() && usePreviewStore.getState().isSwitchingSource) {
-                usePreviewStore.getState().setSwitchingSource(false);
-            }
+            clearIfStillSet();
         }
     },
 
