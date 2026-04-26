@@ -25,6 +25,7 @@ import {
     ChevronRight,
     ArrowLeft,
     Layers,
+    Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
@@ -449,6 +450,11 @@ export function LegacyVideoPreview({
     const [lastSpeedProbeMbps, setLastSpeedProbeMbps] = useState<number | null>(null);
     const speedProbeInFlightRef = useRef(false);
     const lastSpeedProbeAtRef = useRef(0);
+    // Saves the playback position before a source switch so we can restore it after reload
+    const sourceSwitchResumeRef = useRef<number | null>(null);
+    // Tracks the previous finalUrl to detect URL changes (source switch / new episode).
+    // Initialized to empty string; first time finalUrl is set it counts as initial load (no reload needed).
+    const prevFinalUrlRef = useRef<string>("");
 
     // User's preferred subtitle language from settings
     const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
@@ -466,6 +472,7 @@ export function LegacyVideoPreview({
     const previewDirectTitle = usePreviewStore((s) => s.directTitle);
     const previewProgressKeyStore = usePreviewStore((s) => s.progressKey);
     const previewDirectSubs = usePreviewStore((s) => s.directSubtitles);
+    const isSwitchingSource = usePreviewStore((s) => s.isSwitchingSource);
     const showInlineSourcePicker = allFetchedSources.length > 1 && !!(previewProgressKeyStore ?? progressKey);
     const { data: introSegments } = useIntroSegments(progressKey);
     // Track which segments have been auto-skipped (reset on new episode)
@@ -575,6 +582,15 @@ export function LegacyVideoPreview({
         setAutoNextCountdown(null);
     }, []);
 
+    // ── Pause video immediately when a source switch / episode transition starts ──
+    // `isSwitchingSource` is set by the streaming store before URL resolution begins,
+    // ensuring the old stream goes silent the moment the user triggers next/switch.
+    useEffect(() => {
+        if (!isSwitchingSource) return;
+        const video = videoRef.current;
+        if (video && !video.paused) video.pause();
+    }, [isSwitchingSource]);
+
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
     const [useCompactControls, setUseCompactControls] = useState(false);
@@ -618,6 +634,49 @@ export function LegacyVideoPreview({
     // Check if we have an HLS stream available
     const isHls = !!streamingLinks?.apple;
     const shouldShowWarning = hasCodecIssue && !isHls && !isUsingTranscodedStream;
+
+    // ── Handle finalUrl changes: source switch or new episode URL arriving ──
+    // When `finalUrl` changes (new resolved download URL from the streaming store),
+    // we reset error/fallback state and trigger playback of the new stream.
+    // For source switches (same episode): save current time first so we can restore it.
+    // For new episodes: hasSeenkedToInitialRef was already reset in the episode-key
+    // change effect, so we skip position save and let the normal resume logic run.
+    useEffect(() => {
+        if (prevFinalUrlRef.current === finalUrl) return;
+        const isInitialSet = prevFinalUrlRef.current === "";
+        prevFinalUrlRef.current = finalUrl;
+
+        if (!finalUrl || isInitialSet) return;
+
+        // Detect source-switch vs new-episode: if hasSeenkedToInitialRef is still true
+        // the episode key didn't change — this is a source switch on the same episode.
+        const video = videoRef.current;
+        const isSameEpisode = hasSeenkedToInitialRef.current;
+        const currentPos = video?.currentTime ?? 0;
+        if (isSameEpisode && currentPos > 5) {
+            // Save pre-switch position so handleLoadedMetadata can restore it
+            sourceSwitchResumeRef.current = currentPos;
+        } else {
+            sourceSwitchResumeRef.current = null;
+        }
+
+        // Reset per-stream state
+        setError(false);
+        triedUrlResolveRef.current = false;
+        setTriedTranscodeFallback(false);
+        hasPreloaded.current = false;
+        setIsLoading(true);
+        cancelAutoNext();
+
+        // hls.js manages its own lifecycle in its [finalUrl, useHlsJs] effect
+        if (useHlsJs) return;
+
+        if (!video) return;
+        video.src = finalUrl;
+        video.load();
+        video.play().catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [finalUrl, useHlsJs, cancelAutoNext]);
 
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
@@ -750,7 +809,7 @@ export function LegacyVideoPreview({
         return () => document.removeEventListener("keydown", handler, true);
     }, []);
 
-    // Reset skipped-segment tracking whenever the episode changes.
+    // Reset state whenever the episode changes (new progressKey).
     // Uses a serialized key instead of reference equality so new objects
     // with the same imdbId/season/episode don't trigger a false reset.
     const prevProgressKeyStrRef = useRef(serializeProgressKey(progressKey));
@@ -758,6 +817,11 @@ export function LegacyVideoPreview({
         const cur = serializeProgressKey(progressKey);
         if (prevProgressKeyStrRef.current !== cur) {
             prevProgressKeyStrRef.current = cur;
+
+            // Cancel any running auto-next countdown so it can't double-navigate
+            cancelAutoNext();
+            // Clear any saved source-switch resume position (new episode = start fresh)
+            sourceSwitchResumeRef.current = null;
 
             // Stop the old media pipeline immediately to prevent dual audio
             // when switching episodes within the same player instance.
@@ -768,10 +832,15 @@ export function LegacyVideoPreview({
                 video.load();
             }
 
+            // Show loading state immediately while the new URL resolves
+            setIsLoading(true);
+
             skippedSegmentsRef.current = new Set();
             hasMarkedCompletedRef.current = false;
             hasShownResumeToastRef.current = false;
             hasPreloaded.current = false;
+            // Allow handleLoad to seek to the new episode's start / resume position
+            hasSeenkedToInitialRef.current = false;
             historySessionIdRef.current =
                 typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
             lastHistoryEmitRef.current = null;
@@ -789,7 +858,7 @@ export function LegacyVideoPreview({
             setAudioTrackCount(0);
             setSelectedAudioIndex(0);
         }
-    }, [progressKey]);
+    }, [progressKey, cancelAutoNext]);
 
     const runBufferingSpeedProbe = useCallback(
         async (opts?: { auto?: boolean }) => {
@@ -1138,8 +1207,13 @@ export function LegacyVideoPreview({
             el.defaultPlaybackRate = playbackRate;
             el.playbackRate = playbackRate;
             setDuration(el.duration || 0);
-            if (hasSeenkedToInitialRef.current) {
-                // On transcode fallback/source switch, prefer the user's current
+            if (sourceSwitchResumeRef.current !== null) {
+                // Source switch: restore the exact pre-switch playback position
+                const restorePos = sourceSwitchResumeRef.current;
+                sourceSwitchResumeRef.current = null;
+                el.currentTime = restorePos;
+            } else if (hasSeenkedToInitialRef.current) {
+                // On transcode fallback, prefer the user's current
                 // playback position over the initial resume point — the user may
                 // have watched further since the original seek.
                 const currentPos = el.currentTime;
@@ -1424,9 +1498,12 @@ export function LegacyVideoPreview({
                 setDuration((prev) => (prev > 0 ? prev : dur));
             }
 
-            // Preload next episode at outro start (if available) or 90%
+            // Preload next episode at outro start (if available) or 70%.
+            // 70% gives the preload pipeline enough runway to: fetch streams from
+            // all addons, select the best source, AND pre-resolve the download URL
+            // — so by the time the auto-next popup fires the switch is instant.
             const outroSec = introSegments?.outro?.start_sec;
-            const preloadThreshold = outroSec ?? (dur > 0 ? dur * 0.9 : Infinity);
+            const preloadThreshold = outroSec ?? (dur > 0 ? dur * 0.7 : Infinity);
             if (dur > 0 && time >= preloadThreshold && !hasPreloaded.current) {
                 hasPreloaded.current = true;
                 onPreload?.();
@@ -3468,6 +3545,17 @@ export function LegacyVideoPreview({
                                     </button>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Source-switching / next-episode loading overlay
+                        Rendered INSIDE the player container so it remains visible
+                        during native fullscreen (elements outside the fullscreen
+                        element are hidden by the browser). */}
+                    {isSwitchingSource && (
+                        <div className="absolute inset-0 z-[55] flex flex-col items-center justify-center gap-3 pointer-events-none animate-in fade-in-0 duration-200" style={{ background: "rgba(0,0,0,0.72)" }}>
+                            <Loader2 className="h-10 w-10 animate-spin text-white/90" />
+                            <p className="text-sm font-medium text-white/80">Loading stream…</p>
                         </div>
                     )}
 

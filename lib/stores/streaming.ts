@@ -52,6 +52,14 @@ export interface EpisodeContext {
 
 export interface PreloadedData {
     source: AddonSource;
+    /**
+     * The fully-resolved download URL (chased through addon redirect chains).
+     * Pre-resolved during preloading so next-episode switching is instant —
+     * playSource skips the resolveStreamUrl round-trip when this is present.
+     */
+    resolvedUrl: string;
+    /** Redirect chain captured during URL pre-resolution (for streaming-links extraction). */
+    redirectChain?: string[];
     allFetchedSources?: AddonSource[];
     subtitles: AddonSubtitle[];
     title: string;
@@ -95,7 +103,18 @@ interface StreamingState {
     playSource: (
         source: AddonSource,
         title: string,
-        options?: { subtitles?: AddonSubtitle[]; progressKey?: ProgressKey }
+        options?: {
+            subtitles?: AddonSubtitle[];
+            progressKey?: ProgressKey;
+            /**
+             * Pre-resolved download URL (from preloadEpisodeTarget).
+             * When provided, playSource skips the resolveStreamUrl round-trip
+             * and begins playback instantly.
+             */
+            resolvedUrl?: string;
+            /** Redirect chain associated with resolvedUrl. */
+            redirectChain?: string[];
+        }
     ) => Promise<void>;
     playNextEpisode: (
         addons: { id: string; url: string; name: string }[],
@@ -548,10 +567,19 @@ async function preloadEpisodeTarget(
     };
     const result = selectBestSourceForBinge(allSources, streamingSettings, selectionOptions);
 
-    if (!result.source) return null;
+    if (!result.source || !result.source.url) return null;
+
+    // Pre-resolve the stream URL now so next-episode switching is instant.
+    // resolveStreamUrl follows addon proxy/redirect chains to the actual debrid
+    // download link and caches the result in resolvedStreamCache. By doing this
+    // during preloading (well before playback) we eliminate the 2–3 s round-trip
+    // that would otherwise happen when the user clicks "Next Episode".
+    const { url: resolvedUrl, chain: redirectChain } = await resolveStreamUrl(result.source.url);
 
     return {
         source: result.source,
+        resolvedUrl,
+        redirectChain,
         allFetchedSources: mergePlayingIntoSourceList(result.source, dedupeSourcesByUrl(allSources)),
         subtitles,
         title: target.title,
@@ -978,15 +1006,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     ? titleMemory.preferredPlayer
                     : useSettingsStore.getState().get("mediaPlayer");
 
-            // For browser playback, open the preview dialog immediately (loading state)
-            // before resolving the URL, so the user sees instant feedback.
+            // For browser playback, open the preview dialog immediately so the user
+            // sees instant feedback. When a pre-resolved URL is available (preloaded
+            // path), we can supply it right away — no loading spinner at all.
             if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
+                const earlyUrl = options?.resolvedUrl ?? ""; // "" → loading spinner
                 if (reuseOpenPreview) {
-                    // Keep existing video element mounted (keeps fullscreen alive).
-                    // Just refresh title/subtitles/progressKey. URL is left untouched
-                    // until we resolve the real one a moment below, so the old stream
-                    // keeps playing without a loader flash.
+                    // Keep existing video element mounted (preserves fullscreen).
+                    // Supply the pre-resolved URL immediately if we have it so the
+                    // player starts loading the new stream without any delay.
                     usePreviewStore.getState().updateSingleSource({
+                        url: earlyUrl || undefined,
                         title: fileName,
                         subtitles,
                         progressKey: options?.progressKey,
@@ -994,7 +1024,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     });
                 } else {
                     usePreviewStore.getState().openSinglePreview({
-                        url: "", // Empty → shows loading spinner in dialog
+                        url: earlyUrl, // "" → shows loading spinner; pre-resolved → instant
                         title: fileName,
                         fileType: FileType.VIDEO,
                         subtitles,
@@ -1003,8 +1033,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 }
             }
 
-            // Resolve addon proxy/redirect URL to the actual debrid download link
-            const resolved = await resolveStreamUrl(source.url);
+            // Resolve addon proxy/redirect URL to the actual debrid download link.
+            // When a pre-resolved URL is provided (from preloadEpisodeTarget) we skip
+            // the network round-trip entirely — this is what makes next-episode
+            // switching instant when the preload pipeline ran ahead of time.
+            const resolved = options?.resolvedUrl
+                ? { url: options.resolvedUrl, chain: options.redirectChain }
+                : await resolveStreamUrl(source.url);
             if (hydrationToken !== playSourceToken) return;
 
             const playUrl = resolved.url;
@@ -1441,6 +1476,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             playSource(preloadedEntry.source, preloadedEntry.title, {
                 subtitles: preloadedEntry.subtitles,
                 progressKey,
+                // Skip resolveStreamUrl — URL was resolved during preloading
+                resolvedUrl: preloadedEntry.resolvedUrl,
+                redirectChain: preloadedEntry.redirectChain,
             });
 
             toast.success("Playing next episode", { description: preloadedEntry.title, position: TOAST_POSITION });
