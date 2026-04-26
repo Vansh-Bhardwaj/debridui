@@ -582,14 +582,20 @@ export function LegacyVideoPreview({
         setAutoNextCountdown(null);
     }, []);
 
-    // ── Pause video immediately when a source switch / episode transition starts ──
-    // `isSwitchingSource` is set by the streaming store before URL resolution begins,
-    // ensuring the old stream goes silent the moment the user triggers next/switch.
+    // ── When a source switch / episode transition starts ──
+    // `isSwitchingSource` is set by the streaming store synchronously, the moment
+    // the user triggers next/prev/source-switch. We use it as the single source
+    // of truth for "transition in progress":
+    //   1. Pause the old video so the audio goes silent immediately.
+    //   2. Cancel any running auto-next countdown so the popup + timer vanish
+    //      (prevents the "countdown keeps running while new stream loads" bug
+    //      and prevents the countdown from double-firing navigation).
     useEffect(() => {
         if (!isSwitchingSource) return;
         const video = videoRef.current;
         if (video && !video.paused) video.pause();
-    }, [isSwitchingSource]);
+        cancelAutoNext();
+    }, [isSwitchingSource, cancelAutoNext]);
 
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
@@ -675,7 +681,6 @@ export function LegacyVideoPreview({
         video.src = finalUrl;
         video.load();
         video.play().catch(() => {});
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalUrl, useHlsJs, cancelAutoNext]);
 
     const openInExternalPlayer = useCallback(
@@ -1569,32 +1574,62 @@ export function LegacyVideoPreview({
                 }
             }
 
-            // Show next-episode popup before end.
-            // Priority: IntroDB outro start time > user's nextEpisodePromptSeconds setting.
+            // ── Next-episode popup trigger ──────────────────────────────
+            // Show a brief countdown popup near the end so the user can either
+            // click to advance instantly, dismiss, or let it auto-advance.
+            //
+            // Window:
+            //   - Base: `nextEpisodePromptSeconds` from settings, clamped to [3, 15]s
+            //     so the popup never shows for huge chunks of the episode.
+            //   - If IntroDB reports an outro that starts within the base window,
+            //     use the outro start as the trigger (so the popup lines up with
+            //     the credits). Outros that begin earlier than the window are
+            //     used for preload only (above), NOT for the popup.
+            //
+            // Guards:
+            //   - Don't (re-)start while a transition is in progress.
+            //   - Don't (re-)start while an existing countdown is running.
             if (
                 onNextRef.current &&
                 autoNextEpisode &&
                 Number.isFinite(dur) &&
                 dur > 0 &&
+                !isSwitchingSourceRef.current &&
                 autoNextCountdownRef.current === null &&
                 countdownTimerRef.current === null
             ) {
+                const promptSeconds = Math.max(3, Math.min(nextEpisodePromptSeconds || 10, 15));
                 const outroStart = introSegments?.outro?.start_sec;
-                // Use outro start as the trigger point if IntroDB provides it
-                const triggerAt = outroStart != null ? dur - outroStart : nextEpisodePromptSeconds;
+                const outroFromEnd = outroStart != null ? dur - outroStart : Infinity;
+                // Use outroStart only if it's inside the popup window (≤ promptSeconds
+                // from end) — otherwise preload uses it and popup uses the base window.
+                const triggerAt = Math.min(promptSeconds, outroFromEnd);
                 const remaining = dur - time;
                 if (remaining > 0 && remaining <= triggerAt) {
-                    const secs = Math.ceil(remaining);
+                    const secs = Math.max(1, Math.min(Math.ceil(remaining), 15));
                     setAutoNextCountdown(secs);
                     let left = secs;
                     countdownTimerRef.current = setInterval(() => {
+                        // Abort the countdown if a transition was started by something
+                        // else (user click, keyboard shortcut, source switch).
+                        if (isSwitchingSourceRef.current) {
+                            if (countdownTimerRef.current) {
+                                clearInterval(countdownTimerRef.current);
+                                countdownTimerRef.current = null;
+                            }
+                            setAutoNextCountdown(null);
+                            return;
+                        }
                         left--;
                         if (left <= 0) {
                             clearInterval(countdownTimerRef.current!);
                             countdownTimerRef.current = null;
                             setAutoNextCountdown(null);
-                            // Advance to next episode immediately when countdown expires
-                            onNextRef.current?.();
+                            // Advance — guardedNav applies the single-flight check
+                            // so if the user already clicked the button we don't
+                            // double-fire.
+                            const next = onNextRef.current;
+                            if (next && !isSwitchingSourceRef.current) next();
                         } else {
                             setAutoNextCountdown(left);
                         }
@@ -1657,32 +1692,22 @@ export function LegacyVideoPreview({
                 forceSync("play_complete", "ended");
                 emitHistory("complete", true);
             }
-            // Auto-next: if countdown was already shown pre-end, advance now.
-            // Otherwise start a short countdown.
-            if (onNext && autoNextEpisode) {
-                const cb = onNext;
+            // Auto-next at end of video:
+            //   - If a transition is already underway (user clicked popup / Shift+N
+            //     / arrow while the countdown was running), do nothing — it's handled.
+            //   - If the pre-end popup already ran, it already called onNext.
+            //   - Otherwise (short video, promptSeconds=0, or popup was dismissed),
+            //     fire onNext directly. The single-flight guard in the store ensures
+            //     duplicate dispatches are no-ops.
+            if (onNext && autoNextEpisode && !isSwitchingSourceRef.current) {
+                // Cancel any stale timer state first (defensive — the popup's own
+                // timer should have been cleared already).
                 if (countdownTimerRef.current) {
-                    // Countdown was running (triggered during timeupdate) — advance immediately
                     clearInterval(countdownTimerRef.current);
                     countdownTimerRef.current = null;
-                    setAutoNextCountdown(null);
-                    cb();
-                } else {
-                    // Fallback: video ended without pre-end popup (short video or setting = 0)
-                    setAutoNextCountdown(5);
-                    let remaining = 5;
-                    countdownTimerRef.current = setInterval(() => {
-                        remaining--;
-                        if (remaining <= 0) {
-                            clearInterval(countdownTimerRef.current!);
-                            countdownTimerRef.current = null;
-                            setAutoNextCountdown(null);
-                            cb();
-                        } else {
-                            setAutoNextCountdown(remaining);
-                        }
-                    }, 1000);
                 }
+                setAutoNextCountdown(null);
+                onNext();
             }
         };
 
@@ -2251,39 +2276,34 @@ export function LegacyVideoPreview({
         }
     }, [showControls, openMenu, setOpenMenuTracked]);
 
-    // Guard against rapid episode navigation clicks
-    const navGuardRef = useRef(false);
+    // Single-flight guard for next/prev episode and source-switch clicks.
+    // We use the store's `isSwitchingSource` flag (read via a ref for sync access)
+    // as the single source of truth — it's set synchronously at the start of
+    // playNextEpisode/playPreviousEpisode/playSource and cleared in finally.
+    // This means rapid clicks, countdown firing, keyboard shortcuts, and arrow
+    // buttons all coordinate correctly: only one transition runs at a time.
+    const isSwitchingSourceRef = useRef(isSwitchingSource);
+    useEffect(() => {
+        isSwitchingSourceRef.current = isSwitchingSource;
+    }, [isSwitchingSource]);
+
     const guardedNav = useCallback((fn?: () => void) => {
-        if (!fn || navGuardRef.current) return;
-        navGuardRef.current = true;
+        if (!fn) return;
+        if (isSwitchingSourceRef.current) return;
         fn();
-        setTimeout(() => {
-            navGuardRef.current = false;
-        }, 1000);
     }, []);
 
     const pickAlternateSource = useCallback(
         (src: AddonSource) => {
-            // Ignore clicks on the already-active source (dropdown also disables it,
-            // but guard here too against double-taps / keyboard).
+            // Ignore clicks on the already-active source.
             if (src.url === selectedSourceFromStore?.url) {
                 setOpenMenuTracked(null);
                 return;
             }
-            // Debounce via the same nav guard used for prev/next episode — one
-            // switch at a time, 1 s cooldown, no stacked pipelines on rapid clicks.
-            if (navGuardRef.current) return;
-            navGuardRef.current = true;
-            setTimeout(() => {
-                navGuardRef.current = false;
-            }, 1000);
-
-            // Immediate visual feedback: pause the current video so the old stream
-            // isn't audibly playing while the new URL resolves. The preview store
-            // flips `isSwitchingSource` inside playSource which overlays a loader.
-            const v = videoRef.current;
-            if (v && !v.paused) v.pause();
-            setIsLoading(true);
+            // Shared single-flight guard: if a transition is already running, ignore.
+            // playSource itself flips isSwitchingSource=true synchronously, so once we
+            // get past this check no other navigation will race us.
+            if (isSwitchingSourceRef.current) return;
 
             const pk = previewProgressKeyStore ?? progressKey ?? undefined;
             const subPick = previewDirectSubs?.length ? previewDirectSubs : subtitles;
@@ -2582,7 +2602,9 @@ export function LegacyVideoPreview({
                 case "N":
                     if (event.shiftKey && onNextRef.current) {
                         event.preventDefault();
-                        if (autoNextCountdown !== null) markCurrentAsCompleted();
+                        // Single-flight guard — ignore if a transition is already running
+                        if (isSwitchingSourceRef.current) break;
+                        if (autoNextCountdownRef.current !== null) markCurrentAsCompleted();
                         cancelAutoNext();
                         onNextRef.current();
                     }
@@ -2599,8 +2621,8 @@ export function LegacyVideoPreview({
                 case "p":
                 case "P":
                     if (event.shiftKey) {
-                        // Shift+P: previous episode
-                        if (onPrev) {
+                        // Shift+P: previous episode (single-flight)
+                        if (onPrev && !isSwitchingSourceRef.current) {
                             event.preventDefault();
                             onPrev();
                         }

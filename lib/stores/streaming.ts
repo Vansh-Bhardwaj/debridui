@@ -137,6 +137,13 @@ let requestId = 0;
 let preloadRequestId = 0;
 /** Bumps on each `playSource` call so late source hydration does not overwrite a newer play. */
 let playSourceToken = 0;
+/**
+ * Single-flight token for episode navigation (next / previous).
+ * A navigation call is valid only while its captured token still matches this value.
+ * Any async result from a superseded token is discarded, guaranteeing that the
+ * user's most recent navigation wins even if earlier ones are still in-flight.
+ */
+let navigationToken = 0;
 
 /**
  * Cached browser codec support detection.
@@ -1215,11 +1222,16 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             set({ episodeContext: null });
         }
 
-        toastId = toast.loading("Finding best source...", {
-            description: displayTitle,
-            position: TOAST_POSITION,
-            cancel: { label: "Cancel", onClick: () => get().cancel() },
-        });
+        // Skip the loader toast during binge navigation — the in-player
+        // "Loading stream…" overlay already conveys progress, and stacking a
+        // second notification is noisy + fights with the overlay visually.
+        if (!isBinge) {
+            toastId = toast.loading("Finding best source...", {
+                description: displayTitle,
+                position: TOAST_POSITION,
+                cancel: { label: "Cancel", onClick: () => get().cancel() },
+            });
+        }
         toastCreatedAt = Date.now();
 
         try {
@@ -1353,7 +1365,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 source,
                 title: displayTitle,
                 isCached: result.isCached,
-                autoPlay: forceAutoPlay || streamingSettings.autoPlay,
+                // Binge navigation is a direct user intent ("next episode") — always
+                // auto-play without popping a toast, regardless of the autoPlay setting.
+                autoPlay: forceAutoPlay || isBinge || streamingSettings.autoPlay,
                 allowUncached: streamingSettings.allowUncached,
                 onPlay: () =>
                     playSource(source, displayTitle, {
@@ -1433,93 +1447,120 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             return;
         }
 
-        const nextEpisode = episodeContext.episode + 1;
-        let targetSeason = episodeContext.season;
-        let targetEpisode = nextEpisode;
+        // ── Single-flight guard ──────────────────────────────────────────
+        // If a transition is already running, silently ignore this call.
+        // The overlay is already visible so the user knows navigation is underway.
+        const previewStore = usePreviewStore.getState();
+        if (previewStore.isSwitchingSource) return;
 
-        const preloadedEntry = preloadedData.find(
-            (entry) =>
-                entry.imdbId === episodeContext.imdbId &&
-                ((entry.season === episodeContext.season && entry.episode === nextEpisode) ||
-                    (entry.season === episodeContext.season + 1 && entry.episode === 1))
-        );
+        // ── Instant feedback ─────────────────────────────────────────────
+        // Flip the switching overlay synchronously BEFORE any await so the
+        // user sees feedback immediately (and the old video pauses via the
+        // player's effect). No more dead-waiting while trakt fetches episodes.
+        previewStore.setSwitchingSource(true);
 
-        if (preloadedEntry) {
-            const progressKey = {
-                imdbId: episodeContext.imdbId,
-                type: "show" as const,
-                season: preloadedEntry.season,
-                episode: preloadedEntry.episode,
-            };
-
-            set({
-                episodeContext: {
-                    ...episodeContext,
-                    season: preloadedEntry.season,
-                    episode: preloadedEntry.episode,
-                    title: cleanShowTitle(preloadedEntry.title),
-                },
-                selectedSource: preloadedEntry.source,
-                allFetchedSources: preloadedEntry.allFetchedSources || [preloadedEntry.source],
-                pendingPlayContext: {
-                    displayTitle: preloadedEntry.title,
-                    subtitles: preloadedEntry.subtitles,
-                    progressKey,
-                },
-                preloadedData: preloadedData.filter(
-                    (entry) =>
-                        getPreloadKey(entry.imdbId, entry.season, entry.episode) !==
-                        getPreloadKey(preloadedEntry.imdbId, preloadedEntry.season, preloadedEntry.episode)
-                ),
-            });
-
-            playSource(preloadedEntry.source, preloadedEntry.title, {
-                subtitles: preloadedEntry.subtitles,
-                progressKey,
-                // Skip resolveStreamUrl — URL was resolved during preloading
-                resolvedUrl: preloadedEntry.resolvedUrl,
-                redirectChain: preloadedEntry.redirectChain,
-            });
-
-            toast.success("Playing next episode", { description: preloadedEntry.title, position: TOAST_POSITION });
-            return;
-        }
+        // Capture a token. Any late async result with a stale token is discarded.
+        const tok = ++navigationToken;
+        const isStale = () => tok !== navigationToken;
 
         try {
-            const { traktClient } = await import("@/lib/trakt");
-            const episodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
-            const currentSeasonEpCount = episodes.length;
+            // ── Fast path: preloaded ─────────────────────────────────────
+            const nextEpisode = episodeContext.episode + 1;
+            const preloadedEntry = preloadedData.find(
+                (entry) =>
+                    entry.imdbId === episodeContext.imdbId &&
+                    ((entry.season === episodeContext.season && entry.episode === nextEpisode) ||
+                        (entry.season === episodeContext.season + 1 && entry.episode === 1))
+            );
 
-            if (nextEpisode > currentSeasonEpCount) {
+            if (preloadedEntry) {
+                const progressKey = {
+                    imdbId: episodeContext.imdbId,
+                    type: "show" as const,
+                    season: preloadedEntry.season,
+                    episode: preloadedEntry.episode,
+                };
+
+                set({
+                    episodeContext: {
+                        ...episodeContext,
+                        season: preloadedEntry.season,
+                        episode: preloadedEntry.episode,
+                        title: cleanShowTitle(preloadedEntry.title),
+                    },
+                    selectedSource: preloadedEntry.source,
+                    allFetchedSources: preloadedEntry.allFetchedSources || [preloadedEntry.source],
+                    pendingPlayContext: {
+                        displayTitle: preloadedEntry.title,
+                        subtitles: preloadedEntry.subtitles,
+                        progressKey,
+                    },
+                    preloadedData: preloadedData.filter(
+                        (entry) =>
+                            getPreloadKey(entry.imdbId, entry.season, entry.episode) !==
+                            getPreloadKey(preloadedEntry.imdbId, preloadedEntry.season, preloadedEntry.episode)
+                    ),
+                });
+
+                // playSource takes over isSwitchingSource lifecycle from here.
+                // When the pre-resolved URL is supplied, playSource clears the
+                // overlay the moment it calls setDirectUrl on the preview store.
+                await playSource(preloadedEntry.source, preloadedEntry.title, {
+                    subtitles: preloadedEntry.subtitles,
+                    progressKey,
+                    resolvedUrl: preloadedEntry.resolvedUrl,
+                    redirectChain: preloadedEntry.redirectChain,
+                });
+                return;
+            }
+
+            // ── Slow path: fetch metadata + fresh streams ────────────────
+            const { traktClient } = await import("@/lib/trakt");
+            let targetSeason = episodeContext.season;
+            let targetEpisode = nextEpisode;
+            let episodes: Awaited<ReturnType<typeof traktClient.getShowEpisodes>> = [];
+            try {
+                episodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
+            } catch {
+                episodes = [];
+            }
+            if (isStale()) return;
+
+            // Season rollover
+            if (nextEpisode > episodes.length) {
                 targetSeason += 1;
                 targetEpisode = 1;
-
+                let nextSeasonEpisodes: typeof episodes = [];
                 try {
-                    const nextSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
-                    if (nextSeasonEpisodes.length === 0) throw new Error("No episodes");
-
-                    const epData = nextSeasonEpisodes.find((entry) => entry.number === 1);
-                    const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
-                    const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${titleSuffix}`;
-
-                    await play(
-                        {
-                            imdbId: episodeContext.imdbId,
-                            type: "show",
-                            title: nextTitle,
-                            tvParams: { season: targetSeason, episode: 1 },
-                        },
-                        addons,
-                        { ...options, isBinge: true }
-                    );
-                    return;
+                    nextSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, targetSeason);
                 } catch {
+                    nextSeasonEpisodes = [];
+                }
+                if (isStale()) return;
+
+                if (nextSeasonEpisodes.length === 0) {
                     toast.info("End of series", {
                         description: "You've reached the last episode",
                         position: TOAST_POSITION,
                     });
-                    return;
+                    return; // finally clears the overlay
                 }
+
+                const epData = nextSeasonEpisodes.find((entry) => entry.number === 1);
+                const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
+                const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${titleSuffix}`;
+
+                await play(
+                    {
+                        imdbId: episodeContext.imdbId,
+                        type: "show",
+                        title: nextTitle,
+                        tvParams: { season: targetSeason, episode: 1 },
+                    },
+                    addons,
+                    { ...options, isBinge: true }
+                );
+                return;
             }
 
             const epData = episodes.find((entry) => entry.number === nextEpisode);
@@ -1537,17 +1578,15 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 { ...options, isBinge: true }
             );
         } catch (error) {
-            console.error("Failed to navigate/fetch metadata:", error);
-            await play(
-                {
-                    imdbId: episodeContext.imdbId,
-                    type: "show",
-                    title: episodeContext.title,
-                    tvParams: { season: targetSeason, episode: targetEpisode },
-                },
-                addons,
-                { ...options, isBinge: true }
-            );
+            console.error("playNextEpisode failed:", error);
+            toast.error("Couldn't load next episode", { position: TOAST_POSITION });
+        } finally {
+            // Ensure the overlay is cleared if we bailed before playSource took over.
+            // playSource itself owns the flag while it runs; only clear if this
+            // navigation is still the latest one AND playSource didn't already clear it.
+            if (!isStale() && usePreviewStore.getState().isSwitchingSource) {
+                usePreviewStore.getState().setSwitchingSource(false);
+            }
         }
     },
 
@@ -1561,55 +1600,68 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             return;
         }
 
-        const prevEpisode = episodeContext.episode - 1;
+        // Single-flight: same guard as playNextEpisode
+        const previewStore = usePreviewStore.getState();
+        if (previewStore.isSwitchingSource) return;
+        previewStore.setSwitchingSource(true);
 
-        if (prevEpisode < 1) {
-            const prevSeason = episodeContext.season - 1;
-            if (prevSeason >= 1) {
-                // Fetch the previous season's episode list to find the last episode
-                try {
-                    const { traktClient } = await import("@/lib/trakt");
-                    const prevSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, prevSeason);
-                    const lastEpisode = prevSeasonEpisodes.length > 0 ? prevSeasonEpisodes.length : 1;
-                    await play(
-                        {
-                            imdbId: episodeContext.imdbId,
-                            type: "show",
-                            title: episodeContext.title,
-                            tvParams: { season: prevSeason, episode: lastEpisode },
-                        },
-                        addons,
-                        { ...options, isBinge: true }
-                    );
-                } catch {
-                    // Fallback to episode 1 if metadata fetch fails
-                    await play(
-                        {
-                            imdbId: episodeContext.imdbId,
-                            type: "show",
-                            title: episodeContext.title,
-                            tvParams: { season: prevSeason, episode: 1 },
-                        },
-                        addons,
-                        { ...options, isBinge: true }
-                    );
+        const tok = ++navigationToken;
+        const isStale = () => tok !== navigationToken;
+
+        try {
+            const prevEpisode = episodeContext.episode - 1;
+
+            if (prevEpisode < 1) {
+                const prevSeason = episodeContext.season - 1;
+                if (prevSeason < 1) {
+                    toast.info("Beginning of series", {
+                        description: "You're at the first episode",
+                        position: TOAST_POSITION,
+                    });
+                    return;
                 }
+
+                const { traktClient } = await import("@/lib/trakt");
+                let prevSeasonEpisodes: Awaited<ReturnType<typeof traktClient.getShowEpisodes>> = [];
+                try {
+                    prevSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, prevSeason);
+                } catch {
+                    prevSeasonEpisodes = [];
+                }
+                if (isStale()) return;
+
+                const lastEpisode = prevSeasonEpisodes.length > 0 ? prevSeasonEpisodes.length : 1;
+                await play(
+                    {
+                        imdbId: episodeContext.imdbId,
+                        type: "show",
+                        title: episodeContext.title,
+                        tvParams: { season: prevSeason, episode: lastEpisode },
+                    },
+                    addons,
+                    { ...options, isBinge: true }
+                );
                 return;
             }
-            toast.info("Beginning of series", { description: "You're at the first episode", position: TOAST_POSITION });
-            return;
-        }
 
-        await play(
-            {
-                imdbId: episodeContext.imdbId,
-                type: "show",
-                title: episodeContext.title,
-                tvParams: { season: episodeContext.season, episode: prevEpisode },
-            },
-            addons,
-            { ...options, isBinge: true }
-        );
+            await play(
+                {
+                    imdbId: episodeContext.imdbId,
+                    type: "show",
+                    title: episodeContext.title,
+                    tvParams: { season: episodeContext.season, episode: prevEpisode },
+                },
+                addons,
+                { ...options, isBinge: true }
+            );
+        } catch (error) {
+            console.error("playPreviousEpisode failed:", error);
+            toast.error("Couldn't load previous episode", { position: TOAST_POSITION });
+        } finally {
+            if (!isStale() && usePreviewStore.getState().isSwitchingSource) {
+                usePreviewStore.getState().setSwitchingSource(false);
+            }
+        }
     },
 
     cancel: () => {
