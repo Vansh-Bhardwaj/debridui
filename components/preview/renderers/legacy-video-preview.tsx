@@ -460,7 +460,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Local state machine for episode transitions + auto-next countdown.
     // See components/player/use-binge-transition.ts for design rationale.
     const binge = useBingeTransition();
-    const { isTransitioning, autoNextCountdown, guardedNav, startTransition, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
+    const { isTransitioning, autoNextCountdown, autoNextTotalDuration, guardedNav, startTransition, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
 
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
@@ -1340,7 +1340,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 const remaining = dur - time;
                 if (remaining > 0 && remaining <= triggerAt) {
                     const nextFn = onNextRef.current;
-                    startAutoNextCountdown(Math.ceil(remaining), () => {
+                    // Use promptSeconds as the countdown duration (matches user settings).
+                    // The countdown ring animation runs for this full duration.
+                    startAutoNextCountdown(promptSeconds, () => {
                         if (nextFn) guardedNav(() => nextFn());
                     });
                 }
@@ -2981,18 +2983,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         <button
                                             type="button"
                                             onClick={() => { markCurrentAsCompleted(); cancelAutoNext(); if (onNext) guardedNav(() => onNext()); }}
-                                            className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-white/5 active:scale-[0.98]"
+                                            className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-[background,transform] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-white/[0.05] active:scale-[0.98]"
                                         >
                                             <svg width="28" height="28" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
-                                                <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5" />
+                                                <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.5" />
                                                 <circle
                                                     cx="20" cy="20" r="18" fill="none" stroke="var(--primary)" strokeWidth="2.5"
                                                     strokeDasharray="113" className="player-countdown-ring"
-                                                    style={{ "--countdown-duration": `${autoNextCountdown}s` } as React.CSSProperties}
+                                                    style={{ "--countdown-duration": `${autoNextTotalDuration}s` } as React.CSSProperties}
                                                 />
                                             </svg>
                                             <div className="flex-1 text-left min-w-0">
                                                 <p className="text-sm font-medium text-white truncate">Next Episode</p>
+                                                <p className="text-[11px] text-white/40 tabular-nums">{autoNextCountdown}s</p>
                                             </div>
                                             <SkipForward className="size-4 text-white/60 shrink-0" />
                                         </button>

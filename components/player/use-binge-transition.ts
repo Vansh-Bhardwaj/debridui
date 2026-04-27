@@ -19,6 +19,8 @@ export interface BingeTransitionState {
     isTransitioning: boolean;
     /** Auto-next countdown (null = hidden, number = seconds remaining). */
     autoNextCountdown: number | null;
+    /** The total duration the countdown was started with (for ring animation). */
+    autoNextTotalDuration: number;
     /**
      * Wraps a navigation action (onNext/onPrev) with single-flight protection.
      * Returns true if the navigation was dispatched, false if blocked.
@@ -40,6 +42,7 @@ export function useBingeTransition(): BingeTransitionState {
     const [isTransitioning, setIsTransitioning] = useState(false);
     const isTransitioningRef = useRef(false);
     const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+    const [autoNextTotalDuration, setAutoNextTotalDuration] = useState(10);
     const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Keep ref in sync with state for closure access
@@ -88,6 +91,7 @@ export function useBingeTransition(): BingeTransitionState {
             if (countdownTimerRef.current) return;
 
             const clamped = Math.max(1, Math.min(Math.ceil(seconds), 15));
+            setAutoNextTotalDuration(clamped);
             setAutoNextCountdown(clamped);
             let remaining = clamped;
 
@@ -125,6 +129,7 @@ export function useBingeTransition(): BingeTransitionState {
     return {
         isTransitioning,
         autoNextCountdown,
+        autoNextTotalDuration,
         guardedNav,
         startTransition,
         clearTransition,

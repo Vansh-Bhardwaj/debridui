@@ -6,10 +6,10 @@ import { SkipForward, X } from "lucide-react";
 /* ═══════════════════════════════════════════════════════════════════════════════
    Transition Overlay
    ───────────────────────────────────────────────────────────────────────────────
-   Shown during episode switches. Uses the same loading-bar shimmer as the
-   existing player (`.player-loading-bar`) plus a cinematic opacity fade over
-   the video surface. No spinner icon — just the top loading bar and a subtle
-   center text that fades in after a brief delay (avoids flash on fast switches).
+   Shown during episode switches. Modern flat design with animated elements:
+   - A full-screen dark surface (no blur — matches design system)
+   - Animated primary-colored progress dots that pulse in sequence
+   - A delayed text label that only appears for slow transitions
 
    Renders INSIDE the player container so it stays visible in native fullscreen.
    Uses `pointer-events: all` to block accidental clicks on the underlying video.
@@ -20,14 +20,14 @@ export function TransitionOverlay({
 }: {
     isVisible: boolean;
 }) {
-    // Delay showing the "Loading…" text so fast transitions feel instant
+    // Delay showing the text so fast transitions feel instantaneous
     const [showText, setShowText] = useState(false);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         if (isVisible) {
             setShowText(false);
-            timerRef.current = setTimeout(() => setShowText(true), 800);
+            timerRef.current = setTimeout(() => setShowText(true), 1200);
         } else {
             setShowText(false);
             if (timerRef.current) {
@@ -44,17 +44,24 @@ export function TransitionOverlay({
 
     return (
         <div
-            className="player-transition-overlay absolute inset-0 z-[55] pointer-events-auto"
+            className="player-transition-overlay absolute inset-0 z-[55] pointer-events-auto flex items-center justify-center"
         >
-            {/* Top loading bar — reuses existing player CSS class for visual consistency */}
+            {/* Top loading bar — reuses existing player CSS class */}
             <div className="player-loading-bar" />
 
-            {/* Center feedback — only shows after delay for slow transitions */}
-            {showText && (
-                <div className="player-transition-label">
-                    Loading stream…
+            {/* Center indicator — animated dot sequence */}
+            <div className="player-transition-center">
+                <div className="player-transition-dots">
+                    <span className="player-transition-dot" style={{ animationDelay: "0ms" }} />
+                    <span className="player-transition-dot" style={{ animationDelay: "160ms" }} />
+                    <span className="player-transition-dot" style={{ animationDelay: "320ms" }} />
                 </div>
-            )}
+                {showText && (
+                    <p className="player-transition-label">
+                        Loading next episode
+                    </p>
+                )}
+            </div>
         </div>
     );
 }
@@ -62,23 +69,24 @@ export function TransitionOverlay({
 /* ═══════════════════════════════════════════════════════════════════════════════
    Auto-Next Episode Card
    ───────────────────────────────────────────────────────────────────────────────
-   Matches the existing auto-next popup in the CTA stack (same position, same
-   ring animation via `.player-countdown-ring`, same dark surface + white/alpha
-   borders). The difference vs. the old external component: this one is declared
-   inline so it can directly reference `markCurrentAsCompleted`, and uses the
-   native CSS keyframes that already exist.
+   Compact card in the CTA stack. Uses a countdown ring driven by CSS animation
+   (--countdown-duration). Dark surface, no blur, clean typography, spring easing.
 
-   This component is UNUSED if the existing inline JSX for auto-next is kept
-   in the player render. It's provided as an alternative for cleaner extraction.
+   The `totalDuration` prop drives the ring animation speed and must equal the
+   total countdown seconds (from user settings). This is distinct from the
+   current `countdown` display number which ticks down every second.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 export function AutoNextCard({
     countdown,
+    totalDuration,
     onNext,
     onDismiss,
     isTransitioning,
 }: {
     countdown: number | null;
+    /** The total countdown duration from settings (drives the ring animation). */
+    totalDuration: number;
     onNext: () => void;
     onDismiss: () => void;
     isTransitioning: boolean;
@@ -105,11 +113,12 @@ export function AutoNextCard({
                         <circle
                             cx="20" cy="20" r="18" fill="none" stroke="var(--primary)" strokeWidth="2.5"
                             strokeDasharray="113" className="player-countdown-ring"
-                            style={{ "--countdown-duration": `${countdown}s` } as React.CSSProperties}
+                            style={{ "--countdown-duration": `${totalDuration}s` } as React.CSSProperties}
                         />
                     </svg>
                     <div className="flex-1 text-left min-w-0">
                         <p className="text-sm font-medium text-white truncate">Next Episode</p>
+                        <p className="text-[11px] text-white/40 tabular-nums">{countdown}s</p>
                     </div>
                     <SkipForward className="size-4 text-white/60 shrink-0" />
                 </button>

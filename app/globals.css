@@ -1142,7 +1142,7 @@ input[type="range"]:hover::-moz-range-thumb {
     animation: player-loading-bar 1.35s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-/* Binge transition overlay — cinematic darken + reuse loading-bar */
+/* Binge transition overlay — cinematic darken + centered animated dots */
 @keyframes player-transition-in {
     from {
         opacity: 0;
@@ -1152,19 +1152,30 @@ input[type="range"]:hover::-moz-range-thumb {
     }
 }
 
+@keyframes player-transition-dot-pulse {
+    0%, 100% {
+        opacity: 0.25;
+        transform: scale(0.85);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.15);
+    }
+}
+
 @keyframes player-transition-label-in {
     from {
         opacity: 0;
-        transform: translateY(6px) scale(0.96);
+        transform: translateY(8px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
 .player-transition-overlay {
-    background: rgba(0, 0, 0, 0.68);
+    background: rgba(0, 0, 0, 0.72);
     animation: player-transition-in 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -1172,18 +1183,40 @@ input[type="range"]:hover::-moz-range-thumb {
     z-index: 56;
 }
 
-.player-transition-label {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.72);
-    animation: player-transition-label-in 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Centered content container */
+.player-transition-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     pointer-events: none;
     user-select: none;
+}
+
+/* Pulsing dot sequence */
+.player-transition-dots {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.player-transition-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.25;
+    animation: player-transition-dot-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* Delayed text — "Loading next episode" */
+.player-transition-label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.55);
+    animation: player-transition-label-in 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    text-transform: uppercase;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1191,10 +1224,13 @@ input[type="range"]:hover::-moz-range-thumb {
         animation: none;
         opacity: 1;
     }
+    .player-transition-dot {
+        animation: none;
+        opacity: 0.6;
+    }
     .player-transition-label {
         animation: none;
         opacity: 1;
-        transform: translate(-50%, -50%);
     }
 }
 
