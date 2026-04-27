@@ -6,6 +6,8 @@ import Hls from "hls.js";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { useBingeTransition } from "@/components/player/use-binge-transition";
+import { TransitionOverlay, AutoNextPopup } from "@/components/player/binge-overlays";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
@@ -454,11 +456,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const osdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Accumulates total seek distance while a seek key is held
     const seekAccRef = useRef<{ direction: 1 | -1; total: number } | null>(null);
-    // Auto-next episode countdown
-    const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
-    const autoNextCountdownRef = useRef(autoNextCountdown);
-    useEffect(() => { autoNextCountdownRef.current = autoNextCountdown; }, [autoNextCountdown]);
-    const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // ── Binge transition system ──
+    // Local state machine for episode transitions + auto-next countdown.
+    // See components/player/use-binge-transition.ts for design rationale.
+    const binge = useBingeTransition();
+    const { isTransitioning, autoNextCountdown, guardedNav, startTransition, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
 
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
@@ -519,13 +521,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const lastTapRef = useRef<{ time: number; x: number } | null>(null);
     const [bufferedPercent, setBufferedPercent] = useState(0);
 
-    const cancelAutoNext = useCallback(() => {
-        if (countdownTimerRef.current) {
-            clearInterval(countdownTimerRef.current);
-            countdownTimerRef.current = null;
-        }
-        setAutoNextCountdown(null);
-    }, []);
+    // cancelAutoNext is provided by useBingeTransition above
 
     // Control bar auto-hide
     const [showControls, setShowControls] = useState(true);
@@ -1315,31 +1311,23 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
             // Show next-episode popup before end.
             // Priority: IntroDB outro start time > user's nextEpisodePromptSeconds setting.
+            // Guarded: don't start during a transition or if already counting.
             if (
                 onNextRef.current && autoNextEpisode &&
                 Number.isFinite(dur) && dur > 0 &&
-                autoNextCountdownRef.current === null && countdownTimerRef.current === null
+                !isTransitioningRef.current
             ) {
+                const promptSeconds = Math.max(3, Math.min(nextEpisodePromptSeconds || 10, 15));
                 const outroStart = introSegments?.outro?.start_sec;
-                // Use outro start as the trigger point if IntroDB provides it
-                const triggerAt = outroStart != null ? dur - outroStart : nextEpisodePromptSeconds;
+                const outroFromEnd = outroStart != null ? dur - outroStart : Infinity;
+                // Use outroStart only if it's inside the popup window
+                const triggerAt = Math.min(promptSeconds, outroFromEnd);
                 const remaining = dur - time;
                 if (remaining > 0 && remaining <= triggerAt) {
-                    const secs = Math.ceil(remaining);
-                    setAutoNextCountdown(secs);
-                    let left = secs;
-                    countdownTimerRef.current = setInterval(() => {
-                        left--;
-                        if (left <= 0) {
-                            clearInterval(countdownTimerRef.current!);
-                            countdownTimerRef.current = null;
-                            setAutoNextCountdown(null);
-                            // Advance to next episode immediately when countdown expires
-                            onNextRef.current?.();
-                        } else {
-                            setAutoNextCountdown(left);
-                        }
-                    }, 1000);
+                    const nextFn = onNextRef.current;
+                    startAutoNextCountdown(Math.ceil(remaining), () => {
+                        if (nextFn) guardedNav(() => nextFn());
+                    });
                 }
             }
         };
@@ -1349,6 +1337,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const onPlaying = () => {
             setIsLoading(false);
             setIsPlaying(true);
+            // Clear the binge transition overlay — the new stream is now playing.
+            clearTransition();
             // Start (or resume) the actual watch-time timer
             watchStartRef.current = Date.now();
         };
@@ -1398,32 +1388,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 forceSync("play_complete", "ended");
                 emitHistory("complete", true);
             }
-            // Auto-next: if countdown was already shown pre-end, advance now.
-            // Otherwise start a short countdown.
-            if (onNext && autoNextEpisode) {
-                const cb = onNext;
-                if (countdownTimerRef.current) {
-                    // Countdown was running (triggered during timeupdate) — advance immediately
-                    clearInterval(countdownTimerRef.current);
-                    countdownTimerRef.current = null;
-                    setAutoNextCountdown(null);
-                    cb();
-                } else {
-                    // Fallback: video ended without pre-end popup (short video or setting = 0)
-                    setAutoNextCountdown(5);
-                    let remaining = 5;
-                    countdownTimerRef.current = setInterval(() => {
-                        remaining--;
-                        if (remaining <= 0) {
-                            clearInterval(countdownTimerRef.current!);
-                            countdownTimerRef.current = null;
-                            setAutoNextCountdown(null);
-                            cb();
-                        } else {
-                            setAutoNextCountdown(remaining);
-                        }
-                    }, 1000);
-                }
+            // Auto-next: advance via guardedNav (single-flight protection).
+            if (onNext && autoNextEpisode && !isTransitioningRef.current) {
+                cancelAutoNext(); // clear any stale countdown
+                guardedNav(() => onNext());
             }
         };
 
@@ -1479,13 +1447,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 clearTimeout(skipGraceTimerRef.current);
                 skipGraceTimerRef.current = null;
             }
-            if (countdownTimerRef.current) {
-                clearInterval(countdownTimerRef.current);
-                countdownTimerRef.current = null;
-                setAutoNextCountdown(null);
-            }
+            cancelAutoNext();
         };
-    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe]);
+    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe, guardedNav, startAutoNextCountdown, clearTransition, isTransitioningRef]);
 
     // Stop media pipeline on unmount to prevent background audio after close.
     // Separated from the event-listener effect so it only runs on true unmount,
@@ -1926,14 +1890,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [showControls, openMenu, setOpenMenuTracked]);
 
-    // Guard against rapid episode navigation clicks
-    const navGuardRef = useRef(false);
-    const guardedNav = useCallback((fn?: () => void) => {
-        if (!fn || navGuardRef.current) return;
-        navGuardRef.current = true;
-        fn();
-        setTimeout(() => { navGuardRef.current = false; }, 1000);
-    }, []);
+    // guardedNav is provided by useBingeTransition above.
+    // It blocks all navigation while a transition is in progress and auto-clears
+    // when the new stream fires its 'playing' event.
 
     const pickAlternateSource = useCallback(
         (src: AddonSource) => {
@@ -2075,8 +2034,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     }
                     if (autoNextCountdown !== null) {
                         event.preventDefault();
-                        if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
-                        setAutoNextCountdown(null);
+                        cancelAutoNext();
                         break;
                     }
                     if (fakeFullscreen) {
@@ -2091,7 +2049,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         event.preventDefault();
                         markCurrentAsCompleted();
                         cancelAutoNext();
-                        guardedNav(onNext);
+                        guardedNav(() => onNext());
                     } else if (activeSkipSegment && !autoSkipIntro) {
                         event.preventDefault();
                         const seg = introSegments?.[activeSkipSegment];
@@ -2982,6 +2940,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         </div>
                     </div>
 
+                    {/* Transition overlay: shown during episode switches.
+                        Rendered INSIDE the player container so it remains visible
+                        during native fullscreen (elements outside the fullscreen
+                        element are hidden by the browser). */}
+                    <TransitionOverlay isVisible={isTransitioning} />
+
                     {/* Floating CTA stack: keep skip/next prompts in one place to avoid overlap */}
                     {(autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
                         <div
@@ -3001,7 +2965,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => { markCurrentAsCompleted(); cancelAutoNext(); guardedNav(onNext); }}
+                                            onClick={() => { markCurrentAsCompleted(); cancelAutoNext(); if (onNext) guardedNav(() => onNext()); }}
                                             className="w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-white/5 active:scale-[0.98]"
                                         >
                                             <svg width="28" height="28" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
@@ -3162,8 +3126,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                                     <button
                                         className={PLAYER_BTN_SM}
-                                        onClick={(e) => { e.stopPropagation(); guardedNav(onPrev); }}
-                                        disabled={!onPrev}
+                                        onClick={(e) => { e.stopPropagation(); if (onPrev) guardedNav(() => onPrev()); }}
+                                        disabled={!onPrev || isTransitioning}
                                         title="Previous episode"
                                         data-tv-focusable
                                     >
@@ -3174,9 +3138,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         onClick={(e) => { 
                                             e.stopPropagation(); 
                                             if (autoNextCountdown !== null) markCurrentAsCompleted();
-                                            guardedNav(onNext); 
+                                            if (onNext) guardedNav(() => onNext()); 
                                         }}
-                                        disabled={!onNext}
+                                        disabled={!onNext || isTransitioning}
                                         title="Next episode"
                                         data-tv-focusable
                                     >

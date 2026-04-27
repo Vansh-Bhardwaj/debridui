@@ -11,7 +11,7 @@ import {
 import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { AddonClient } from "@/lib/addons/client";
 import { parseStreams } from "@/lib/addons/parser";
-import { selectBestSource, detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
+import { selectBestSource, selectBestSourceForBinge, detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
 import { queryClient } from "@/lib/query-client";
 import { detectCodecSupport, type CodecSupport } from "@/lib/utils/codec-support";
 import { toast } from "sonner";
@@ -77,7 +77,7 @@ interface StreamingState {
     play: (
         request: StreamingRequest,
         addons: { id: string; url: string; name: string }[],
-        options?: { forceAutoPlay?: boolean }
+        options?: { forceAutoPlay?: boolean; isBinge?: boolean }
     ) => Promise<void>;
     playSource: (
         source: AddonSource,
@@ -105,6 +105,8 @@ let requestId = 0;
 let preloadRequestId = 0;
 /** Bumps on each `playSource` call so late source hydration does not overwrite a newer play. */
 let playSourceToken = 0;
+/** Single-flight guard for episode navigation — prevents double-fire from rapid clicks / auto-next overlap. */
+let navigationToken = 0;
 
 /**
  * Cached browser codec support detection.
@@ -918,9 +920,13 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         try {
             const titleMemory = options?.progressKey?.imdbId ? getTitleMemory(options.progressKey.imdbId) : null;
 
+            // Strip any previously appended [meta] bracket suffix so repeated stream
+            // switches don't produce "Show S01E01 [1080p] [1080p BluRay]" accumulation.
+            const cleanTitle = title.replace(/(\s*\[[^\]]*\])+$/, "").trim();
+
             // Build descriptive filename with source metadata
             const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
-            const fileName = meta ? `${title} [${meta}]` : title;
+            const fileName = meta ? `${cleanTitle} [${meta}]` : cleanTitle;
 
             // ── Auto-fetch subtitles when none provided ────────────────────
             // Ensures every play path (continue watching, source picker, etc.)
@@ -1083,6 +1089,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
     play: async (request, addons, options) => {
         const forceAutoPlay = options?.forceAutoPlay ?? false;
+        const isBinge = options?.isBinge ?? false;
         const timer = createDevTimer("streaming.play", {
             imdbId: request.imdbId,
             type: request.type,
@@ -1131,11 +1138,16 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             set({ episodeContext: null });
         }
 
-        toastId = toast.loading("Finding best source...", {
-            description: displayTitle,
-            position: TOAST_POSITION,
-            cancel: { label: "Cancel", onClick: () => get().cancel() },
-        });
+        // Skip the loading toast during binge navigation — the player's own
+        // transition overlay provides visual feedback, and the toast is distracting
+        // when episodes auto-advance.
+        if (!isBinge) {
+            toastId = toast.loading("Finding best source...", {
+                description: displayTitle,
+                position: TOAST_POSITION,
+                cancel: { label: "Cancel", onClick: () => get().cancel() },
+            });
+        }
         toastCreatedAt = Date.now();
 
         try {
@@ -1209,7 +1221,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const mediaPlayer = titleMemory?.preferredPlayer ?? useSettingsStore.getState().get("mediaPlayer");
             const codecSupport = getCodecSupportForPlayer(mediaPlayer);
 
-            const result = selectBestSource(allSources, streamingSettings, {
+            const selectFn = isBinge ? selectBestSourceForBinge : selectBestSource;
+            const result = selectFn(allSources, streamingSettings, {
                 preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
                 preferredAddon: titleMemory?.preferredAddonId,
                 preferCached: streamingSettings.preferCached,
@@ -1258,21 +1271,32 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 pendingPlayContext: { displayTitle, subtitles, progressKey },
             });
 
-            showSourceToast({
-                source,
-                title: displayTitle,
-                isCached: result.isCached,
-                autoPlay: forceAutoPlay || streamingSettings.autoPlay,
-                allowUncached: streamingSettings.allowUncached,
-                onPlay: () =>
-                    playSource(source, displayTitle, {
-                        progressKey: progressKey ?? undefined,
-                        subtitles: subtitles.length > 0 ? subtitles : undefined,
-                    }),
-                otherSourcesCount: Math.max(0, fullSourceList.length - 1),
-                onPickSource: () => set({ sourcePickerOpen: true }),
-            });
-            timer.end({ status: "ok", selectedCached: result.isCached });
+            // During binge navigation, auto-play directly without showing the source
+            // selection toast — the user expects seamless continuation.
+            if (isBinge) {
+                playSource(source, displayTitle, {
+                    progressKey: progressKey ?? undefined,
+                    subtitles: subtitles.length > 0 ? subtitles : undefined,
+                });
+                dismissToast();
+                timer.end({ status: "ok", selectedCached: result.isCached, binge: true });
+            } else {
+                showSourceToast({
+                    source,
+                    title: displayTitle,
+                    isCached: result.isCached,
+                    autoPlay: forceAutoPlay || streamingSettings.autoPlay,
+                    allowUncached: streamingSettings.allowUncached,
+                    onPlay: () =>
+                        playSource(source, displayTitle, {
+                            progressKey: progressKey ?? undefined,
+                            subtitles: subtitles.length > 0 ? subtitles : undefined,
+                        }),
+                    otherSourcesCount: Math.max(0, fullSourceList.length - 1),
+                    onPickSource: () => set({ sourcePickerOpen: true }),
+                });
+                timer.end({ status: "ok", selectedCached: result.isCached });
+            }
         } catch (error) {
             console.error(error);
             if (requestId === currentRequestId) {
@@ -1332,6 +1356,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
     },
 
     playNextEpisode: async (addons, options) => {
+        // Single-flight guard: if a previous navigation is still in progress, discard this one.
+        const myToken = ++navigationToken;
+
         const { episodeContext, play, preloadedData, playSource } = get();
         if (!episodeContext) {
             toast.error("No episode context", {
@@ -1353,6 +1380,8 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         );
 
         if (preloadedEntry) {
+            if (myToken !== navigationToken) return;
+
             const progressKey = {
                 imdbId: episodeContext.imdbId,
                 type: "show" as const,
@@ -1386,7 +1415,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 progressKey,
             });
 
-            toast.success("Playing next episode", { description: preloadedEntry.title, position: TOAST_POSITION });
             return;
         }
 
@@ -1407,6 +1435,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
                     const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E01${titleSuffix}`;
 
+                    if (myToken !== navigationToken) return;
                     await play(
                         {
                             imdbId: episodeContext.imdbId,
@@ -1415,7 +1444,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: targetSeason, episode: 1 },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                     return;
                 } catch {
@@ -1431,6 +1460,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const titleSuffix = epData?.title ? ` - ${epData.title}` : "";
             const nextTitle = `${episodeContext.title} S${String(targetSeason).padStart(2, "0")}E${String(targetEpisode).padStart(2, "0")}${titleSuffix}`;
 
+            if (myToken !== navigationToken) return;
             await play(
                 {
                     imdbId: episodeContext.imdbId,
@@ -1439,10 +1469,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     tvParams: { season: targetSeason, episode: targetEpisode },
                 },
                 addons,
-                options
+                { ...options, isBinge: true }
             );
         } catch (error) {
             console.error("Failed to navigate/fetch metadata:", error);
+            if (myToken !== navigationToken) return;
             await play(
                 {
                     imdbId: episodeContext.imdbId,
@@ -1451,12 +1482,14 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     tvParams: { season: targetSeason, episode: targetEpisode },
                 },
                 addons,
-                options
+                { ...options, isBinge: true }
             );
         }
     },
 
     playPreviousEpisode: async (addons, options) => {
+        const myToken = ++navigationToken;
+
         const { episodeContext, play } = get();
         if (!episodeContext) {
             toast.error("No episode context", {
@@ -1476,6 +1509,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     const { traktClient } = await import("@/lib/trakt");
                     const prevSeasonEpisodes = await traktClient.getShowEpisodes(episodeContext.imdbId, prevSeason);
                     const lastEpisode = prevSeasonEpisodes.length > 0 ? prevSeasonEpisodes.length : 1;
+                    if (myToken !== navigationToken) return;
                     await play(
                         {
                             imdbId: episodeContext.imdbId,
@@ -1484,10 +1518,11 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: prevSeason, episode: lastEpisode },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                 } catch {
                     // Fallback to episode 1 if metadata fetch fails
+                    if (myToken !== navigationToken) return;
                     await play(
                         {
                             imdbId: episodeContext.imdbId,
@@ -1496,7 +1531,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                             tvParams: { season: prevSeason, episode: 1 },
                         },
                         addons,
-                        options
+                        { ...options, isBinge: true }
                     );
                 }
                 return;
@@ -1505,6 +1540,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             return;
         }
 
+        if (myToken !== navigationToken) return;
         await play(
             {
                 imdbId: episodeContext.imdbId,
@@ -1513,7 +1549,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 tvParams: { season: episodeContext.season, episode: prevEpisode },
             },
             addons,
-            options
+            { ...options, isBinge: true }
         );
     },
 

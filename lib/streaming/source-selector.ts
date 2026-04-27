@@ -431,6 +431,55 @@ export function selectBestSource(
 }
 
 /**
+ * Select the best source for binge-watching (next/previous episode navigation).
+ *
+ * Strategy:
+ *   1. If the user has a `preferredBingeGroup`, hard-filter to sources from that exact
+ *      pack first. Within that set, the regular scorer still applies (codec, resolution,
+ *      cached, etc.) so the best file in the pack wins.
+ *   2. If no bingeGroup sources survive the codec/range gates, fall through to the normal
+ *      `selectBestSource` logic so the user is never stuck with nothing.
+ *
+ * This gives "continuity by default" without silently picking an unplayable release.
+ */
+export function selectBestSourceForBinge(
+    sources: AddonSource[],
+    settings: StreamingSettings,
+    options: SelectionOptions = {}
+): SelectionResult {
+    const { preferredBingeGroup } = options;
+
+    // If there's no binge group to anchor on, fall back to normal selection.
+    if (!preferredBingeGroup) {
+        return selectBestSource(sources, settings, options);
+    }
+
+    // Narrow to sources that share the preferred binge group.
+    const bingeGroupSources = sources.filter((s) => s.bingeGroup === preferredBingeGroup);
+
+    if (bingeGroupSources.length > 0) {
+        // Run normal selection within the binge-group subset.
+        const result = selectBestSource(bingeGroupSources, settings, {
+            ...options,
+            preferredBingeGroup: undefined, // already guaranteed by the filter
+        });
+        if (result.hasMatches) {
+            // Build allSorted from full source list so the in-player picker still shows everything.
+            const fullResult = selectBestSource(sources, settings, options);
+            return {
+                ...result,
+                allSorted: result.source
+                    ? [result.source, ...fullResult.allSorted.filter((s) => s.url !== result.source!.url)]
+                    : fullResult.allSorted,
+            };
+        }
+    }
+
+    // No binge-group match → fall back to standard selection.
+    return selectBestSource(sources, settings, options);
+}
+
+/**
  * Get alternative sources for in-player source switching
  * Returns up to `limit` sources excluding the currently playing one
  */
