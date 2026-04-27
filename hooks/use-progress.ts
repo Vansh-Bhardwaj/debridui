@@ -51,6 +51,20 @@ function isResumeEligible(progressSeconds: number, durationSeconds: number): boo
 }
 
 /**
+ * Detect seeded "up next" cursors — entries written by markCompleted() for the
+ * next episode. They have 0 seconds progress with a placeholder duration (≤ 1).
+ * These should appear in Continue Watching even though they have no real progress.
+ */
+function isUpNextCursor(progressSeconds: number, durationSeconds: number): boolean {
+    return progressSeconds === 0 && durationSeconds <= 1;
+}
+
+/** Should this entry appear in the Continue Watching shelf? */
+function isContinueWatchingEligible(progressSeconds: number, durationSeconds: number): boolean {
+    return isResumeEligible(progressSeconds, durationSeconds) || isUpNextCursor(progressSeconds, durationSeconds);
+}
+
+/**
  * Generate a storage key for localStorage
  */
 function getStorageKey(key: ProgressKey): string {
@@ -355,28 +369,55 @@ export function useProgress(key: ProgressKey | null) {
     }, [key, isLoggedIn, syncNow]);
 
     /**
-     * Mark as completed (clears from continue watching)
+     * Mark as completed.
+     *
+     * For shows: if `nextEpisode` is provided, the completed episode's progress
+     * is cleared and a new cursor (0 seconds) is seeded for the next episode.
+     * This makes Continue Watching show the next episode immediately (Netflix behavior).
+     *
+     * For movies (or when no next episode exists): progress is simply deleted.
      */
-    const markCompleted = useCallback(() => {
+    const markCompleted = useCallback((nextEpisode?: { season: number; episode: number }) => {
         if (!key || completedRef.current) return;
         completedRef.current = true;
 
-        // Remove from localStorage
+        // Remove completed episode from localStorage
         try {
             localStorage.removeItem(getStorageKey(key));
         } catch { }
 
-        // Delete from server if logged in
+        // Seed next episode progress locally so Continue Watching updates instantly
+        if (nextEpisode && key.type === "show") {
+            const nextKey: ProgressKey = {
+                imdbId: key.imdbId,
+                type: "show",
+                season: nextEpisode.season,
+                episode: nextEpisode.episode,
+            };
+            writeLocalProgress(nextKey, {
+                progressSeconds: 0,
+                durationSeconds: 1, // placeholder — will be overwritten on actual playback
+                updatedAt: Date.now(),
+            });
+        }
+
+        // Delete completed episode from server + seed next if applicable
         if (isLoggedIn) {
             const params = new URLSearchParams({ imdbId: key.imdbId, type: key.type });
             if (key.season != null) params.set("season", String(key.season));
             if (key.episode != null) params.set("episode", String(key.episode));
             params.set("mode", "delete");
 
+            // Provide next episode info so the server can seed the cursor in one roundtrip
+            if (nextEpisode && key.type === "show") {
+                params.set("nextSeason", String(nextEpisode.season));
+                params.set("nextEpisode", String(nextEpisode.episode));
+            }
+
             fetchWithTimeout(`/api/progress?${params}`, { method: "DELETE" }, 8000).catch(() => { });
         }
 
-        // Invalidate cache so the dashboard removes this item immediately
+        // Invalidate cache so the dashboard reflects the change immediately
         queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
     }, [key, isLoggedIn, queryClient]);
 
@@ -435,7 +476,7 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     const percent = data.durationSeconds > 0
                         ? (data.progressSeconds / data.durationSeconds) * 100
                         : 0;
-                    if ((data.progressSeconds >= RESUME_MIN_SECONDS || percent >= RESUME_MIN_PERCENT) && percent <= CONTINUE_MAX_PERCENT) {
+                    if (isContinueWatchingEligible(data.progressSeconds, data.durationSeconds)) {
                         localItems.push({
                             imdbId,
                             type: season !== undefined ? "show" : "movie",
@@ -469,7 +510,7 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                     // Skip duplicates (from NULL unique index bug) — first entry is newest
                     if (merged.has(storageKey)) continue;
                     const serverUpdatedAt = new Date(item.updatedAt).getTime();
-                    if (isResumeEligible(item.progressSeconds, item.durationSeconds)) {
+                    if (isContinueWatchingEligible(item.progressSeconds, item.durationSeconds)) {
                         merged.set(storageKey, {
                             ...key,
                             progressSeconds: item.progressSeconds,

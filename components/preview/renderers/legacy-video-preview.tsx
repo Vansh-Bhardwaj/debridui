@@ -819,7 +819,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const markCurrentAsCompleted = useCallback(() => {
         if (!progressKey || hasMarkedCompletedRef.current) return;
         hasMarkedCompletedRef.current = true;
-        markCompleted();
+
+        // For shows: compute the next episode from the streaming store's episode context
+        // so that Continue Watching advances to the next episode instead of disappearing.
+        let nextEp: { season: number; episode: number } | undefined;
+        if (progressKey.type === "show" && progressKey.season != null && progressKey.episode != null) {
+            const ctx = useStreamingStore.getState().episodeContext;
+            if (ctx && ctx.season === progressKey.season && ctx.episode === progressKey.episode) {
+                // Simple next episode: same season + 1, or season + 1 ep 1
+                // The exact resolution (season boundaries) is handled by the
+                // streaming store's playNextEpisode — we just seed a cursor here.
+                // If the user binge-watches, the actual playback will overwrite this.
+                nextEp = { season: ctx.season, episode: ctx.episode + 1 };
+            }
+        }
+
+        markCompleted(nextEp);
         emitHistory("complete", true);
     }, [progressKey, markCompleted, emitHistory]);
 

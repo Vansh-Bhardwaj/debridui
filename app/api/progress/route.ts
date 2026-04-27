@@ -360,6 +360,11 @@ export async function DELETE(request: NextRequest) {
         const season = seasonRaw ? parseInt(seasonRaw) : NaN;
         const episode = episodeRaw ? parseInt(episodeRaw) : NaN;
 
+        const nextSeasonRaw = searchParams.get("nextSeason");
+        const nextEpisodeRaw = searchParams.get("nextEpisode");
+        const nextSeason = nextSeasonRaw ? parseInt(nextSeasonRaw) : NaN;
+        const nextEp = nextEpisodeRaw ? parseInt(nextEpisodeRaw) : NaN;
+
         const progressConditions = buildProgressConditions(session.user.id, imdbId, type, season, episode);
         const hiddenConditions = buildHiddenConditions(session.user.id, imdbId, type, season, episode);
 
@@ -392,12 +397,39 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ success: true, mode: "hide" });
         }
 
-        await Promise.all([
+        // Delete completed episode + optionally seed next episode cursor
+        const ops: Promise<unknown>[] = [
             db.delete(userProgress).where(and(...progressConditions)),
             db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
-        ]);
+        ];
 
-        return NextResponse.json({ success: true, mode: "delete" });
+        // Seed next episode cursor at 0 seconds so Continue Watching advances
+        const shouldSeedNext = type === "show" && !Number.isNaN(nextSeason) && !Number.isNaN(nextEp);
+        if (shouldSeedNext) {
+            ops.push(
+                db.insert(userProgress).values({
+                    userId: session.user.id,
+                    imdbId,
+                    type: "show",
+                    season: nextSeason,
+                    episode: nextEp,
+                    progressSeconds: 0,
+                    durationSeconds: 1, // placeholder — overwritten on actual playback
+                    updatedAt: new Date(),
+                }).onConflictDoUpdate({
+                    target: [userProgress.userId, userProgress.imdbId, userProgress.season, userProgress.episode],
+                    set: {
+                        progressSeconds: 0,
+                        durationSeconds: 1,
+                        updatedAt: new Date(),
+                    },
+                })
+            );
+        }
+
+        await Promise.all(ops);
+
+        return NextResponse.json({ success: true, mode: "delete", nextSeeded: shouldSeedNext });
     } catch (error) {
         console.error("[progress] DELETE error:", error);
         return NextResponse.json({ error: "Failed to delete progress" }, { status: 500 });
