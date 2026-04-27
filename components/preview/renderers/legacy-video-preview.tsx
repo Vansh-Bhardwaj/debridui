@@ -7,7 +7,7 @@ import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useBingeTransition } from "@/components/player/use-binge-transition";
-import { TransitionOverlay, AutoNextPopup } from "@/components/player/binge-overlays";
+import { TransitionOverlay } from "@/components/player/binge-overlays";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
@@ -2760,7 +2760,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
 
                     {/* Mobile center controls: skip ±10s + play/pause */}
-                    {useCompactControls && showControls && !isLoading && (
+                    {useCompactControls && showControls && !isLoading && !isTransitioning && (
                         <div className="absolute inset-0 z-30 flex items-center justify-center gap-10 pointer-events-none" data-player-controls>
                             <button
                                 type="button"
@@ -2930,7 +2930,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <div
                         className={cn(
                             "player-top-chrome absolute inset-x-0 top-0 z-40 pointer-events-none transition-[opacity,transform] duration-[420ms] ease-premium motion-reduce:duration-150 motion-reduce:transition-opacity",
-                            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
+                            showControls && !isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
                         )}
                     >
                         <div data-player-controls className="player-top-chrome-inner pointer-events-auto px-4 pb-12 pt-4">
@@ -2947,7 +2947,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <TransitionOverlay isVisible={isTransitioning} />
 
                     {/* Floating CTA stack: keep skip/next prompts in one place to avoid overlap */}
-                    {(autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
+                    {!isTransitioning && (autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
                         <div
                             data-player-controls
                             onClick={(e) => e.stopPropagation()}
@@ -3023,7 +3023,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     <div
                         className={cn(
                             "absolute inset-x-0 bottom-0 z-40 pointer-events-none transition-[opacity,transform] duration-[320ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:duration-150 motion-reduce:transition-opacity",
-                            showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                            showControls && !isTransitioning ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
                         )}
                     >
                         <div
