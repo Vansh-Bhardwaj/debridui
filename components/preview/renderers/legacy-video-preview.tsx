@@ -629,6 +629,34 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
     }, []);
 
+    const { data: showSeasons } = useQuery({
+        queryKey: ["trakt", "show", "seasons", progressKey?.imdbId],
+        queryFn: () => traktClient.getShowSeasons(progressKey!.imdbId),
+        enabled: progressKey?.type === "show" && progressKey.season != null && progressKey.episode != null,
+        staleTime: 24 * 60 * 60 * 1000,
+    });
+
+    const nextEpisodeCursor = useMemo(() => {
+        if (progressKey?.type !== "show" || progressKey.season == null || progressKey.episode == null || !showSeasons) {
+            return undefined;
+        }
+
+        const regularSeasons = showSeasons.filter((season) => season.number > 0).sort((a, b) => a.number - b.number);
+        const currentSeason = regularSeasons.find((season) => season.number === progressKey.season);
+        if (!currentSeason) return undefined;
+
+        if (progressKey.episode < (currentSeason.aired_episodes ?? 0)) {
+            return { season: progressKey.season, episode: progressKey.episode + 1 };
+        }
+
+        const nextSeason = regularSeasons.find((season) => season.number > progressKey.season && (season.aired_episodes ?? 0) > 0);
+        if (nextSeason) {
+            return { season: nextSeason.number, episode: 1 };
+        }
+
+        return undefined;
+    }, [progressKey, showSeasons]);
+
     // Capture ? key before the global shortcuts dialog can handle it.
     // Uses capture phase on document to fire before any bubble-phase handlers.
     useEffect(() => {
@@ -820,23 +848,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (!progressKey || hasMarkedCompletedRef.current) return;
         hasMarkedCompletedRef.current = true;
 
-        // For shows: compute the next episode from the streaming store's episode context
-        // so that Continue Watching advances to the next episode instead of disappearing.
-        let nextEp: { season: number; episode: number } | undefined;
-        if (progressKey.type === "show" && progressKey.season != null && progressKey.episode != null) {
-            const ctx = useStreamingStore.getState().episodeContext;
-            if (ctx && ctx.season === progressKey.season && ctx.episode === progressKey.episode) {
-                // Simple next episode: same season + 1, or season + 1 ep 1
-                // The exact resolution (season boundaries) is handled by the
-                // streaming store's playNextEpisode — we just seed a cursor here.
-                // If the user binge-watches, the actual playback will overwrite this.
-                nextEp = { season: ctx.season, episode: ctx.episode + 1 };
-            }
-        }
+        // For shows: seed the next episode so Continue Watching advances instead of disappearing.
+        const nextEp = nextEpisodeCursor;
 
         markCompleted(nextEp);
         emitHistory("complete", true);
-    }, [progressKey, markCompleted, emitHistory]);
+    }, [progressKey, markCompleted, emitHistory, nextEpisodeCursor]);
 
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
@@ -1318,9 +1335,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const currentWatchTime = watchedTimeRef.current + (watchStartRef.current ? (Date.now() - watchStartRef.current) / 1000 : 0);
             if (progressKey && dur > 0 && time / dur > 0.85 && !hasMarkedCompletedRef.current) {
                 if (currentWatchTime >= dur * COMPLETION_MIN_WATCH_FRACTION) {
-                    hasMarkedCompletedRef.current = true;
-                    markCompleted();
-                    emitHistory("complete", true);
+                    scrobble("stop", 100);
+                    markCurrentAsCompleted();
                 }
             }
 
@@ -1394,16 +1410,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 watchedTimeRef.current += (Date.now() - watchStartRef.current) / 1000;
                 watchStartRef.current = null;
             }
-            // Trakt scrobble stop (progress >= 80% → Trakt marks as watched)
-            scrobble("stop", 100);
-            // Mark as completed when video ends (> 95% watched)
             if (progressKey) {
+                // Trakt scrobble stop (progress >= 80% → Trakt marks as watched)
                 if (!hasMarkedCompletedRef.current) {
-                    hasMarkedCompletedRef.current = true;
-                    markCompleted();
+                    scrobble("stop", 100);
+                    markCurrentAsCompleted();
                 }
-                forceSync("play_complete", "ended");
-                emitHistory("complete", true);
             }
             // Auto-next: advance via guardedNav (single-flight protection).
             if (onNext && autoNextEpisode && !isTransitioningRef.current) {
@@ -1451,10 +1463,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const dur = video.duration;
             const progressPct = dur > 0 ? (ct / dur) * 100 : 0;
 
-            forceSync("play_stop", "unmount");
-            emitHistory("stop", true);
-            if (progressPct > 0) {
-                void scrobble("stop", progressPct);
+            if (!hasMarkedCompletedRef.current) {
+                forceSync("play_stop", "unmount");
+                emitHistory("stop", true);
+                if (progressPct > 0) {
+                    void scrobble("stop", progressPct);
+                }
             }
             if (pendingSeekSyncTimerRef.current) {
                 clearTimeout(pendingSeekSyncTimerRef.current);
@@ -1466,7 +1480,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
             cancelAutoNext();
         };
-    }, [progressKey, updateProgress, forceSync, markCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe, guardedNav, startAutoNextCountdown, clearTransition, isTransitioningRef]);
+    }, [progressKey, updateProgress, forceSync, markCurrentAsCompleted, onNext, onPreload, scrobble, autoSkipIntro, autoNextEpisode, nextEpisodePromptSeconds, introSegments, emitHistory, cancelAutoNext, runBufferingSpeedProbe, guardedNav, startAutoNextCountdown, clearTransition, isTransitioningRef]);
 
     // Stop media pipeline on unmount to prevent background audio after close.
     // Separated from the event-listener effect so it only runs on true unmount,

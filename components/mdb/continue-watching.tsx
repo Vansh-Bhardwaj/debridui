@@ -71,9 +71,6 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     });
     const _episodeTitle = episodes?.find((e) => e.number === item.episode)?.title;
 
-    // Detect seeded "up next" cursors (0s progress, placeholder duration ≤ 1)
-    const isUpNext = item.progressSeconds === 0 && item.durationSeconds <= 1;
-
     const progressPercent = item.durationSeconds > 0
         ? Math.min(Math.round((item.progressSeconds / item.durationSeconds) * 100), 100)
         : 0;
@@ -221,19 +218,17 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                             </div>
                         )}
 
-                        {/* Progress bar at very bottom — hidden for "up next" entries */}
-                        {!isUpNext && (
-                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/60">
-                                <div
-                                    className="h-full bg-primary transition-[width] duration-300 ease-premium motion-reduce:transition-none"
-                                    style={{ width: `${progressPercent}%` }}
-                                />
-                            </div>
-                        )}
+                        {/* Progress bar overlay at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 backdrop-blur-sm">
+                            <div
+                                className="h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.6)] transition-all duration-500"
+                                style={{ width: `${progressPercent}%` }}
+                            />
+                        </div>
 
-                        {/* Status badge – bottom left above progress */}
-                        <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-sm bg-black/75 text-[10px] font-medium text-white/90">
-                            {isUpNext ? "Up next" : `${formatTime(remainingTime)} left`}
+                        {/* Remaining time badge */}
+                        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-[10px] font-medium text-white/90">
+                            {formatTime(remainingTime)} left
                         </div>
                     </div>
                 </div>
