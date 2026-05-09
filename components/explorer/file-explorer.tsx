@@ -7,12 +7,15 @@ import { FileList, FileListBody, FileListEmpty, FileListLoading } from "./file-l
 import { FileListHeader } from "./file-list-header";
 import { FileListRow } from "./file-list-row";
 import { FileActionsDrawer } from "./file-actions-drawer";
+import { PullToRefresh } from "@/components/common/pull-to-refresh";
 import { useSelectionStore } from "@/lib/stores/selection";
 import { AddContent } from "./add-content";
 import { useFileExplorer } from "@/hooks/use-file-explorer";
 import { SearchSection } from "./search-section";
 import { ListPagination } from "@/components/common/pagination";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { DebridFile } from "@/lib/types";
 import { PAGE_SIZE } from "@/lib/constants";
 import { useDelayedFlag } from "@/hooks/use-delayed-flag";
@@ -21,6 +24,8 @@ import { cn } from "@/lib/utils";
 
 export const FileExplorer = memo(function FileExplorer() {
     const { files, isLoading, currentPage, totalPages, setPage } = useFileExplorer();
+    const queryClient = useQueryClient();
+    const { currentAccount } = useAuthGuaranteed();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const queryParam = searchParams.get("q") || "";
@@ -122,8 +127,13 @@ export const FileExplorer = memo(function FileExplorer() {
         [searchPage]
     );
 
+    const handleRefresh = useCallback(async () => {
+        await queryClient.invalidateQueries({ queryKey: [currentAccount.id, "getTorrentList"] });
+    }, [queryClient, currentAccount.id]);
+
     return (
         <>
+            <PullToRefresh onRefresh={handleRefresh}>
             <div className={cn(
                 "md:mx-auto md:w-full pb-24",
                 tvMode ? "md:max-w-6xl xl:max-w-7xl 2xl:max-w-[90rem]" : "md:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl"
@@ -185,6 +195,7 @@ export const FileExplorer = memo(function FileExplorer() {
                     <FileActionsDrawer files={activeData} />
                 </div>
             </div>
+            </PullToRefresh>
         </>
     );
 });
