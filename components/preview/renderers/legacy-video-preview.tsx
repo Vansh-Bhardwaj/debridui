@@ -8,6 +8,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Mi
 import { toast } from "sonner";
 import { useBingeTransition } from "@/components/player/use-binge-transition";
 import { TransitionOverlay } from "@/components/player/binge-overlays";
+import { DiagnosticsOverlay } from "@/components/player/diagnostics-overlay";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
@@ -371,6 +372,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         () => typeof sessionStorage !== 'undefined' ? !sessionStorage.getItem('codec-warning-dismissed') : true
     );
     const [showHelp, setShowHelp] = useState(false);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [showRemainingTime, setShowRemainingTime] = useState(false);
     const ios = isIOS();
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
@@ -2291,6 +2293,30 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         return next;
                     });
                     break;
+                case "s":
+                case "S":
+                    if (activeSkipSegment && !autoSkipIntro) {
+                        event.preventDefault();
+                        const seg = introSegments?.[activeSkipSegment];
+                        if (seg && videoRef.current) {
+                            skippedSegmentsRef.current.add(activeSkipSegment);
+                            videoRef.current.currentTime = seg.end_sec;
+                            setActiveSkipSegment(null);
+                            showOsd(
+                                activeSkipSegment === "intro" ? "Skipped Intro" :
+                                    activeSkipSegment === "recap" ? "Skipped Recap" : "Skipped Credits",
+                            );
+                        }
+                    }
+                    break;
+                case "d":
+                case "D":
+                    event.preventDefault();
+                    setShowDiagnostics((v) => {
+                        showOsd(v ? "Diagnostics Off" : "Diagnostics On");
+                        return !v;
+                    });
+                    break;
             }
             // 0–9: seek to 0%–90% of duration (YouTube-style)
             if (/^[0-9]$/.test(event.key)) {
@@ -2761,6 +2787,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onLoadedMetadata={handleLoadedMetadata}
                         onLoadedData={handleLoad}
                         onError={useHlsJs ? undefined : handleError}
+                    />
+
+                    <DiagnosticsOverlay
+                        open={showDiagnostics}
+                        videoRef={videoRef}
+                        sourceUrl={selectedSourceFromStore?.url ?? finalUrl ?? null}
+                        sourceLabel={selectedSourceFromStore?.addonName ?? null}
                     />
 
                     {/* YouTube-style top loading bar */}
