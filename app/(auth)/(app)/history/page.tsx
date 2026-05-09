@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 import { Button } from "@/components/ui/button";
+import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
 import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar, ChevronDown } from "lucide-react";
@@ -253,6 +254,58 @@ const HistoryGroupRow = memo(function HistoryGroupRow({
 
 const PAGE_SIZE = 50;
 
+/** Horizontal resume-row card used in the Recently Played shelf. */
+const RecentCard = memo(function RecentCard({ entry }: { entry: HistoryEntry }) {
+    const { data: media } = useTraktMedia(entry.imdbId, entry.type);
+    const title = media?.title || entry.fileName || entry.imdbId;
+    const posterUrl = getPosterUrl(media?.images) || `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(title)}`;
+    const slug = media?.ids?.slug || media?.ids?.imdb;
+    const href = slug ? `/${entry.type === "movie" ? "movies" : "shows"}/${slug}` : "#";
+    const progressPercent = entry.durationSeconds > 0
+        ? Math.min(Math.round((entry.progressSeconds / entry.durationSeconds) * 100), 100)
+        : 0;
+    const episodeLabel = entry.type === "show" && entry.season && entry.episode
+        ? `S${String(entry.season).padStart(2, "0")}E${String(entry.episode).padStart(2, "0")}`
+        : null;
+
+    return (
+        <Link href={href} className="block group w-[140px] shrink-0 focus-visible:outline-none" aria-label={`Resume ${title}`}>
+            <div className="aspect-2/3 relative overflow-hidden rounded-sm bg-muted border border-border/50 group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background">
+                <Image src={posterUrl} alt={title} fill sizes="140px" className="object-cover transition-transform duration-300 group-hover:scale-105" unoptimized />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-x-0 bottom-0 p-2 space-y-1">
+                    <div className="h-0.5 w-full bg-white/20 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${progressPercent}%` }} />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-white/80">
+                        <Play className="size-2.5 fill-white/90 text-white/90" />
+                        <span>{episodeLabel ?? formatDuration(entry.progressSeconds)}</span>
+                    </div>
+                </div>
+            </div>
+            <div className="mt-1.5 truncate text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                {title}
+            </div>
+        </Link>
+    );
+});
+
+/** Dedupe history by imdbId (+ season/episode for shows), keep most-recent per key. */
+function pickRecentUnique(entries: HistoryEntry[], limit = 10): HistoryEntry[] {
+    const seen = new Set<string>();
+    const out: HistoryEntry[] = [];
+    for (const e of entries) {
+        const key = e.type === "show" && e.season != null && e.episode != null
+            ? `${e.imdbId}:s${e.season}e${e.episode}`
+            : e.imdbId;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(e);
+        if (out.length >= limit) break;
+    }
+    return out;
+}
+
 function updateHistoryCaches(
     queryClient: ReturnType<typeof useQueryClient>,
     updater: (old: { history: HistoryEntry[]; total: number }) => { history: HistoryEntry[]; total: number }
@@ -379,6 +432,23 @@ export default function HistoryPage() {
 
             {!isLoading && !error && entries.length > 0 && (
                 <>
+                    {/* Recently Played shelf — top 10 unique, newest first. */}
+                    {entries.length > 0 && (
+                        <section className="space-y-3" data-tv-section>
+                            <div className="flex items-center gap-4">
+                                <div className="h-px w-8 bg-primary" />
+                                <span className="text-xs tracking-widest uppercase text-muted-foreground">Recently Played</span>
+                            </div>
+                            <ScrollCarousel>
+                                <div className="flex gap-3 pb-2">
+                                    {pickRecentUnique(entries, 10).map((entry) => (
+                                        <RecentCard key={`recent-${entry.id}`} entry={entry} />
+                                    ))}
+                                </div>
+                            </ScrollCarousel>
+                        </section>
+                    )}
+
                     {/* Stats row */}
                     <div className={cn("grid grid-cols-2 sm:grid-cols-4", tvMode ? "gap-4" : "gap-3")} data-tv-section>
                         {[

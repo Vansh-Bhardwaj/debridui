@@ -27,6 +27,7 @@ function buildShortcutGroups(mod: string): ShortcutGroup[] {
             label: "Global",
             shortcuts: [
                 { keys: [mod, "K"], description: "Open search" },
+                { keys: ["/"], description: "Open search" },
                 { keys: [mod, "B"], description: "Toggle sidebar" },
                 { keys: ["?"], description: "Keyboard shortcuts" },
                 { keys: ["⇧", "T"], description: "Toggle TV mode" },
@@ -43,9 +44,17 @@ function buildShortcutGroups(mod: string): ShortcutGroup[] {
                 { keys: ["M"], description: "Toggle mute" },
                 { keys: ["F"], description: "Toggle fullscreen" },
                 { keys: ["C"], description: "Cycle subtitles" },
+                { keys: ["D"], description: "Diagnostics overlay" },
+                { keys: ["S"], description: "Skip intro" },
                 { keys: ["<", ">"], description: "Frame step (paused)" },
                 { keys: ["⇧", "N"], description: "Next episode" },
                 { keys: ["⇧", "P"], description: "Previous episode" },
+            ],
+        },
+        {
+            label: "Source Picker",
+            shortcuts: [
+                { keys: ["1", "–", "9"], description: "Quick-pick a source" },
             ],
         },
         {

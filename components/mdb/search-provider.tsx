@@ -30,9 +30,18 @@ export function SearchProvider({ children }: SearchProviderProps) {
 
     useEffect(() => {
         const down = (e: KeyboardEvent) => {
+            // Cmd/Ctrl+K from anywhere
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 toggle();
+                return;
+            }
+            // "/" opens search when not typing into a field
+            if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                const target = e.target as HTMLElement | null;
+                if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+                e.preventDefault();
+                setOpen(true);
             }
         };
 

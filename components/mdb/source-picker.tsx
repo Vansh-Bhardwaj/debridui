@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { type AddonSource } from "@/lib/addons/types";
@@ -11,10 +11,12 @@ const SourceItem = memo(function SourceItem({
     source,
     isSelected,
     onSelect,
+    numberKey,
 }: {
     source: AddonSource;
     isSelected: boolean;
     onSelect: (s: AddonSource) => void;
+    numberKey?: number;
 }) {
     return (
         <button
@@ -26,12 +28,17 @@ const SourceItem = memo(function SourceItem({
                     : "hover:bg-muted/30 text-foreground/80"
             )}
         >
-            {/* Cache indicator */}
+            {/* Cache indicator / number key */}
             <div className={cn(
-                "shrink-0 flex size-8 items-center justify-center rounded-sm",
+                "shrink-0 flex size-8 items-center justify-center rounded-sm relative",
                 source.isCached ? "bg-emerald-500/10 text-emerald-500" : "bg-muted/50 text-muted-foreground"
             )}>
                 {source.isCached ? <Zap className="size-4" /> : <HardDrive className="size-4" />}
+                {numberKey != null && (
+                    <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-background border border-border/70 text-[9px] font-mono text-muted-foreground">
+                        {numberKey}
+                    </span>
+                )}
             </div>
 
             {/* Info */}
@@ -75,6 +82,28 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
     const cached = allFetchedSources.filter((s) => s.isCached);
     const uncached = allFetchedSources.filter((s) => !s.isCached);
 
+    // Stable 1..9 quick-pick order: cached first, then uncached, preserving display order.
+    const quickPickOrder: AddonSource[] = [...cached, ...uncached].slice(0, 9);
+
+    useEffect(() => {
+        if (!sourcePickerOpen) return;
+        const handler = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const n = parseInt(e.key, 10);
+            if (!Number.isNaN(n) && n >= 1 && n <= 9) {
+                const source = quickPickOrder[n - 1];
+                if (source) {
+                    e.preventDefault();
+                    handleSelect(source);
+                }
+            }
+        };
+        document.addEventListener("keydown", handler);
+        return () => document.removeEventListener("keydown", handler);
+    }, [sourcePickerOpen, quickPickOrder, handleSelect]);
+
     return (
         <Sheet open={sourcePickerOpen} onOpenChange={closeSourcePicker}>
             <SheetContent side="bottom" className="max-h-[75vh] p-0 flex flex-col">
@@ -94,14 +123,18 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
                             <div className="px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground bg-muted/20 sticky top-0">
                                 Cached
                             </div>
-                            {cached.map((source, i) => (
-                                <SourceItem
-                                    key={source.url || `cached-${i}`}
-                                    source={source}
-                                    isSelected={source.url === selectedSource?.url}
-                                    onSelect={handleSelect}
-                                />
-                            ))}
+                            {cached.map((source, i) => {
+                                const quickIndex = quickPickOrder.indexOf(source);
+                                return (
+                                    <SourceItem
+                                        key={source.url || `cached-${i}`}
+                                        source={source}
+                                        isSelected={source.url === selectedSource?.url}
+                                        onSelect={handleSelect}
+                                        numberKey={quickIndex >= 0 && quickIndex < 9 ? quickIndex + 1 : undefined}
+                                    />
+                                );
+                            })}
                         </div>
                     )}
                     {uncached.length > 0 && (
@@ -109,14 +142,18 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
                             <div className="px-4 py-2 text-[10px] tracking-widest uppercase text-muted-foreground bg-muted/20 sticky top-0">
                                 Not Cached
                             </div>
-                            {uncached.map((source, i) => (
-                                <SourceItem
-                                    key={source.url || `uncached-${i}`}
-                                    source={source}
-                                    isSelected={source.url === selectedSource?.url}
-                                    onSelect={handleSelect}
-                                />
-                            ))}
+                            {uncached.map((source, i) => {
+                                const quickIndex = quickPickOrder.indexOf(source);
+                                return (
+                                    <SourceItem
+                                        key={source.url || `uncached-${i}`}
+                                        source={source}
+                                        isSelected={source.url === selectedSource?.url}
+                                        onSelect={handleSelect}
+                                        numberKey={quickIndex >= 0 && quickIndex < 9 ? quickIndex + 1 : undefined}
+                                    />
+                                );
+                            })}
                         </div>
                     )}
                 </div>

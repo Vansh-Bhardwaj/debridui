@@ -64,9 +64,11 @@ function StandardLayout({ children }: { children: React.ReactNode }) {
                         <SearchButton className="shrink-0" />
                     </div>
                 </header>
-                <RouteTransition>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
-                </RouteTransition>
+                <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
+                    <RouteTransition>
+                        <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
+                    </RouteTransition>
+                </main>
             </SidebarInset>
         </SidebarProvider>
     );
@@ -80,7 +82,7 @@ function TVLayout({ children }: { children: React.ReactNode }) {
         <div className="min-h-screen bg-background">
             <TVNavigationBar />
             <ControlledIndicator />
-            <main className="pt-16">
+            <main id="main-content" tabIndex={-1} className="pt-16 outline-none">
                 <RouteTransition>
                     <div className="flex flex-1 flex-col gap-4 p-4 px-8 pt-6 xl:px-12 2xl:px-16">
                         {children}
@@ -90,6 +92,17 @@ function TVLayout({ children }: { children: React.ReactNode }) {
             <GamepadHints />
             <TVCursor x={cursor.x} y={cursor.y} visible={cursor.visible} hovering={cursor.hovering} targetRect={cursor.targetRect} />
         </div>
+    );
+}
+
+// Visually-hidden until focused — lets keyboard users jump past nav to content.
+function SkipToContent() {
+    return (
+        <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-sm focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring">
+            Skip to content
+        </a>
     );
 }
 
@@ -113,6 +126,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <KeyboardShortcutsDialog>
             <SearchProvider>
+                <SkipToContent />
                 <div id="tv-mode-root" {...(tvMode ? { "data-tv-mode": "" } : {})}>
                     {tvMode ? (
                         <TVLayout>{children}</TVLayout>
