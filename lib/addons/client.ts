@@ -151,10 +151,12 @@ export class AddonClient {
             }
         }
 
-        // Last resort: built-in proxy (same origin, no CORS issues)
-        const apiProxyUrl = `/api/addon/proxy?url=${encodeURIComponent(url)}`;
+        // Last resort: signed proxy worker URL (main worker only does the
+        // HMAC sign — actual fetch runs on the separate proxy worker).
+        const { getSignedProxyUrl } = await import("@/lib/signed-proxy");
+        const apiProxyUrl = await getSignedProxyUrl("addon", url);
         if (process.env.NODE_ENV === "development") {
-            console.log(`[Addon] API PROXY fetch: ${url}`);
+            console.log(`[Addon] SIGNED PROXY fetch: ${url}`);
         }
         return this.executeFetch<T>(apiProxyUrl);
     }

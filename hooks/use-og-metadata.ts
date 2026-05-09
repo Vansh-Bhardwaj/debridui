@@ -1,4 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
+import { getOGProxyUrl } from "@/lib/signed-proxy";
 
 interface OGMetadata {
     title: string | null;
@@ -10,7 +11,9 @@ interface OGMetadata {
 
 async function fetchOGMetadata(url: string): Promise<OGMetadata | null> {
     try {
-        const res = await fetch(`/api/og-metadata?url=${encodeURIComponent(url)}`);
+        const endpoint = getOGProxyUrl(url);
+        if (!endpoint) return null;
+        const res = await fetch(endpoint);
         if (!res.ok) return null;
         return await res.json();
     } catch {

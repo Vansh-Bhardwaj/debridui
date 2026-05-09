@@ -72,7 +72,8 @@ export const userProgress = pgTable(
     ]
 );
 
-// Watch history table - append-only log of completed/significant play sessions
+// Watch history table - one row per (user, imdb, type, season, episode).
+// Upserted on every pause/stop/complete; keeps max(progress, duration) + latest watchedAt.
 export const watchHistory = pgTable(
     "watch_history",
     {
@@ -91,6 +92,7 @@ export const watchHistory = pgTable(
         watchedAt: timestamp("watched_at").notNull().defaultNow(),
     },
     (table) => [
+        uniqueIndex("unique_user_watch_history").on(table.userId, table.imdbId, table.type, table.season, table.episode),
         index("watch_history_userId_idx").on(table.userId),
         index("watch_history_watchedAt_idx").on(table.watchedAt),
         index("watch_history_session_id_idx").on(table.sessionId),

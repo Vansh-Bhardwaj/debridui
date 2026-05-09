@@ -473,9 +473,6 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                         }
                     }
 
-                    const percent = data.durationSeconds > 0
-                        ? (data.progressSeconds / data.durationSeconds) * 100
-                        : 0;
                     if (isContinueWatchingEligible(data.progressSeconds, data.durationSeconds)) {
                         localItems.push({
                             imdbId,

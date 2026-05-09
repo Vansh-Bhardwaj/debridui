@@ -180,7 +180,13 @@ function pickPreferredAudioTrackIndex(
 }
 
 async function resolveAddonStreamUrl(downloadUrl: string): Promise<{ url?: string; status?: number } | null> {
-    const endpoint = `/api/addon/resolve?url=${encodeURIComponent(downloadUrl)}`;
+    const { getSignedProxyUrl } = await import("@/lib/signed-proxy");
+    let endpoint: string;
+    try {
+        endpoint = await getSignedProxyUrl("resolve", downloadUrl);
+    } catch {
+        return null;
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
             const response = await fetch(endpoint);
@@ -460,7 +466,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Local state machine for episode transitions + auto-next countdown.
     // See components/player/use-binge-transition.ts for design rationale.
     const binge = useBingeTransition();
-    const { isTransitioning, autoNextCountdown, autoNextTotalDuration, guardedNav, startTransition, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
+    const { isTransitioning, autoNextCountdown, autoNextTotalDuration, guardedNav, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
 
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
@@ -640,16 +646,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (progressKey?.type !== "show" || progressKey.season == null || progressKey.episode == null || !showSeasons) {
             return undefined;
         }
+        // Hoist into locals so TS retains the null narrowing inside `.find()` closures.
+        const currentSeasonNum = progressKey.season;
+        const currentEpisodeNum = progressKey.episode;
 
         const regularSeasons = showSeasons.filter((season) => season.number > 0).sort((a, b) => a.number - b.number);
-        const currentSeason = regularSeasons.find((season) => season.number === progressKey.season);
+        const currentSeason = regularSeasons.find((season) => season.number === currentSeasonNum);
         if (!currentSeason) return undefined;
 
-        if (progressKey.episode < (currentSeason.aired_episodes ?? 0)) {
-            return { season: progressKey.season, episode: progressKey.episode + 1 };
+        if (currentEpisodeNum < (currentSeason.aired_episodes ?? 0)) {
+            return { season: currentSeasonNum, episode: currentEpisodeNum + 1 };
         }
 
-        const nextSeason = regularSeasons.find((season) => season.number > progressKey.season && (season.aired_episodes ?? 0) > 0);
+        const nextSeason = regularSeasons.find((season) => season.number > currentSeasonNum && (season.aired_episodes ?? 0) > 0);
         if (nextSeason) {
             return { season: nextSeason.number, episode: 1 };
         }
@@ -729,7 +738,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             let usedProxyFallback = false;
             const probe = await measureStreamMbps(speedProbeUrl).catch(async () => {
                 usedProxyFallback = true;
-                return measureStreamMbps(`/api/addon/proxy?url=${encodeURIComponent(speedProbeUrl)}&ts=${Date.now()}`);
+                const { getSignedProxyUrl } = await import("@/lib/signed-proxy");
+                const signed = await getSignedProxyUrl("addon", speedProbeUrl);
+                return measureStreamMbps(signed);
             });
 
             if (probe.bytes < 128 * 1024) {

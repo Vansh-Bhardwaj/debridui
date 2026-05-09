@@ -6,7 +6,6 @@ import { useTraktSlugFromTmdb } from "@/hooks/use-trakt";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cdnUrl } from "@/lib/utils/media";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";

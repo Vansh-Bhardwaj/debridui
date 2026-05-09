@@ -704,7 +704,9 @@ async function resolveStreamUrl(url: string): Promise<{ url: string; chain?: str
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10_000);
         try {
-            const res = await fetch(`/api/addon/resolve?url=${encodeURIComponent(url)}`, {
+            const { getSignedProxyUrl } = await import("@/lib/signed-proxy");
+            const endpoint = await getSignedProxyUrl("resolve", url);
+            const res = await fetch(endpoint, {
                 signal: controller.signal,
             });
             if (!res.ok) return { url };

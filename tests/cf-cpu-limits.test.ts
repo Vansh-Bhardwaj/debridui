@@ -117,18 +117,29 @@ describe("source: authenticated pages should be force-static", () => {
     }
 });
 
-describe("source: API routes should stream when possible", () => {
-    test("addon proxy streams response body", () => {
-        const src = readSource("app/api/addon/proxy/route.ts");
-        // Should use response.body (streaming) not response.text() (buffering)
-        expect(src).toContain("response.body");
-        expect(src).not.toMatch(/const\s+data\s*=\s*await\s+response\.text\(\)/);
+describe("source: proxy routes offloaded to proxy worker", () => {
+    test("app/api/addon/proxy no longer exists (moved to proxy.worker.js)", () => {
+        expect(sourceExists("app/api/addon/proxy/route.ts")).toBe(false);
+    });
+    test("app/api/addon/resolve no longer exists (moved to proxy.worker.js)", () => {
+        expect(sourceExists("app/api/addon/resolve/route.ts")).toBe(false);
+    });
+    test("app/api/og-metadata no longer exists (moved to proxy.worker.js)", () => {
+        expect(sourceExists("app/api/og-metadata/route.ts")).toBe(false);
+    });
+    test("app/api/subtitles/proxy no longer exists (browser uses CORS proxy directly)", () => {
+        expect(sourceExists("app/api/subtitles/proxy/route.ts")).toBe(false);
+    });
+    test("app/api/sign/route.ts signs URLs for proxy worker", () => {
+        const src = readSource("app/api/sign/route.ts");
+        expect(src).toContain("SIGNING_SECRET");
+        expect(src).toContain('"HMAC"');
+        expect(src).toMatch(/kind !== "addon".*kind !== "resolve"/s);
     });
 });
 
 describe("source: subtitle routes have size limits", () => {
     const subtitleRoutes = [
-        "app/api/subtitles/proxy/route.ts",
         "app/api/subtitles/vlc/[filename]/route.ts",
     ];
 

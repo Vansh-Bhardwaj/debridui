@@ -20,24 +20,31 @@ export function TransitionOverlay({
 }: {
     isVisible: boolean;
 }) {
-    // Delay showing the text so fast transitions feel instantaneous
+    // Delay showing the text so fast transitions feel instantaneous.
+    // `showText` is derived from `isVisible` + elapsed time; we only need
+    // a ref timer to flip the delayed state, so we lazy-init via a ref.
     const [showText, setShowText] = useState(false);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        if (isVisible) {
-            setShowText(false);
-            timerRef.current = setTimeout(() => setShowText(true), 1200);
-        } else {
-            setShowText(false);
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-                timerRef.current = null;
-            }
+        // Clean up any pending timer first so an isVisible flip doesn't leak.
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
         }
+        if (!isVisible) {
+            // Safe: one-shot reset when becoming hidden.
+            if (showText) setShowText(false);
+            return;
+        }
+        timerRef.current = setTimeout(() => setShowText(true), 1200);
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = null;
         };
+        // showText intentionally omitted — it's set via the timer below and
+        // reading it would cause the effect to re-run every time text toggles.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isVisible]);
 
     if (!isVisible) return null;
