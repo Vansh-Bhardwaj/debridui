@@ -3,17 +3,36 @@ export const dynamic = "force-static";
 
 import { memo, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Heart, Film, Tv } from "lucide-react";
+import { ArrowLeft, Heart, Film, Tv, Sparkles, RotateCcw, Gem } from "lucide-react";
 import { MediaCard } from "@/components/mdb/media-card";
 import { EmptyState, LoadingState } from "@/components/common/async-state";
+import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { useWatchedIds } from "@/hooks/use-progress";
-import { traktClient, type TraktMediaItem } from "@/lib/trakt";
+import {
+    useTraktRelated,
+    useTraktPopularMovies,
+    useTraktPopularShows,
+    useTraktMedia,
+} from "@/hooks/use-trakt";
+import { traktClient, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 
 const INITIAL_LIMIT = 20;
 const LOAD_MORE_LIMIT = 10;
 const CACHE_DURATION_STANDARD = 15 * 60 * 1000;
+const SIX_MONTHS_MS = 182 * 24 * 60 * 60 * 1000;
+
+interface HistoryEntry {
+    id: string;
+    imdbId: string;
+    type: "movie" | "show";
+    season: number | null;
+    episode: number | null;
+    progressSeconds: number;
+    durationSeconds: number;
+    watchedAt: string;
+}
 
 function useRecommendationsByType(type: "movies" | "shows", limit: number) {
     return useQuery({
@@ -23,6 +42,18 @@ function useRecommendationsByType(type: "movies" | "shows", limit: number) {
         staleTime: CACHE_DURATION_STANDARD,
         gcTime: CACHE_DURATION_STANDARD * 2,
         placeholderData: keepPreviousData,
+    });
+}
+
+function useHistoryPage() {
+    return useQuery<{ history: HistoryEntry[]; total: number }>({
+        queryKey: ["watch-history", 100],
+        queryFn: async () => {
+            const res = await fetch(`/api/history?limit=100&offset=0`);
+            if (!res.ok) throw new Error("Failed to fetch history");
+            return res.json();
+        },
+        staleTime: 5 * 60 * 1000,
     });
 }
 
@@ -71,6 +102,149 @@ const MediaGrid = memo(function MediaGrid({
     );
 });
 
+/** Horizontal shelf wrapper used by all personalized rows. */
+function Shelf({
+    icon: Icon,
+    label,
+    children,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <section className="space-y-3" data-tv-section>
+            <div className="flex items-center gap-3">
+                <div className="h-px w-8 bg-primary" />
+                <span className="flex items-center gap-1.5 text-xs tracking-widest uppercase text-muted-foreground">
+                    <Icon className="size-3" />
+                    {label}
+                </span>
+            </div>
+            {children}
+        </section>
+    );
+}
+
+function ShelfCarousel({ items, type, watchedIds }: { items: TraktMedia[]; type: "movie" | "show"; watchedIds: Set<string> }) {
+    if (items.length === 0) return null;
+    return (
+        <ScrollCarousel>
+            <div className="flex gap-3 pb-2">
+                {items.slice(0, 20).map((media) => (
+                    <div key={`${type}-${media.ids?.slug ?? media.ids?.imdb}`} className="w-[140px] shrink-0">
+                        <MediaCard
+                            media={media}
+                            type={type}
+                            watched={!!media.ids?.imdb && watchedIds.has(media.ids.imdb)}
+                        />
+                    </div>
+                ))}
+            </div>
+        </ScrollCarousel>
+    );
+}
+
+/** "Because you watched X" — uses Trakt `related` for the last-seen title. */
+function BecauseYouWatchedShelf({ watchedIds }: { watchedIds: Set<string> }) {
+    const { data: history } = useHistoryPage();
+    const anchor = history?.history?.[0];
+    const anchorId = anchor?.imdbId ?? "";
+    const anchorType = (anchor?.type ?? "movie") as "movie" | "show";
+    const { data: anchorMedia } = useTraktMedia(anchorId, anchorType);
+    const { data: related = [] } = useTraktRelated(anchorId, anchorType);
+
+    const anchorTitle = anchorMedia?.title ?? "your last watch";
+    if (!anchor || related.length === 0) return null;
+    return (
+        <Shelf icon={Sparkles} label={`Because you watched ${anchorTitle}`}>
+            <ShelfCarousel items={related} type={anchorType} watchedIds={watchedIds} />
+        </Shelf>
+    );
+}
+
+/** "Re-watch" — titles watched once > 6 months ago, unique. */
+function RewatchShelf({ watchedIds }: { watchedIds: Set<string> }) {
+    const { data: history } = useHistoryPage();
+    // Fixed cutoff computed once on mount to keep render pure.
+    const [cutoff] = useState(() => Date.now() - SIX_MONTHS_MS);
+    const candidates = useMemo(() => {
+        if (!history?.history) return [];
+        const seen = new Set<string>();
+        const out: HistoryEntry[] = [];
+        for (const e of history.history) {
+            if (new Date(e.watchedAt).getTime() > cutoff) continue;
+            if (seen.has(e.imdbId)) continue;
+            seen.add(e.imdbId);
+            out.push(e);
+            if (out.length >= 12) break;
+        }
+        return out;
+    }, [history, cutoff]);
+
+    if (candidates.length === 0) return null;
+    return (
+        <Shelf icon={RotateCcw} label="Re-watch">
+            <ScrollCarousel>
+                <div className="flex gap-3 pb-2">
+                    {candidates.map((entry) => (
+                        <RewatchCard key={`rewatch-${entry.id}`} entry={entry} watchedIds={watchedIds} />
+                    ))}
+                </div>
+            </ScrollCarousel>
+        </Shelf>
+    );
+}
+
+function RewatchCard({ entry, watchedIds }: { entry: HistoryEntry; watchedIds: Set<string> }) {
+    const { data: media } = useTraktMedia(entry.imdbId, entry.type);
+    if (!media) return null;
+    return (
+        <div className="w-[140px] shrink-0">
+            <MediaCard media={media} type={entry.type} watched={watchedIds.has(entry.imdbId)} />
+        </div>
+    );
+}
+
+/** "Hidden gems" — Trakt popular items with rating >= 7.5. */
+function HiddenGemsShelf({ watchedIds }: { watchedIds: Set<string> }) {
+    const { data: popularMovies = [] } = useTraktPopularMovies(40);
+    const { data: popularShows = [] } = useTraktPopularShows(40);
+
+    const gemsMovies = useMemo<TraktMedia[]>(
+        () => popularMovies
+            .map((item: TraktMediaItem) => item.movie)
+            .filter((m): m is TraktMedia => !!m && (m.rating ?? 0) >= 7.5)
+            .slice(0, 12),
+        [popularMovies]
+    );
+    const gemsShows = useMemo<TraktMedia[]>(
+        () => popularShows
+            .map((item: TraktMediaItem) => item.show)
+            .filter((m): m is TraktMedia => !!m && (m.rating ?? 0) >= 7.5)
+            .slice(0, 12),
+        [popularShows]
+    );
+
+    if (gemsMovies.length === 0 && gemsShows.length === 0) return null;
+    return (
+        <Shelf icon={Gem} label="Hidden gems">
+            {gemsMovies.length > 0 && (
+                <div className="space-y-1.5">
+                    <span className="text-[10px] tracking-widest uppercase text-muted-foreground/60 ml-11">Movies</span>
+                    <ShelfCarousel items={gemsMovies} type="movie" watchedIds={watchedIds} />
+                </div>
+            )}
+            {gemsShows.length > 0 && (
+                <div className="space-y-1.5">
+                    <span className="text-[10px] tracking-widest uppercase text-muted-foreground/60 ml-11">TV Shows</span>
+                    <ShelfCarousel items={gemsShows} type="show" watchedIds={watchedIds} />
+                </div>
+            )}
+        </Shelf>
+    );
+}
+
 const ForYouPage = memo(function ForYouPage() {
     const [movieLimit, setMovieLimit] = useState(INITIAL_LIMIT);
     const [showLimit, setShowLimit] = useState(INITIAL_LIMIT);
@@ -92,7 +266,7 @@ const ForYouPage = memo(function ForYouPage() {
     const isError = isEmpty && (moviesError || showsError);
 
     return (
-        <div className="space-y-8 py-6 lg:px-6">
+        <div className="space-y-10 py-6 lg:px-6">
             <div className="space-y-3">
                 <Link
                     href="/dashboard"
@@ -112,6 +286,11 @@ const ForYouPage = memo(function ForYouPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Personalized horizontal shelves (fail silent if source data unavailable) */}
+            <BecauseYouWatchedShelf watchedIds={watchedIds} />
+            <RewatchShelf watchedIds={watchedIds} />
+            <HiddenGemsShelf watchedIds={watchedIds} />
 
             {isLoading ? (
                 <LoadingState label="Loading recommendations..." className="py-24" />
