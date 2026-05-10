@@ -17,6 +17,7 @@ import {
 import { traktClient, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { shuffleWithSeed, dailySeed } from "@/lib/utils";
 
 const INITIAL_LIMIT = 20;
 const LOAD_MORE_LIMIT = 10;
@@ -35,9 +36,17 @@ interface HistoryEntry {
 }
 
 function useRecommendationsByType(type: "movies" | "shows", limit: number) {
+    const seed = dailySeed();
+    // Fetch a stable-size larger pool; shuffle + slice to what the caller
+    // wanted. Trakt's ranking is deterministic per user, so rotating on the
+    // client avoids users seeing identical top-N titles for months.
+    const poolSize = Math.max(50, limit * 2);
     return useQuery({
-        queryKey: ["trakt", "recommendations", type, limit],
-        queryFn: () => traktClient.getRecommendations(type, limit),
+        queryKey: ["trakt", "recommendations", type, poolSize, seed],
+        queryFn: async () => {
+            const pool = await traktClient.getRecommendations(type, poolSize);
+            return shuffleWithSeed(pool, `${seed}-${type}`).slice(0, limit);
+        },
         enabled: !!traktClient.getAccessToken(),
         staleTime: CACHE_DURATION_STANDARD,
         gcTime: CACHE_DURATION_STANDARD * 2,

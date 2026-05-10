@@ -206,3 +206,45 @@ export const encodeAccountData = (data: { type: string; apiKey: string }): strin
 export const getProxyUrl = (url: string): string => {
     return `${CORS_PROXY_URL}${encodeURIComponent(url)}`;
 };
+
+/** Deterministic 32-bit PRNG (mulberry32). Same seed → same sequence. */
+export function mulberry32(seed: number): () => number {
+    return function () {
+        let t = (seed = (seed + 0x6d2b79f5) | 0);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+/** FNV-1a 32-bit hash of a string. Stable, cheap, no crypto. */
+export function seedFromString(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+/** Fisher–Yates shuffle using a mulberry32 PRNG seeded from the given string.
+ *  Same seed + same input → same output, so the displayed order is stable
+ *  within a session but rotates when the seed changes (e.g. day boundary). */
+export function shuffleWithSeed<T>(arr: readonly T[], seed: string): T[] {
+    const out = arr.slice();
+    const rand = mulberry32(seedFromString(seed));
+    for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+}
+
+/** YYYY-MM-DD in the viewer's local timezone. Rolls over at local midnight. */
+export function dailySeed(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}

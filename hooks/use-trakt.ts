@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/lib/stores/settings";
 import { createTMDBClient, tmdbToTraktMedia } from "@/lib/tmdb";
 import { fetchCinemetaMeta, cinemetaToTraktMedia } from "@/lib/cinemeta";
 import { fetchKitsuByTitle, kitsuToTraktMedia } from "@/lib/kitsu";
+import { shuffleWithSeed, dailySeed } from "@/lib/utils";
 import { toast } from "sonner";
 
 // Cache duration constants
@@ -146,31 +147,44 @@ export function useTraktTrendingMixed(limit = 20) {
 }
 
 export function useTraktRecommendations(enabled = true) {
+    const seed = dailySeed();
     return useQuery({
-        queryKey: ["trakt", "recommendations"],
+        // Seed in the key → cache naturally invalidates at local midnight,
+        // triggering a fresh fetch + new shuffle order.
+        queryKey: ["trakt", "recommendations", seed],
         queryFn: async () => {
+            // Fetch a larger pool so the displayed slice can actually rotate
+            // day-to-day. Trakt's ranking is stable per user, so asking for 5
+            // items always returned the same 5.
             const [movies, shows] = await Promise.all([
-                traktClient.getRecommendations("movies", 5),
-                traktClient.getRecommendations("shows", 5),
+                traktClient.getRecommendations("movies", 30),
+                traktClient.getRecommendations("shows", 30),
             ]);
-            // Interleave movies and shows for variety
             const mixed: TraktMediaItem[] = [];
             const max = Math.max(movies.length, shows.length);
             for (let i = 0; i < max; i++) {
                 if (movies[i]) mixed.push(movies[i]);
                 if (shows[i]) mixed.push(shows[i]);
             }
-            const items = mixed;
             // Fall back to trending if no recommendations yet (insufficient watch history)
-            if (items.length === 0) {
-                const trending = await traktClient.getTrendingMixed(8);
-                return { items: trending.mixed, isPersonalized: false };
+            if (mixed.length === 0) {
+                const trending = await traktClient.getTrendingMixed(30);
+                return {
+                    items: shuffleWithSeed(trending.mixed, seed).slice(0, 15),
+                    isPersonalized: false,
+                };
             }
-            return { items, isPersonalized: true };
+            return {
+                items: shuffleWithSeed(mixed, seed).slice(0, 15),
+                isPersonalized: true,
+            };
         },
         enabled,
-        staleTime: CACHE_DURATION.STANDARD,
-        gcTime: CACHE_DURATION.LONG,
+        // Shorter stale time — the seed-based invalidation handles the
+        // long-term rotation, but we also want fresh Trakt data within a day
+        // if the user watches new stuff.
+        staleTime: 60 * 60 * 1000,
+        gcTime: CACHE_DURATION.STANDARD,
     });
 }
 
