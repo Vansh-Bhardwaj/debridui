@@ -2,6 +2,7 @@
 export const dynamic = "force-static";
 
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useUserAddons, useAddAddon, useRemoveAddon, useToggleAddon, useToggleAddonCatalogs, useUpdateAddonOrders } from "@/hooks/use-addons";
 import { AddonClient } from "@/lib/addons/client";
 import { type Addon } from "@/lib/addons/types";
@@ -9,7 +10,7 @@ import { type CreateAddon } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X, ExternalLink } from "lucide-react";
+import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X, ExternalLink, LayoutGrid } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { AddonCard, AddonCardSkeleton } from "@/components/addons/addon-card";
 import { CachedBadge } from "@/components/common/display";
@@ -182,10 +183,18 @@ export default function AddonsPage() {
                 title="Stremio Addons"
                 description="Manage your Stremio addons to fetch sources from multiple providers"
                 action={
-                    <Button onClick={handleRefresh} disabled={isRefreshing || isLoading} variant="outline" data-tv-focusable tabIndex={0}>
-                        <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                        Refresh
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" data-tv-focusable tabIndex={0}>
+                            <Link href="/addons/browse">
+                                <LayoutGrid className="size-4" />
+                                <span className="hidden sm:inline">Browse catalog</span>
+                            </Link>
+                        </Button>
+                        <Button onClick={handleRefresh} disabled={isRefreshing || isLoading} variant="outline" data-tv-focusable tabIndex={0}>
+                            <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                            Refresh
+                        </Button>
+                    </div>
                 }
             />
 
