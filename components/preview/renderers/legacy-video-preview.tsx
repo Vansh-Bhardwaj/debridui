@@ -9,6 +9,13 @@ import { toast } from "sonner";
 import { useBingeTransition } from "@/components/player/use-binge-transition";
 import { TransitionOverlay } from "@/components/player/binge-overlays";
 import { DiagnosticsOverlay } from "@/components/player/diagnostics-overlay";
+import {
+    INITIAL_SUBTITLE_SYNC,
+    videoToSubtitleTime,
+    captureSyncPoint,
+    describeSync,
+    type SubtitleSyncState,
+} from "@/lib/utils/subtitle-sync";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
 import type { AddonSubtitle } from "@/lib/addons/types";
@@ -391,7 +398,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [subtitlePosition, setSubtitlePosition] = useState(
         () => useSettingsStore.getState().settings.playback.subtitlePosition
     );
-    const [subtitleDelay, setSubtitleDelay] = useState(0); // ms, negative = earlier, positive = later
+    const [syncState, setSyncState] = useState<SubtitleSyncState>(INITIAL_SUBTITLE_SYNC);
+    const subtitleDelay = syncState.delayMs;
+    const setSubtitleDelay = useCallback(
+        (updater: number | ((prev: number) => number)) => {
+            setSyncState((prev) => ({
+                ...prev,
+                delayMs: typeof updater === "function" ? updater(prev.delayMs) : updater,
+            }));
+        },
+        [],
+    );
     const [subtitleBackground, setSubtitleBackground] = useState<'solid' | 'semi' | 'outline' | 'none'>(
         () => useSettingsStore.getState().settings.playback.subtitleBackground ?? 'semi'
     );
@@ -2332,7 +2349,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls, markCurrentAsCompleted]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls, markCurrentAsCompleted, setSubtitleDelay]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -2703,10 +2720,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             return;
         }
         // Find the cue that matches currentTime, adjusted by subtitle delay
-        const adjustedTime = currentTime - subtitleDelay / 1000;
+        const adjustedTime = videoToSubtitleTime(currentTime, syncState);
         const activeCue = cues.find((c) => adjustedTime >= c.start && adjustedTime < c.end);
         setActiveCueText(activeCue?.text ?? "");
-    }, [activeSubtitleIndex, parsedCues, currentTime, subtitleDelay]);
+    }, [activeSubtitleIndex, parsedCues, currentTime, syncState]);
 
     // iOS: ensure playsinline (and webkit prefix for older Safari)
     useEffect(() => {
@@ -3720,6 +3737,89 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             >
                                                                 <Plus className="h-3.5 w-3.5" />
                                                             </button>
+                                                        </div>
+                                                        {/* Speed — fixes fps-mismatch drift (e.g. PAL 25→NTSC 23.976) */}
+                                                        <div className={POPUP_LABEL}>Speed</div>
+                                                        <div
+                                                            className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
+                                                            onWheel={(e) => {
+                                                                e.stopPropagation();
+                                                                setSyncState((s) => ({
+                                                                    ...s,
+                                                                    speed: Math.max(0.9, Math.min(1.1, +(s.speed + (e.deltaY < 0 ? 0.001 : -0.001)).toFixed(4))),
+                                                                }));
+                                                            }}
+                                                        >
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSyncState((s) => ({ ...s, speed: Math.max(0.9, +(s.speed - 0.001).toFixed(4)) }))}
+                                                                title="Slower (−0.1%)"
+                                                            >
+                                                                <Minus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                className="player-stepper-value text-xs tabular-nums font-mono text-white/70 hover:text-primary transition-colors bg-transparent border-none cursor-pointer"
+                                                                title="Click to reset to 100%"
+                                                                onClick={() => setSyncState((s) => ({ ...s, speed: 1 }))}
+                                                            >
+                                                                {(syncState.speed * 100).toFixed(1)}%
+                                                            </button>
+                                                            <button
+                                                                className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
+                                                                onClick={() => setSyncState((s) => ({ ...s, speed: Math.min(1.1, +(s.speed + 0.001).toFixed(4)) }))}
+                                                                title="Faster (+0.1%)"
+                                                            >
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        {/* Two-point sync anchors — locks the offset at two moments,
+                                                            then linearly interpolates between them. Fixes drift that
+                                                            isn't a uniform fps mismatch (edit differences, ad breaks). */}
+                                                        <div className={POPUP_LABEL}>Sync anchors</div>
+                                                        <div className="flex items-center gap-1.5 px-3.5 pt-1 pb-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const v = videoRef.current?.currentTime ?? 0;
+                                                                    setSyncState((prev) => ({ ...prev, pointA: captureSyncPoint(v, prev) }));
+                                                                    showOsd("Sync point A set");
+                                                                }}
+                                                                className={cn(
+                                                                    "flex-1 text-[10px] py-1 rounded-sm border transition-colors cursor-pointer",
+                                                                    syncState.pointA
+                                                                        ? "border-primary/60 bg-primary/10 text-white"
+                                                                        : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white/80"
+                                                                )}
+                                                                title="Mark current time as sync anchor A"
+                                                            >
+                                                                {syncState.pointA ? `A · ${syncState.pointA.videoAt.toFixed(0)}s` : "Set A"}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const v = videoRef.current?.currentTime ?? 0;
+                                                                    setSyncState((prev) => ({ ...prev, pointB: captureSyncPoint(v, prev) }));
+                                                                    showOsd("Sync point B set");
+                                                                }}
+                                                                className={cn(
+                                                                    "flex-1 text-[10px] py-1 rounded-sm border transition-colors cursor-pointer",
+                                                                    syncState.pointB
+                                                                        ? "border-primary/60 bg-primary/10 text-white"
+                                                                        : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white/80"
+                                                                )}
+                                                                title="Mark current time as sync anchor B"
+                                                            >
+                                                                {syncState.pointB ? `B · ${syncState.pointB.videoAt.toFixed(0)}s` : "Set B"}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setSyncState(INITIAL_SUBTITLE_SYNC)}
+                                                                className="text-[10px] py-1 px-2 rounded-sm border border-white/10 bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/70 transition-colors cursor-pointer"
+                                                                title="Clear delay, speed, and sync anchors"
+                                                                disabled={syncState.delayMs === 0 && syncState.speed === 1 && !syncState.pointA && !syncState.pointB}
+                                                            >
+                                                                Reset
+                                                            </button>
+                                                        </div>
+                                                        <div className="px-3.5 pb-2 text-[10px] text-white/40">
+                                                            {describeSync(syncState)}
                                                         </div>
                                                         {/* Background style */}
                                                         <div className={POPUP_LABEL}>Background</div>
