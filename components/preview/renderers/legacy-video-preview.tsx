@@ -464,6 +464,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const allFetchedSources = useStreamingStore((s) => s.allFetchedSources);
     const selectedSourceFromStore = useStreamingStore((s) => s.selectedSource);
     const playSourceFromStore = useStreamingStore((s) => s.playSource);
+    const openSourcePicker = useStreamingStore((s) => s.openSourcePicker);
     const previewDirectTitle = usePreviewStore((s) => s.directTitle);
     const previewProgressKeyStore = usePreviewStore((s) => s.progressKey);
     const previewDirectSubs = usePreviewStore((s) => s.directSubtitles);
@@ -3597,6 +3598,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                             );
                                                         })}
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setOpenMenuTracked(null); openSourcePicker(); }}
+                                                        className={cn(POPUP_ITEM, "border-t border-white/10 justify-center gap-1.5 text-[11px] text-white/60 hover:text-white")}
+                                                    >
+                                                        <Layers className="size-3.5" />
+                                                        Show all sources · filter &amp; sort
+                                                    </button>
                                                 </DropdownMenuContent>
                                             </DropdownMenuPortal>
                                         </DropdownMenu>
