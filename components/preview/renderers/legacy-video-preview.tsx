@@ -55,6 +55,16 @@ interface SubtitleCue {
     text: string;
 }
 
+/** Unified subtitle entry for the player picker. "addon" entries come from
+ *  Stremio addons (have a URL to fetch and parse). "embedded" entries come
+ *  from the native <video>.textTracks list (populated by the container
+ *  demuxer for MP4 or by hls.js for HLS subtitle renditions) — no URL;
+ *  cues are read directly off the TextTrack.cues array. */
+type PlayerSubtitle = AddonSubtitle & {
+    source?: "addon" | "embedded";
+    trackId?: string;
+};
+
 /** iOS Safari requires user gesture to start playback and often requires Range request support from the server. */
 function isIOS(): boolean {
     if (typeof navigator === "undefined") return false;
@@ -472,6 +482,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Manual subtitle rendering (bypasses Windows OS caption override)
     const [parsedCues, setParsedCues] = useState<SubtitleCue[][]>([]);
     const [activeCueText, setActiveCueText] = useState<string>("");
+    /** Subtitles sourced from native <video>.textTracks — covers embedded
+     *  MP4/MKV subtitle tracks AND HLS subtitle renditions (hls.js exposes
+     *  them via the same textTracks list). Refreshed on track add/remove. */
+    const [embeddedSubtitles, setEmbeddedSubtitles] = useState<PlayerSubtitle[]>([]);
+    /** Unified list shown in the subtitle picker: addon entries from props
+     *  first, then any embedded/HLS tracks discovered on the <video> element. */
+    const displayedSubtitles = useMemo<PlayerSubtitle[]>(
+        () => [
+            ...(subtitles ?? []).map((s): PlayerSubtitle => ({ ...s, source: "addon" })),
+            ...embeddedSubtitles,
+        ],
+        [subtitles, embeddedSubtitles],
+    );
 
     // In-player OSD (on-screen display) for keyboard feedback
     const [osdText, setOsdText] = useState("");
@@ -917,9 +940,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         // Auto-enable subtitle track matching user's preferred language (only if user hasn't set a preference)
-        if (!userSetSubtitleRef.current && subtitles && subtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
-            const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
-            const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
+        if (!userSetSubtitleRef.current && displayedSubtitles.length > 0 && activeSubtitleIndex === -1 && preferredSubLang) {
+            const langIndex = displayedSubtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
+            const bestIndex = langIndex !== -1
+                ? langIndex
+                : displayedSubtitles.findIndex((s) => !!s.url || s.source === "embedded");
 
             if (bestIndex !== -1) {
                 setActiveSubtitleIndex(bestIndex);
@@ -927,7 +952,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         onLoad?.();
-    }, [onLoad, startFromSeconds, initialProgress, subtitles, activeSubtitleIndex, preferredSubLang, applyResumePosition]);
+    }, [onLoad, startFromSeconds, initialProgress, displayedSubtitles, activeSubtitleIndex, preferredSubLang, applyResumePosition]);
 
     // Cross-device resume: if server progress arrives after the video has already loaded
     // and the user hasn't watched much yet (< 5s), apply the position now.
@@ -938,17 +963,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (initialProgress > 5) applyResumePosition(initialProgress);
     }, [initialProgress, applyResumePosition]);
 
-    // Watch for subtitles arriving later (e.g. from async fetch)
+    // Watch for subtitles arriving later (e.g. from async fetch or embedded track load)
     useEffect(() => {
-        if (!userSetSubtitleRef.current && subtitles?.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
-            const langIndex = subtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
-            const bestIndex = langIndex !== -1 ? langIndex : subtitles.findIndex((s) => s.url);
+        if (!userSetSubtitleRef.current && displayedSubtitles.length && activeSubtitleIndex === -1 && !isLoading && preferredSubLang) {
+            const langIndex = displayedSubtitles.findIndex((s) => isSubtitleLanguage(s, preferredSubLang));
+            const bestIndex = langIndex !== -1
+                ? langIndex
+                : displayedSubtitles.findIndex((s) => !!s.url || s.source === "embedded");
 
             if (bestIndex !== -1) {
                 setActiveSubtitleIndex(bestIndex);
             }
         }
-    }, [subtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
+    }, [displayedSubtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
 
     const handleError = useCallback(() => {
         setIsLoading(false);
@@ -1263,11 +1290,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [selectedAudioIndex]);
 
     useEffect(() => {
-        if (activeSubtitleIndex < 0 || !subtitles?.length) return;
-        if (activeSubtitleIndex >= subtitles.length) {
-            setActiveSubtitleIndex(subtitles.length - 1);
+        if (activeSubtitleIndex < 0 || !displayedSubtitles.length) return;
+        if (activeSubtitleIndex >= displayedSubtitles.length) {
+            setActiveSubtitleIndex(displayedSubtitles.length - 1);
         }
-    }, [activeSubtitleIndex, subtitles]);
+    }, [activeSubtitleIndex, displayedSubtitles]);
 
     // Sync basic media state for custom controls.
     useEffect(() => {
@@ -1982,33 +2009,105 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     );
 
     // When subtitle selection changes, toggle textTracks modes (also disables embedded tracks).
+    // Discover native textTracks whenever the video element gains/loses them
+    // (fires on loadedmetadata, on HLS subtitle rendition switches, etc.).
     useEffect(() => {
-        const el = videoRef.current;
-        if (!el) return;
-        const tracks = el.textTracks;
-        if (!tracks) return;
+        const video = videoRef.current;
+        if (!video) return;
 
-        const activeSub = activeSubtitleIndex >= 0 ? subtitles?.[activeSubtitleIndex] : undefined;
-        const activeLabel = activeSub ? activeSub.name ?? activeSub.lang : undefined;
-
-        // Expose active subtitle index to the device sync reporter via a data attribute
-        el.dataset.activeSubtitle = String(activeSubtitleIndex);
-
-        // Ensure we never show more than one subtitle/caption track at a time.
-        // Some streams have embedded tracks with the same label/lang as addon tracks,
-        // so we only activate the first matching track to avoid "dual subtitles".
-        let activated = false;
-        for (let i = 0; i < tracks.length; i++) {
-            const track = tracks[i];
-            if (track.kind !== "subtitles" && track.kind !== "captions") continue;
-            track.mode = "disabled";
-            if (!activeSub || activated) continue;
-            if (track.label === activeLabel || (activeSub.lang && track.language === activeSub.lang)) {
-                track.mode = "showing";
-                activated = true;
+        const sync = () => {
+            const found: PlayerSubtitle[] = [];
+            for (const t of Array.from(video.textTracks)) {
+                if (t.kind !== "subtitles" && t.kind !== "captions") continue;
+                const lang = (t.language || "").toLowerCase();
+                const label = t.label || "";
+                const trackId = t.id && t.id.length > 0
+                    ? t.id
+                    : `${label}-${lang}-${found.length}`;
+                found.push({
+                    lang: lang || "und",
+                    name: label || getLanguageDisplayName(lang) || "Embedded",
+                    source: "embedded",
+                    trackId,
+                    url: undefined as unknown as string,
+                });
             }
+            setEmbeddedSubtitles((prev) => {
+                // Skip state update when nothing changed to avoid re-renders on every HLS fragment tick.
+                if (prev.length === found.length && prev.every((p, i) => p.trackId === found[i]?.trackId)) {
+                    return prev;
+                }
+                return found;
+            });
+        };
+
+        sync();
+        const tracks = video.textTracks;
+        tracks.addEventListener?.("addtrack", sync);
+        tracks.addEventListener?.("removetrack", sync);
+        video.addEventListener("loadedmetadata", sync);
+        return () => {
+            tracks.removeEventListener?.("addtrack", sync);
+            tracks.removeEventListener?.("removetrack", sync);
+            video.removeEventListener("loadedmetadata", sync);
+        };
+    }, []);
+
+    // Manage textTrack.mode based on what the user picked.
+    // • Embedded entry selected → its track = 'hidden' (fires cuechange
+    //   without rendering the browser's native caption overlay).
+    // • Anything else selected → all tracks disabled so the browser stays silent.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const entry = displayedSubtitles[activeSubtitleIndex];
+        video.dataset.activeSubtitle = String(activeSubtitleIndex);
+
+        for (const track of Array.from(video.textTracks)) {
+            if (track.kind !== "subtitles" && track.kind !== "captions") continue;
+            const isSelected = entry?.source === "embedded" && entry.trackId && (
+                track.id === entry.trackId ||
+                track.label === entry.name
+            );
+            track.mode = isSelected ? "hidden" : "disabled";
         }
-    }, [activeSubtitleIndex, subtitles]);
+    }, [activeSubtitleIndex, displayedSubtitles]);
+
+    // When an embedded entry is active, snapshot its cues into parsedCues
+    // so the custom overlay + sync transform work uniformly across sources.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const entry = displayedSubtitles[activeSubtitleIndex];
+        if (!entry || entry.source !== "embedded" || !entry.trackId) return;
+        const track = Array.from(video.textTracks).find(
+            (t) =>
+                (t.kind === "subtitles" || t.kind === "captions") &&
+                (t.id === entry.trackId || t.label === entry.name)
+        );
+        if (!track) return;
+
+        const snapshot = () => {
+            if (!track.cues) return;
+            const cues: SubtitleCue[] = [];
+            for (let i = 0; i < track.cues.length; i++) {
+                const c = track.cues[i] as VTTCue;
+                cues.push({
+                    start: c.startTime,
+                    end: c.endTime,
+                    text: normalizeSubtitleCueText(c.text || ""),
+                });
+            }
+            setParsedCues((prev) => {
+                const next = [...prev];
+                next[activeSubtitleIndex] = cues;
+                return next;
+            });
+        };
+        snapshot();
+        track.addEventListener("cuechange", snapshot);
+        return () => track.removeEventListener("cuechange", snapshot);
+    }, [activeSubtitleIndex, displayedSubtitles]);
 
     const formatTime = (value: number): string => {
         if (!Number.isFinite(value) || value < 0) return "0:00";
@@ -2275,17 +2374,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     break;
                 case "c":
                 case "C":
-                    if (!subtitles?.length) return;
+                    if (!displayedSubtitles.length) return;
                     event.preventDefault();
                     setActiveSubtitleIndex((prev) => {
-                        if (subtitles.length === 0) return -1;
+                        if (displayedSubtitles.length === 0) return -1;
                         if (prev === -1) {
-                            showOsd(`Subtitles: ${subtitles[0].name || "Track 1"}`);
+                            showOsd(`Subtitles: ${displayedSubtitles[0].name || "Track 1"}`);
                             return 0;
                         }
                         const next = prev + 1;
-                        if (next < subtitles.length) {
-                            showOsd(`Subtitles: ${subtitles[next].name || `Track ${next + 1}`}`);
+                        if (next < displayedSubtitles.length) {
+                            showOsd(`Subtitles: ${displayedSubtitles[next].name || `Track ${next + 1}`}`);
                             return next;
                         }
                         showOsd("Subtitles Off");
@@ -2349,7 +2448,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls, markCurrentAsCompleted, setSubtitleDelay]);
+    }, [subtitles, togglePlay, toggleMute, toggleFullscreen, seekTo, showOsd, showSpeedOsd, triggerSeekRipple, fakeFullscreen, isFullscreen, autoNextCountdown, cancelAutoNext, onPrev, onNext, resetControlsTimeout, showHelp, activeSkipSegment, autoSkipIntro, introSegments, guardedNav, useCompactControls, markCurrentAsCompleted, setSubtitleDelay, displayedSubtitles]);
 
     // Remote subtitle switching via device sync custom event
     useEffect(() => {
@@ -2662,12 +2761,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
 
         const run = async () => {
-            // Disable all existing subtitle/caption tracks (including embedded).
-            const existing = Array.from(el.textTracks ?? []).filter(
-                (t) => t.kind === "subtitles" || t.kind === "captions"
-            );
-            for (const t of existing) t.mode = "disabled";
-
             setParsedCues(subtitles.map(() => []));
             const prioritizedIndex = activeSubtitleIndex >= 0
                 ? activeSubtitleIndex
@@ -3419,14 +3512,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     >
                                                         Off
                                                     </button>
-                                                    {subtitles.map((sub, i) => (
+                                                    {displayedSubtitles.map((sub, i) => (
                                                         <button
-                                                            key={`${sub.lang}-${sub.url}-${i}`}
+                                                            key={`${sub.source ?? "addon"}-${sub.lang}-${sub.url ?? sub.trackId ?? ""}-${i}`}
                                                             onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); setOpenMenuTracked(null); }}
                                                             className={POPUP_ITEM}
                                                             data-active={activeSubtitleIndex === i}
                                                         >
-                                                            {sub.name ?? getLanguageDisplayName(sub.lang)}
+                                                            <span className="flex-1 truncate">{sub.name ?? getLanguageDisplayName(sub.lang)}</span>
+                                                            {sub.source === "embedded" && (
+                                                                <span className="ml-2 text-[9px] tracking-widest uppercase text-white/40">embed</span>
+                                                            )}
                                                         </button>
                                                     ))}
                                                 </DropdownMenuContent>
