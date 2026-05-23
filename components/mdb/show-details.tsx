@@ -336,13 +336,36 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     const groupParam = searchParams.get("group");
     const partParam = searchParams.get("part");
 
-    const [selectedSeason, setSelectedSeason] = useState<number>(seasonParam ? parseInt(seasonParam, 10) : 1);
+    const [selectedSeason, setSelectedSeason] = useState<number | null>(seasonParam ? parseInt(seasonParam, 10) : null);
     const [selectedGroup, setSelectedGroup] = useState<string>(groupParam || "");
     const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(partParam ? parseInt(partParam, 10) : 0);
 
     const baseId = media.ids?.slug || media.ids?.imdb || mediaId;
     const { data: seasons, isLoading: seasonsLoading } = useTraktShowSeasons(baseId);
     const { data: watchedProgress } = useTraktShowProgress(baseId);
+
+    const watchedSeasonNumbers = useMemo(() => {
+        const seasonsSet = new Set<number>();
+        for (const season of watchedProgress?.seasons ?? []) {
+            if (season.aired > 0 && season.episodes.length > 0 && season.episodes.every((episode) => episode.completed)) {
+                seasonsSet.add(season.number);
+            }
+        }
+        return seasonsSet;
+    }, [watchedProgress]);
+
+    const preferredSeason = useMemo(() => {
+        if (!seasons?.length) return null;
+
+        const candidates = [watchedProgress?.next_episode?.season, watchedProgress?.last_episode?.season];
+        for (const candidate of candidates) {
+            if (candidate == null) continue;
+            if (seasons.some((season) => season.number === candidate)) return candidate;
+        }
+
+        return seasons.find((season) => season.number > 0)?.number ?? seasons[0]?.number ?? 1;
+    }, [seasons, watchedProgress]);
+    const activeSeason = selectedSeason ?? preferredSeason ?? 1;
 
     // TMDB episode groups (only when user has TMDB key configured)
     const tmdbId = media.ids?.tmdb;
@@ -414,7 +437,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
         return group.episodes.map(tmdbEpisodeToTrakt);
     }, [groupDetails, selectedGroupIndex]);
 
-    const episodeCount = seasons?.find((s) => s.number === selectedSeason)?.episode_count;
+    const episodeCount = seasons?.find((s) => s.number === activeSeason)?.episode_count;
     const hasEpisodeGroups = episodeGroupsData?.results && episodeGroupsData.results.length > 0;
     const isGroupView = !!selectedGroup;
 
@@ -474,7 +497,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                                               <SeasonCard
                                                   key={season.number}
                                                   season={season}
-                                                  isSelected={selectedSeason === season.number}
+                                                  isSelected={activeSeason === season.number}
+                                                  isWatched={watchedSeasonNumbers.has(season.number)}
                                                   onClick={() => handleSeasonChange(season.number)}
                                                   mediaId={baseId}
                                               />
@@ -484,8 +508,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                         )}
 
                         <EpisodesSection
-                            key={`season-${selectedSeason}`}
-                            selectedSeason={selectedSeason}
+                            key={`season-${activeSeason}`}
+                            selectedSeason={activeSeason}
                             episodeCount={episodeCount}
                             mediaId={baseId}
                             media={media}
@@ -518,6 +542,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
                                                     key={group.number}
                                                     season={group}
                                                     isSelected={selectedGroupIndex === idx}
+                                                    isWatched={false}
                                                     onClick={() => handleGroupIndexChange(idx)}
                                                 />
                                             ))}

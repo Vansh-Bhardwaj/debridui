@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { type TraktSeason } from "@/lib/trakt";
-import { Star } from "lucide-react";
+import { Check, Star } from "lucide-react";
 import { cn, formatYear } from "@/lib/utils";
 import { memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import { getPosterUrl } from "@/lib/utils/media";
 interface SeasonCardProps {
     season: TraktSeason;
     isSelected?: boolean;
+    isWatched?: boolean;
     onClick?: () => void;
     className?: string;
     mediaId?: string;
@@ -20,6 +21,7 @@ interface SeasonCardProps {
 export const SeasonCard = memo(function SeasonCard({
     season,
     isSelected,
+    isWatched,
     onClick,
     className,
     mediaId,
@@ -56,7 +58,8 @@ export const SeasonCard = memo(function SeasonCard({
                     "aspect-2/3 relative overflow-hidden bg-muted/30 rounded-sm transition-all duration-300",
                     isSelected
                         ? "ring-2 ring-primary ring-offset-1 ring-offset-background"
-                        : "hover:ring-1 hover:ring-border"
+                        : "hover:ring-1 hover:ring-border",
+                    isWatched && "opacity-80"
                 )}>
                 <Image
                     fill
@@ -87,6 +90,15 @@ export const SeasonCard = memo(function SeasonCard({
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
                             <Star className="size-3 fill-primary text-primary" />
                             {season.rating.toFixed(1)}
+                        </span>
+                    </div>
+                )}
+
+                {isWatched && (
+                    <div className="absolute bottom-2.5 right-2.5">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
+                            <Check className="size-3" />
+                            Watched
                         </span>
                     </div>
                 )}

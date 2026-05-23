@@ -193,11 +193,18 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 
     const title = media?.title || "Unknown";
     const mediaSlug = media?.ids?.slug || media?.ids?.imdb;
-    const mediaHref = mediaSlug ? `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}` : "#";
+    const mediaHref = mediaSlug
+        ? item.type === "show" && nextEpisode
+            ? `/shows/${mediaSlug}?season=${nextEpisode.season}`
+            : `/${item.type === "movie" ? "movies" : "shows"}/${mediaSlug}`
+        : "#";
+    const mediaLabel = item.type === "show" && nextEpisode
+        ? `Open ${title} season ${String(nextEpisode.season).padStart(2, "0")}`
+        : title;
 
     return (
         <div className="flex-shrink-0 w-40 sm:w-48 xl:w-52 2xl:w-56 group relative">
-            <Link href={mediaHref} className="block focus-visible:outline-none" aria-label={title} data-tv-focusable tabIndex={0}>
+            <Link href={mediaHref} className="block focus-visible:outline-none" aria-label={mediaLabel} data-tv-focusable tabIndex={0}>
                 <div className="relative overflow-hidden rounded-sm shadow-none transition-[box-shadow] duration-500 ease-premium group-hover:shadow-md group-hover:shadow-black/15 dark:group-hover:shadow-black/35 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <div className="aspect-2/3 relative overflow-hidden bg-muted/50 rounded-sm">
                         {posterSrc ? (
