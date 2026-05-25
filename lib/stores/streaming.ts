@@ -961,10 +961,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             // before resolving the URL, so the user sees instant feedback.
             if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) {
                 if (reuseOpenPreview) {
-                    // Keep existing video element mounted (keeps fullscreen alive).
-                    // Just refresh title/subtitles/progressKey. URL is left untouched
-                    // until we resolve the real one a moment below, so the old stream
-                    // keeps playing without a loader flash.
+                    // Signal the player to stop the old stream and show in-player loading.
+                    // This prevents the old video from continuing while we resolve the new URL.
+                    usePreviewStore.getState().setSwitchingSource(true);
                     usePreviewStore.getState().updateSingleSource({
                         title: fileName,
                         subtitles,
@@ -983,8 +982,17 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
 
             // Resolve addon proxy/redirect URL to the actual debrid download link
-            const resolved = await resolveStreamUrl(source.url);
-            if (hydrationToken !== playSourceToken) return;
+            let resolved: { url: string; chain?: string[] };
+            try {
+                resolved = await resolveStreamUrl(source.url);
+            } catch {
+                usePreviewStore.getState().setSwitchingSource(false);
+                throw new Error("Failed to resolve stream URL");
+            }
+            if (hydrationToken !== playSourceToken) {
+                usePreviewStore.getState().setSwitchingSource(false);
+                return;
+            }
 
             const playUrl = resolved.url;
 
@@ -1024,6 +1032,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             if (mediaPlayer === MediaPlayer.BROWSER) {
                 const previewStore = usePreviewStore.getState();
                 previewStore.setDirectUrl(playUrl);
+                previewStore.setSwitchingSource(false);
                 if (resolved.chain?.length) {
                     previewStore.setRedirectChain(resolved.chain);
                 }

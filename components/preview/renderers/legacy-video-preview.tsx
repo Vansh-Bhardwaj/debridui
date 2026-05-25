@@ -399,6 +399,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     );
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hlsRef = useRef<Hls | null>(null);
+    /** Resume time to restore after an in-player source switch so the user
+     *  doesn't lose their place when picking a different stream. */
+    const switchResumeTimeRef = useRef<number | null>(null);
     const [hlsAudioTracks, setHlsAudioTracks] = useState<{ name: string; lang?: string }[]>([]);
     const [audioTrackCount, setAudioTrackCount] = useState(0);
     const [selectedAudioIndex, setSelectedAudioIndex] = useState(0);
@@ -468,6 +471,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const previewDirectTitle = usePreviewStore((s) => s.directTitle);
     const previewProgressKeyStore = usePreviewStore((s) => s.progressKey);
     const previewDirectSubs = usePreviewStore((s) => s.directSubtitles);
+    const isSwitchingSource = usePreviewStore((s) => s.isSwitchingSource);
     const showInlineSourcePicker =
         allFetchedSources.length > 1 && !!(previewProgressKeyStore ?? progressKey);
     const { data: introSegments } = useIntroSegments(progressKey);
@@ -763,6 +767,31 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setSelectedAudioIndex(0);
         }
     }, [progressKey]);
+
+    // Stop playback immediately when a source switch starts so the old stream
+    // doesn't continue while the new URL is being resolved.
+    useEffect(() => {
+        if (!isSwitchingSource) return;
+        const video = videoRef.current;
+        if (video) {
+            // Preserve current position so we can resume after the switch.
+            if (video.currentTime > 0) {
+                switchResumeTimeRef.current = video.currentTime;
+            }
+            video.pause();
+            video.removeAttribute("src");
+            video.load();
+        }
+        if (hlsRef.current) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
+            setHlsAudioTracks([]);
+        }
+        setIsLoading(true);
+        setError(false);
+        setTriedTranscodeFallback(false);
+        triedUrlResolveRef.current = false;
+    }, [isSwitchingSource]);
 
     const runBufferingSpeedProbe = useCallback(async (opts?: { auto?: boolean }) => {
         const auto = !!opts?.auto;
@@ -1076,10 +1105,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 // On transcode fallback/source switch, prefer the user's current
                 // playback position over the initial resume point — the user may
                 // have watched further since the original seek.
-                const currentPos = el.currentTime;
-                const seekTarget = currentPos && currentPos > 5
-                    ? currentPos
-                    : (startFromSeconds ?? initialProgress);
+                const switchTarget = switchResumeTimeRef.current;
+                switchResumeTimeRef.current = null;
+                const seekTarget = switchTarget !== null && switchTarget > 0
+                    ? switchTarget
+                    : (el.currentTime > 5 ? el.currentTime : (startFromSeconds ?? initialProgress));
                 applyResumePosition(seekTarget);
             }
             // Restore saved volume from localStorage
@@ -1162,6 +1192,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [originalLanguageCode, preferredAudioLang, selectedAudioIndex]);
 
     // Apply native audioTracks selection (Safari path only — hls.js handles its own switching)
+    // Note: the spec requires that exactly one track is enabled at all times.
+    // Setting a track to enabled=true automatically disables all others — we must
+    // NOT manually disable every track first, as that can leave the element in a
+    // silent/invalid state.
     useEffect(() => {
         if (hlsRef.current) return;
         const el = videoRef.current as (HTMLVideoElement & {
@@ -1169,18 +1203,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }) | null;
         if (!el?.audioTracks) return;
         const tracks = el.audioTracks;
-        for (let i = 0; i < tracks.length; i++) {
-            tracks[i].enabled = selectedAudioIndex === i;
+        const target = tracks[selectedAudioIndex];
+        if (target) {
+            target.enabled = true;
         }
 
         const ensureSelected = () => {
-            if (!tracks[selectedAudioIndex]?.enabled) {
-                for (let i = 0; i < tracks.length; i++) {
-                    tracks[i].enabled = false;
-                }
-                if (tracks[selectedAudioIndex]) {
-                    tracks[selectedAudioIndex].enabled = true;
-                }
+            const t = tracks[selectedAudioIndex];
+            if (t && !t.enabled) {
+                t.enabled = true;
             }
         };
 
@@ -1284,11 +1315,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // hls.js: switch audio track when user selects a different one
     useEffect(() => {
         const hls = hlsRef.current;
-        if (!hls || hls.audioTracks.length <= 1) return;
+        // Guard against the hls instance not having tracks yet (race during manifest reload)
+        if (!hls || hlsAudioTracks.length <= 1) return;
         if (hls.audioTrack !== selectedAudioIndex) {
             hls.audioTrack = selectedAudioIndex;
         }
-    }, [selectedAudioIndex]);
+    }, [selectedAudioIndex, hlsAudioTracks.length]);
 
     useEffect(() => {
         if (activeSubtitleIndex < 0 || !displayedSubtitles.length) return;
@@ -1296,6 +1328,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setActiveSubtitleIndex(displayedSubtitles.length - 1);
         }
     }, [activeSubtitleIndex, displayedSubtitles]);
+
+    // Guard against stale selectedAudioIndex when switching to a video with fewer tracks
+    useEffect(() => {
+        if (audioTrackCount > 0 && selectedAudioIndex >= audioTrackCount) {
+            setSelectedAudioIndex(0);
+        }
+    }, [selectedAudioIndex, audioTrackCount]);
 
     // Sync basic media state for custom controls.
     useEffect(() => {
@@ -1423,6 +1462,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         };
         const onWaiting = () => {
+            // Suppress loading flash during episode transitions — the transition overlay
+            // already provides visual feedback, and the loading bar stacks on top of it.
+            if (isTransitioningRef.current) return;
             setIsLoading(true);
         };
         const onPlaying = () => {
@@ -1494,12 +1536,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         const onVisibilityChange = () => {
             if (document.hidden) {
-                forceSync("session_end", "visibility_hidden");
+                // History flush only — progress sync is handled by useProgress hook
+                // to avoid duplicate /api/progress requests that can trigger 429s.
                 emitHistory("session_end", true);
             }
         };
         const onPageHide = () => {
-            forceSync("session_end", "pagehide");
+            // History flush only — progress sync is handled by useProgress hook.
             emitHistory("session_end", true);
         };
         document.addEventListener("visibilitychange", onVisibilityChange);
@@ -1522,7 +1565,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const progressPct = dur > 0 ? (ct / dur) * 100 : 0;
 
             if (!hasMarkedCompletedRef.current) {
-                forceSync("play_stop", "unmount");
+                // History + scrobble only — progress sync is handled by useProgress hook cleanup.
                 emitHistory("stop", true);
                 if (progressPct > 0) {
                     void scrobble("stop", progressPct);
@@ -2908,7 +2951,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     />
 
                     {/* YouTube-style top loading bar */}
-                    {(isLoading && !error) && (
+                    {(isLoading && !error && !isTransitioning && !isSwitchingSource) && (
                         <div className="player-loading-bar absolute top-0 left-0 right-0 h-[3px] z-50 overflow-hidden" />
                     )}
 
@@ -2929,7 +2972,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     )}
 
                     {/* Big center play button when paused (idle state — hidden on mobile where compact controls have their own) */}
-                    {!isLoading && !isPlaying && centerActionDone && !useCompactControls && (
+                    {!isLoading && !isPlaying && centerActionDone && !useCompactControls && !isTransitioning && (
                         <div className="player-center-action">
                             <button
                                 type="button"
@@ -3131,6 +3174,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         during native fullscreen (elements outside the fullscreen
                         element are hidden by the browser). */}
                     <TransitionOverlay isVisible={isTransitioning} />
+
+                    {/* Source-switch loading overlay: shown when switching streams via the picker.
+                        Uses the same visual language as TransitionOverlay so it feels consistent. */}
+                    {isSwitchingSource && (
+                        <div className="absolute inset-0 z-[55] pointer-events-auto flex items-center justify-center bg-black/70">
+                            <div className="player-transition-dots">
+                                <span className="player-transition-dot" style={{ animationDelay: "0ms" }} />
+                                <span className="player-transition-dot" style={{ animationDelay: "160ms" }} />
+                                <span className="player-transition-dot" style={{ animationDelay: "320ms" }} />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Floating CTA stack: keep skip/next prompts in one place to avoid overlap */}
                     {!isTransitioning && (autoNextCountdown !== null || (activeSkipSegment && !autoSkipIntro)) && (
@@ -4055,7 +4110,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     </div>
 
                     {/* iOS: tap-to-play overlay so playback runs in user gesture context */}
-                    {ios && iosTapToPlay && (
+                    {ios && iosTapToPlay && !isTransitioning && (
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleIosTapToPlay(); }}
@@ -4075,7 +4130,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
 
                     {/* If loading takes too long, stream may not support Range requests or codec is unsupported */}
-                    {showLoadingHint && (
+                    {showLoadingHint && !isTransitioning && (
                         <div data-player-controls onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="absolute bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-black/95 px-4 py-3 text-center text-xs text-white sm:bottom-20 sm:left-4 sm:right-4 sm:rounded-sm sm:border">
                             <p className="mb-2 font-medium">Video taking too long?</p>
                             <p className="mb-3 text-white/70">

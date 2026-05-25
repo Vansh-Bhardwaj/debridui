@@ -35,6 +35,8 @@ interface PreviewState {
     /** Redirect chain URLs from addon URL resolution (for extracting debrid provider params) */
     redirectChain: string[] | undefined;
     progressKey: ProgressKey | null;
+    /** True while a source switch is in progress (prevents old stream from continuing to play). */
+    isSwitchingSource: boolean;
 
     // Actions
     openPreview: (file: DebridFileNode, allFiles: DebridFileNode[], fileId: string) => void;
@@ -54,6 +56,8 @@ interface PreviewState {
     setDirectSubtitles: (subtitles: AddonSubtitle[]) => void;
     /** Set the redirect chain from URL resolution */
     setRedirectChain: (chain: string[]) => void;
+    /** Toggle the source-switching flag to show in-player loading and stop old playback. */
+    setSwitchingSource: (switching: boolean) => void;
     closePreview: () => void;
     navigateNext: () => void;
     navigatePrevious: () => void;
@@ -74,6 +78,7 @@ const initialState = {
     directStreamingLinks: undefined as Record<string, string> | undefined,
     redirectChain: undefined as string[] | undefined,
     progressKey: null,
+    isSwitchingSource: false,
 };
 
 /** Stop any currently playing video to prevent ghost audio during preview transitions */
@@ -164,8 +169,9 @@ export const usePreviewStore = create<PreviewState>()((set, get) => ({
     setDirectStreamingLinks: (links) => set({ directStreamingLinks: links }),
     setDirectSubtitles: (subtitles) => set({ directSubtitles: subtitles }),
     setRedirectChain: (chain) => set({ redirectChain: chain }),
+    setSwitchingSource: (switching) => set({ isSwitchingSource: switching }),
 
-    closePreview: () => set(initialState),
+    closePreview: () => set({ ...initialState }),
 
     navigateNext: () => {
         const { currentIndex, previewableFiles } = get();
