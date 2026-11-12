@@ -123,8 +123,10 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const subsSettled = nativeSubs.length > 0 || subsGraceOver;
     const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[] } | null>(null);
     const masterForStream = master && master.hls === hlsUrl ? master : null;
+    // Only once the provider's stream exists: the wrapper fetches that playlist, so
+    // checking it during a slow conversion would fail and silently drop subtitles.
     useEffect(() => {
-        if (!hlsUrl || !subsSettled || masterForStream) return;
+        if (!hlsUrl || !videoReady || !subsSettled || masterForStream) return;
         let cancelled = false;
         const subs = nativeSubs;
         buildNativeHlsUrl(hlsUrl, subs, subtitleLanguage)
@@ -136,7 +138,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return () => {
             cancelled = true;
         };
-    }, [hlsUrl, subsSettled, masterForStream, nativeSubs, subtitleLanguage]);
+    }, [hlsUrl, videoReady, subsSettled, masterForStream, nativeSubs, subtitleLanguage]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     // Converted stream when the provider has one; the original only for MP4-family (or unknown) files.
@@ -161,7 +163,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     ? `Subtitles ready (${masterForStream.subs.length})`
                     : "No subtitles available"
                 : "Loading subtitles",
-            state: !hlsUrl ? "waiting" : masterForStream ? "done" : "active",
+            state: !videoReady ? "waiting" : masterForStream ? "done" : "active",
         },
     ];
 

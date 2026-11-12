@@ -101,11 +101,15 @@ export async function waitForHlsReady(url: string, signal: AbortSignal, timeoutM
 }
 
 /** Whether a playlist URL answers with a playlist (the subtitle wrapper on the proxy worker). */
-export async function isPlaylistReachable(url: string): Promise<boolean> {
-    try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
-        return res.ok && (await res.text()).startsWith("#EXTM3U");
-    } catch {
-        return false;
+export async function isPlaylistReachable(url: string, attempts = 3): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+            if (res.ok && (await res.text()).startsWith("#EXTM3U")) return true;
+        } catch {
+            /* retry */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
     }
+    return false;
 }
