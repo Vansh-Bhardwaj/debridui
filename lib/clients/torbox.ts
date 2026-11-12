@@ -29,6 +29,7 @@ import {
 import { USER_AGENT } from "../constants";
 import { getProxyUrl } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { getDeviceProfile } from "@/lib/playback/device-profile";
 
 // TorBox Search API types
 export interface TorBoxSearchResult {
@@ -134,6 +135,9 @@ const TORBOX_RESOLUTIONS: StreamResolution[] = [
     { index: 4, label: "720p", height: 720 },
     { index: 3, label: "480p", height: 480 },
 ];
+
+/** TorBox resolution index for 1080p (see TORBOX_RESOLUTIONS). */
+const PHONE_RESOLUTION_INDEX = 5;
 
 const VIDEO_FILE = /\.(mkv|mp4|m4v|avi|mov|webm|ts|wmv)$/i;
 
@@ -388,7 +392,15 @@ export default class TorBoxClient extends BaseClient {
             // TorBox defaults to the first audio track (often a dub). Native HLS players
             // (iOS) only get that one track, so request the user's language up front.
             const audioIndex = pickPreferredAudio(info, useSettingsStore.getState().settings.streaming.preferredLanguage);
-            if (audioIndex != null) info = (await info.switchVariant({ audioIndex })) ?? info;
+            // Phones: a 4K conversion is ~27 Mbps and buffers on mobile data; 1080p is ~6 Mbps.
+            const capTo1080 = getDeviceProfile()?.route === "native" && (info.height ?? 0) > 1080;
+            if (audioIndex != null || capTo1080) {
+                const next = await info.switchVariant({
+                    ...(audioIndex != null ? { audioIndex } : {}),
+                    ...(capTo1080 ? { resolutionIndex: PHONE_RESOLUTION_INDEX } : {}),
+                });
+                info = next ?? info;
+            }
             return { apple: info.hlsUrl };
         }).catch(() => ({}));
     }
@@ -477,9 +489,15 @@ export default class TorBoxClient extends BaseClient {
             const files = byHash.files!;
             const match = pick(files);
             if (match) return result(byHash, match);
-            // Only guess for single-video torrents — in a season pack "largest" is the wrong episode.
             const videos = files.filter((f) => VIDEO_FILE.test(f.name));
-            return videos.length === 1 ? result(byHash, videos[0]) : null;
+            if (videos.length === 1) return result(byHash, videos[0]);
+            // Season pack: the episode's SxxEyy / 3x02 tag. Never "largest file" — wrong episode.
+            if (hint.season != null && hint.episode != null) {
+                const tag = new RegExp(`(?:s0*${hint.season}[ ._-]?e0*${hint.episode}|\\b${hint.season}x0*${hint.episode})(?!\\d)`, "i");
+                const episodes = videos.filter((f) => tag.test(baseName(f.short_name || f.name)));
+                if (episodes.length >= 1) return result(byHash, episodes.reduce((a, b) => (b.size > a.size ? b : a)));
+            }
+            return null;
         }
         if (!hint.fileSize && names.length === 0) return null;
         for (const t of torrents) {

@@ -1020,7 +1020,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             }
 
             // Look up the provider's compatible stream while the addon URL resolves.
-            if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) prefetchStreamLinks(source);
+            if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) prefetchStreamLinks(source, options?.progressKey);
 
             // Resolve addon proxy/redirect URL to the actual debrid download link
             let resolved: { url: string; chain?: string[] };

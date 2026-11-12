@@ -127,7 +127,7 @@ export function PreviewDialog() {
                 const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
                 if (Object.keys(chainLinks).length > 0) return chainLinks;
             }
-            return client.getStreamingLinksFromUrl(directUrl!, sourceStreamHint(useStreamingStore.getState().selectedSource));
+            return client.getStreamingLinksFromUrl(directUrl!, sourceStreamHint(useStreamingStore.getState().selectedSource, effectiveProgressKey));
         },
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,

@@ -1,9 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ExternalLink, Loader2, RefreshCw, SkipBack, SkipForward } from "lucide-react";
+import {
+    AlertCircle,
+    AudioLines,
+    Captions,
+    ChevronRight,
+    ExternalLink,
+    Gauge,
+    Layers,
+    Loader2,
+    Maximize,
+    Pause,
+    Play,
+    RefreshCw,
+    Settings2,
+    SkipBack,
+    SkipForward,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { MediaPlayer, type DebridFileNode } from "@/lib/types";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
@@ -11,16 +28,30 @@ import { useStreamingStore } from "@/lib/stores/streaming";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
 import { detectContainer, getDeviceProfile, isMp4Family } from "@/lib/playback/device-profile";
+import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
-import { getLanguageDisplayName } from "@/lib/utils/subtitles";
+import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
 import { buildNativeHlsUrl, pickNativeSubtitles } from "@/lib/playback/native-hls";
 
 /** Cold provider lookups (library listing + createstream) can take ~10s on mobile data. */
 const LINKS_WAIT_MS = 30_000;
+/** Give background subtitle fetches a moment so the first stream already carries them. */
+const SUBTITLE_GRACE_MS = 2_500;
 const SAVE_EVERY_S = 5;
+const HIDE_CONTROLS_MS = 3_000;
+const DOUBLE_TAP_MS = 260;
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const EXTERNAL_PLAYERS = [MediaPlayer.INFUSE, MediaPlayer.VLC, MediaPlayer.KODI];
-const SELECT_CLS =
-    "h-9 max-w-[11rem] rounded-md border border-white/10 bg-white/[0.06] px-2 text-sm text-white/90 outline-none focus-visible:ring-2 focus-visible:ring-primary";
+
+type Sheet = "quality" | "audio" | "subtitles" | "speed" | null;
+
+function formatTime(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+    const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+    const m = Math.floor((seconds / 60) % 60);
+    const h = Math.floor(seconds / 3600);
+    return h ? `${h}:${m.toString().padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
 
 interface NativeVideoPreviewProps {
     file: DebridFileNode;
@@ -33,41 +64,42 @@ interface NativeVideoPreviewProps {
 }
 
 /**
- * Player route for devices that can only play the provider's transcoded stream
- * (iPhone / iPad). Apple's native <video controls> handles playback, fullscreen,
- * AirPlay and subtitles (addon subtitles are carried inside the stream — see
- * lib/playback/native-hls.ts); this component picks the stream and offers what
- * native controls can't: audio language and quality.
+ * Phone player (iPhone / iPad route): YouTube-style inline playback of the
+ * provider's converted stream. Video on top, choices below in portrait; full
+ * bleed in landscape. Subtitles ride inside the HLS stream (lib/playback/native-hls.ts)
+ * so they also show in Apple's player when going fullscreen.
  */
 export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev }: NativeVideoPreviewProps) {
     const device = getDeviceProfile()?.label.split(" · ")[0] ?? "this device";
     const videoRef = useRef<HTMLVideoElement>(null);
     const source = useStreamingStore((s) => s.selectedSource);
+    const openSourcePicker = useStreamingStore((s) => s.openSourcePicker);
     const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
 
+    // ── Stream selection ──────────────────────────────────────────────────
     // streamingLinks is undefined while the provider lookup runs; cap the wait.
     // State is tagged with the URL it belongs to, so a new file starts fresh.
-    const [expiredUrl, setExpiredUrl] = useState<string | null>(null);
+    const [expired, setExpired] = useState<{ links?: string; subs?: string }>({});
     useEffect(() => {
-        const timer = setTimeout(() => setExpiredUrl(downloadUrl), LINKS_WAIT_MS);
-        return () => clearTimeout(timer);
+        const links = setTimeout(() => setExpired((e) => ({ ...e, links: downloadUrl })), LINKS_WAIT_MS);
+        const subs = setTimeout(() => setExpired((e) => ({ ...e, subs: downloadUrl })), SUBTITLE_GRACE_MS);
+        return () => {
+            clearTimeout(links);
+            clearTimeout(subs);
+        };
     }, [downloadUrl]);
-    const pending = !downloadUrl || (streamingLinks === undefined && expiredUrl !== downloadUrl);
+    const pending = !downloadUrl || (streamingLinks === undefined && expired.links !== downloadUrl);
 
     const [variantState, setVariantState] = useState<{ url: string; info: StreamInfo } | null>(null);
     const variant = variantState?.url === downloadUrl ? variantState.info : null;
-
     const hlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
     const info = variant ?? getStreamInfo(hlsUrl);
     const container = detectContainer(source?.fileName, file.name, downloadUrl);
 
-    // Subtitles must be inside the HLS stream — Apple's player ignores tracks the
-    // page adds. Lock the set at first play so late subtitles don't reload the video.
-    const pickedSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
-    const [lockedSubs, setLockedSubs] = useState<{ url: string; list: AddonSubtitle[] } | null>(null);
-    const nativeSubs = lockedSubs && lockedSubs.url === hlsUrl ? lockedSubs.list : pickedSubs;
-    const masterKey = hlsUrl ? [hlsUrl, ...nativeSubs.map((s) => s.url)].join(" ") : null;
+    const nativeSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
+    const waitingForSubs = nativeSubs.length === 0 && expired.subs !== downloadUrl;
+    const masterKey = hlsUrl && !waitingForSubs ? [hlsUrl, ...nativeSubs.map((s) => s.url)].join(" ") : null;
     const [master, setMaster] = useState<{ key: string; url: string } | null>(null);
     useEffect(() => {
         if (!hlsUrl || !masterKey) return;
@@ -86,75 +118,272 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const masterUrl = master?.key === masterKey ? master.url : null;
     // Wrapper playlist failed → play the provider stream directly (no subtitles).
     const streamUrl = masterUrl && failedSrc === masterUrl ? hlsUrl : masterUrl;
-    // Converted stream first. The original only when it's an MP4-family file (or
-    // unknown — Safari tries, and a failure lands on the "can't play" screen).
     const preparing = pending || (!!hlsUrl && !streamUrl);
-    const src = preparing ? null : (hlsUrl ? streamUrl : container && !isMp4Family(container) ? null : downloadUrl);
+    // Converted stream first; the original only for MP4-family (or unknown) files.
+    const src = preparing ? null : hlsUrl ? streamUrl : container && !isMp4Family(container) ? null : downloadUrl;
     const failed = !preparing && (!src || failedSrc === src);
 
-    // ── Progress: resume, periodic save, completion ──
-    const resumeAtRef = useRef<number | null>(null);
+    // ── Playback state ────────────────────────────────────────────────────
+    const [playing, setPlaying] = useState(false);
+    const [buffering, setBuffering] = useState(false);
+    const [time, setTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [bufferedEnd, setBufferedEnd] = useState(0);
+    const [ended, setEnded] = useState(false);
+    const [speed, setSpeed] = useState(1);
+    const [sheet, setSheet] = useState<Sheet>(null);
+    const [controlsVisible, setControlsVisible] = useState(true);
+    const [seekFlash, setSeekFlash] = useState<{ side: "left" | "right"; id: number } | null>(null);
+    const [textTracks, setTextTracks] = useState<{ index: number; label: string; language: string }[]>([]);
+    const [activeTrack, setActiveTrack] = useState(-1);
+    const [switching, setSwitching] = useState(false);
+
+    // Position survives src changes (audio/quality switch, subtitles arriving) on the same element.
+    const positionRef = useRef(0);
+    const wasPlayingRef = useRef(false);
     const lastSavedRef = useRef(0);
+    useEffect(() => {
+        positionRef.current = 0;
+        wasPlayingRef.current = false;
+    }, [downloadUrl]);
+
     const handleLoadedMetadata = useCallback(() => {
         const video = videoRef.current;
         if (!video) return;
-        const switched = resumeAtRef.current != null;
-        const at = resumeAtRef.current ?? initialProgress ?? 0;
-        resumeAtRef.current = null;
+        setDuration(video.duration);
+        const at = positionRef.current > 1 ? positionRef.current : (initialProgress ?? 0);
         if (at > 5 && (!video.duration || at < video.duration - 30)) video.currentTime = at;
-        // Audio/quality switches keep playing; WebKit allows it once the user has played this element.
-        if (switched) void video.play().catch(() => {});
-    }, [initialProgress]);
+        video.playbackRate = speed;
+        // WebKit allows play() without a new tap once the user has played this element.
+        if (wasPlayingRef.current) void video.play().catch(() => setBuffering(false));
+    }, [initialProgress, speed]);
+
     const handleTimeUpdate = useCallback(() => {
         const video = videoRef.current;
-        if (!video || Math.abs(video.currentTime - lastSavedRef.current) < SAVE_EVERY_S) return;
-        lastSavedRef.current = video.currentTime;
-        updateProgress(video.currentTime, video.duration);
+        if (!video) return;
+        positionRef.current = video.currentTime;
+        setTime(video.currentTime);
+        if (video.buffered.length) setBufferedEnd(video.buffered.end(video.buffered.length - 1));
+        if (Math.abs(video.currentTime - lastSavedRef.current) >= SAVE_EVERY_S) {
+            lastSavedRef.current = video.currentTime;
+            updateProgress(video.currentTime, video.duration);
+        }
     }, [updateProgress]);
 
-    // ── Audio language / quality: new provider session at the same position ──
-    const [switching, setSwitching] = useState(false);
-    const switchVariant = useCallback(async (opts: StreamVariantOptions) => {
-        if (!info) return;
-        setSwitching(true);
-        resumeAtRef.current = videoRef.current?.currentTime ?? null;
-        const next = await info.switchVariant(opts).catch(() => null);
-        setSwitching(false);
-        if (next) setVariantState({ url: downloadUrl, info: next });
-        else toast.error("Couldn't switch the stream. Try again in a moment.");
-    }, [info, downloadUrl]);
+    // Subtitle renditions from the HLS stream show up as native text tracks.
+    // The preferred language is switched on when it appears, unless the user chose.
+    const userPickedTrackRef = useRef(false);
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !src) return;
+        const list = video.textTracks;
+        const sync = () => {
+            const all = Array.from(list);
+            if (!userPickedTrackRef.current && !all.some((t) => t.mode === "showing")) {
+                const preferred = all.find(
+                    (t) => (t.kind === "subtitles" || t.kind === "captions") && isSubtitleLanguage({ url: "", lang: t.language || t.label }, subtitleLanguage)
+                );
+                if (preferred) preferred.mode = "showing";
+            }
+            const tracks = all
+                .map((t, index) => ({ index, label: t.label || getLanguageDisplayName(t.language || "und"), language: t.language, kind: t.kind }))
+                .filter((t) => t.kind === "subtitles" || t.kind === "captions");
+            setTextTracks(tracks);
+            setActiveTrack(Array.from(list).findIndex((t) => t.mode === "showing"));
+        };
+        sync();
+        list.addEventListener("addtrack", sync);
+        list.addEventListener("removetrack", sync);
+        list.addEventListener("change", sync);
+        return () => {
+            list.removeEventListener("addtrack", sync);
+            list.removeEventListener("removetrack", sync);
+            list.removeEventListener("change", sync);
+        };
+    }, [src, subtitleLanguage]);
+    const showTrack = useCallback((index: number) => {
+        const list = videoRef.current?.textTracks;
+        if (!list) return;
+        Array.from(list).forEach((t, i) => (t.mode = i === index ? "showing" : "disabled"));
+        setActiveTrack(index);
+    }, []);
+
+    // ── Controls ──────────────────────────────────────────────────────────
+    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pokeControls = useCallback(() => {
+        setControlsVisible(true);
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = setTimeout(() => {
+            if (!videoRef.current?.paused) setControlsVisible(false);
+        }, HIDE_CONTROLS_MS);
+    }, []);
+    useEffect(() => () => {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    }, []);
+
+    const togglePlay = useCallback(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        pokeControls();
+        if (video.paused || video.ended) {
+            // Immediate feedback: HLS can take a few seconds to start.
+            setBuffering(true);
+            setEnded(false);
+            void video.play().catch(() => setBuffering(false));
+        } else {
+            video.pause();
+        }
+    }, [pokeControls]);
+
+    const seekBy = useCallback((delta: number) => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.currentTime = Math.max(0, Math.min((video.duration || Infinity) - 1, video.currentTime + delta));
+        setSeekFlash({ side: delta < 0 ? "left" : "right", id: Date.now() });
+    }, []);
+
+    // Single tap toggles controls; double tap on the left/right half seeks ±10s.
+    const lastTapRef = useRef<{ at: number; timer: ReturnType<typeof setTimeout> | null }>({ at: 0, timer: null });
+    const handleSurfaceTap = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const side = e.clientX - rect.left < rect.width / 2 ? "left" : "right";
+            const now = Date.now();
+            const tap = lastTapRef.current;
+            if (now - tap.at < DOUBLE_TAP_MS) {
+                if (tap.timer) clearTimeout(tap.timer);
+                tap.at = 0;
+                seekBy(side === "left" ? -10 : 10);
+                pokeControls();
+                return;
+            }
+            tap.at = now;
+            tap.timer = setTimeout(() => {
+                setControlsVisible((visible) => {
+                    if (!visible) pokeControls();
+                    return !visible;
+                });
+            }, DOUBLE_TAP_MS);
+        },
+        [seekBy, pokeControls]
+    );
+
+    const goFullscreen = useCallback(() => {
+        const video = videoRef.current as NativeFullscreenVideo | null;
+        if (!video) return;
+        // iPhone: Apple's player (subtitles + AirPlay). iPad: element fullscreen keeps our controls.
+        const host = video.parentElement as (HTMLElement & { webkitRequestFullscreen?: () => void }) | null;
+        if (getDeviceProfile()?.kind === "ipad" && host?.webkitRequestFullscreen) host.webkitRequestFullscreen();
+        else enterNativeFullscreen(video);
+    }, []);
+
+    const switchVariant = useCallback(
+        async (opts: StreamVariantOptions) => {
+            if (!info) return;
+            setSheet(null);
+            setSwitching(true);
+            wasPlayingRef.current = !videoRef.current?.paused;
+            const next = await info.switchVariant(opts).catch(() => null);
+            setSwitching(false);
+            if (next) setVariantState({ url: downloadUrl, info: next });
+            else toast.error("Couldn't switch the stream. Try again in a moment.");
+        },
+        [info, downloadUrl]
+    );
 
     const tryNextSource = () => {
         if (!useStreamingStore.getState().playNextBestSource()) toast.error("No other sources to try.");
     };
     const externalPlayers = EXTERNAL_PLAYERS.filter((p) => isSupportedPlayer(p));
 
+    const currentAudio = info?.audios.find((a) => a.index === info.audioIndex);
+    const currentQuality = info?.resolutions.find((r) => r.index === info.resolutionIndex)?.label ?? info?.resolutions[0]?.label;
+    const chips: { id: Exclude<Sheet, null> | "source"; icon: typeof Gauge; label: string; value: string; show: boolean }[] = [
+        { id: "source", icon: Layers, label: "Source", value: [source?.resolution, source?.quality].filter(Boolean).join(" ") || "Change", show: !!source },
+        { id: "quality", icon: Settings2, label: "Quality", value: currentQuality?.replace(/^Original \((.+)\)$/, "$1") ?? "Auto", show: (info?.resolutions.length ?? 0) > 1 },
+        {
+            id: "audio",
+            icon: AudioLines,
+            label: "Audio",
+            value: currentAudio?.language ? getLanguageDisplayName(currentAudio.language) : "Default",
+            show: (info?.audios.length ?? 0) > 1,
+        },
+        { id: "subtitles", icon: Captions, label: "Subtitles", value: textTracks.find((t) => t.index === activeTrack)?.label ?? "Off", show: textTracks.length > 0 },
+        { id: "speed", icon: Gauge, label: "Speed", value: speed === 1 ? "Normal" : `${speed}×`, show: true },
+    ];
+
+    const sheetOptions: { key: string; label: string; active: boolean; onSelect: () => void }[] =
+        sheet === "quality"
+            ? (info?.resolutions ?? []).map((r) => ({
+                  key: String(r.index),
+                  label: r.label,
+                  active: r.index === info?.resolutionIndex,
+                  onSelect: () => void switchVariant({ resolutionIndex: r.index }),
+              }))
+            : sheet === "audio"
+              ? (info?.audios ?? []).map((a) => ({
+                    key: String(a.index),
+                    label: [a.language ? getLanguageDisplayName(a.language) : `Track ${a.index + 1}`, a.title, a.channels ? `${a.channels}ch` : null]
+                        .filter(Boolean)
+                        .join(" · "),
+                    active: a.index === info?.audioIndex,
+                    onSelect: () => void switchVariant({ audioIndex: a.index }),
+                }))
+              : sheet === "subtitles"
+                ? [{ index: -1, label: "Off" }, ...textTracks].map((t) => ({
+                      key: String(t.index),
+                      label: t.label,
+                      active: t.index === activeTrack,
+                      onSelect: () => {
+                          userPickedTrackRef.current = true;
+                          showTrack(t.index);
+                          setSheet(null);
+                      },
+                  }))
+                : sheet === "speed"
+                  ? SPEEDS.map((s) => ({
+                        key: String(s),
+                        label: s === 1 ? "Normal" : `${s}×`,
+                        active: s === speed,
+                        onSelect: () => {
+                            setSpeed(s);
+                            if (videoRef.current) videoRef.current.playbackRate = s;
+                            setSheet(null);
+                        },
+                    }))
+                  : [];
+
+    const progressPct = duration ? (time / duration) * 100 : 0;
+    const bufferedPct = duration ? (bufferedEnd / duration) * 100 : 0;
+    const showOverlay = controlsVisible || !playing || buffering || ended;
+
     return (
-        <div className="flex h-full w-full flex-col bg-black text-white">
-            <div className="relative flex min-h-0 flex-1 items-center justify-center">
+        <div className="relative flex h-full w-full flex-col bg-black text-white portrait:overflow-y-auto">
+            {/* ── Video (16:9 in portrait, full bleed in landscape) ── */}
+            <div className="relative w-full shrink-0 bg-black portrait:aspect-video landscape:min-h-0 landscape:flex-1">
                 {preparing ? (
-                    <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
-                        <Loader2 className="size-6 animate-spin text-white/60" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                        <Loader2 className="size-7 animate-spin text-white/70" />
                         <p className="text-sm font-medium">Preparing a stream for {device}</p>
-                        <p className="text-xs leading-relaxed text-white/50">
-                            {device} plays a converted copy of this file. Starting it can take a few seconds.
+                        <p className="max-w-xs text-xs leading-relaxed text-white/50">
+                            Your provider converts this file so {device} can play it. This can take a few seconds.
                         </p>
                     </div>
                 ) : failed ? (
-                    <div className="flex max-w-sm flex-col items-center gap-4 px-6 text-center">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto px-6 py-4 text-center">
                         <AlertCircle className="size-6 text-white/60" />
-                        <div className="space-y-1.5">
-                            <p className="text-sm font-medium">This file can&apos;t play on {device}</p>
-                            <p className="text-xs leading-relaxed text-white/50">
+                        <div className="space-y-1">
+                            <p className="text-sm font-medium">This source can&apos;t play on {device}</p>
+                            <p className="max-w-sm text-xs leading-relaxed text-white/50">
                                 {hlsUrl && failedSrc === src
                                     ? "The converted stream didn't load."
-                                    : `${device} only plays converted streams and MP4 files, and no converted stream is available for this source.`}
+                                    : "Your provider couldn't convert this file. Another source usually works."}
                             </p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-2">
                             {source && (
                                 <Button size="sm" onClick={tryNextSource}>
-                                    <RefreshCw className="size-4" /> Try another source
+                                    <RefreshCw className="size-4" /> Next source
                                 </Button>
                             )}
                             {externalPlayers.map((player) => (
@@ -162,87 +391,203 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     key={player}
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                        openInPlayer({ url: downloadUrl, fileName: file.name, player, progressKey })
-                                    }>
+                                    onClick={() => openInPlayer({ url: downloadUrl, fileName: file.name, player, progressKey })}>
                                     <ExternalLink className="size-4" /> {player}
                                 </Button>
                             ))}
                         </div>
                     </div>
                 ) : (
-                    <video
-                        key={src}
-                        ref={videoRef}
-                        src={src ?? undefined}
-                        controls
-                        preload="metadata"
-                        className="h-full w-full bg-black object-contain"
-                        onLoadedMetadata={handleLoadedMetadata}
-                        onTimeUpdate={handleTimeUpdate}
-                        onPlay={() => hlsUrl && !lockedSubs && setLockedSubs({ url: hlsUrl, list: nativeSubs })}
-                        onPause={() => forceSync()}
-                        onEnded={() => markCompleted()}
-                        onError={() => setFailedSrc(src ?? null)}
-                    />
-                )}
-                {switching && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                        <Loader2 className="size-6 animate-spin text-white/70" />
-                    </div>
+                    <>
+                        <video
+                            ref={videoRef}
+                            src={src ?? undefined}
+                            playsInline
+                            preload="metadata"
+                            className="absolute inset-0 h-full w-full object-contain"
+                            onLoadedMetadata={handleLoadedMetadata}
+                            onTimeUpdate={handleTimeUpdate}
+                            onProgress={handleTimeUpdate}
+                            onPlay={() => {
+                                wasPlayingRef.current = true;
+                                setPlaying(true);
+                                pokeControls();
+                            }}
+                            onPlaying={() => setBuffering(false)}
+                            onWaiting={() => setBuffering(true)}
+                            onCanPlay={() => setBuffering((b) => (videoRef.current?.paused ? false : b))}
+                            onPause={() => {
+                                wasPlayingRef.current = false;
+                                setPlaying(false);
+                                setBuffering(false);
+                                setControlsVisible(true);
+                                forceSync();
+                            }}
+                            onEnded={() => {
+                                setEnded(true);
+                                markCompleted();
+                            }}
+                            onError={() => {
+                                setBuffering(false);
+                                setFailedSrc(src ?? null);
+                            }}
+                        />
+
+                        {/* Tap surface: show/hide controls, double-tap ±10s */}
+                        <div className="absolute inset-0" onClick={handleSurfaceTap} />
+
+                        {seekFlash && (
+                            <div
+                                key={seekFlash.id}
+                                className={cn(
+                                    "pointer-events-none absolute inset-y-0 flex w-1/3 items-center justify-center animate-out fade-out-0 duration-700 fill-mode-forwards",
+                                    seekFlash.side === "left" ? "left-0" : "right-0"
+                                )}>
+                                <span className="rounded-full bg-black/50 px-3 py-1.5 text-sm font-medium">
+                                    {seekFlash.side === "left" ? "−10s" : "+10s"}
+                                </span>
+                            </div>
+                        )}
+
+                        <div
+                            className={cn(
+                                "pointer-events-none absolute inset-0 transition-opacity duration-200",
+                                showOverlay ? "opacity-100" : "opacity-0"
+                            )}>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
+
+                            {/* Center: prev · play/pause (spinner while loading) · next */}
+                            <div className="absolute inset-0 flex items-center justify-center gap-10">
+                                <button
+                                    type="button"
+                                    aria-label="Previous"
+                                    disabled={!onPrev}
+                                    onClick={onPrev}
+                                    className={cn("pointer-events-auto rounded-full p-2 disabled:opacity-0", !showOverlay && "pointer-events-none")}>
+                                    <SkipBack className="size-6 fill-current" />
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label={playing ? "Pause" : "Play"}
+                                    onClick={togglePlay}
+                                    className={cn(
+                                        "pointer-events-auto flex size-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm active:scale-95",
+                                        !showOverlay && "pointer-events-none"
+                                    )}>
+                                    {buffering || switching ? (
+                                        <Loader2 className="size-8 animate-spin" />
+                                    ) : playing ? (
+                                        <Pause className="size-8 fill-current" />
+                                    ) : (
+                                        <Play className="ml-1 size-8 fill-current" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label="Next"
+                                    disabled={!onNext}
+                                    onClick={onNext}
+                                    className={cn("pointer-events-auto rounded-full p-2 disabled:opacity-0", !showOverlay && "pointer-events-none")}>
+                                    <SkipForward className="size-6 fill-current" />
+                                </button>
+                            </div>
+
+                            {/* Bottom: time · fullscreen, then the scrubber */}
+                            <div className={cn("absolute inset-x-0 bottom-0 px-3 pb-1", !showOverlay && "[&_*]:pointer-events-none")}>
+                                <div className="flex items-center justify-between text-xs tabular-nums">
+                                    <span>
+                                        {formatTime(time)} <span className="text-white/60">/ {formatTime(duration)}</span>
+                                    </span>
+                                    <button type="button" aria-label="Fullscreen" onClick={goFullscreen} className="pointer-events-auto p-2">
+                                        <Maximize className="size-5" />
+                                    </button>
+                                </div>
+                                <div className="relative h-6">
+                                    <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25" />
+                                    <div className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/40" style={{ width: `${bufferedPct}%` }} />
+                                    <div className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
+                                    <input
+                                        type="range"
+                                        aria-label="Seek"
+                                        min={0}
+                                        max={duration || 0}
+                                        step={1}
+                                        value={time}
+                                        onChange={(e) => {
+                                            const video = videoRef.current;
+                                            if (!video) return;
+                                            video.currentTime = Number(e.target.value);
+                                            setTime(video.currentTime);
+                                            pokeControls();
+                                        }}
+                                        className="pointer-events-auto absolute inset-0 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {ended && onNext && (
+                            <div className="absolute inset-x-0 top-3 flex justify-center">
+                                <Button size="sm" onClick={onNext}>
+                                    Next episode <ChevronRight className="size-4" />
+                                </Button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
-            {/* Choices Apple's controls can't offer. Native <select> → iOS picker. */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-                {onPrev && (
-                    <Button size="icon" variant="ghost" onClick={onPrev} aria-label="Previous">
-                        <SkipBack className="size-4" />
-                    </Button>
-                )}
-                {onNext && (
-                    <Button size="icon" variant="ghost" onClick={onNext} aria-label="Next">
-                        <SkipForward className="size-4" />
-                    </Button>
-                )}
-                {info && info.audios.length > 1 && (
-                    <select
-                        aria-label="Audio"
-                        className={SELECT_CLS}
-                        value={info.audioIndex}
-                        disabled={switching}
-                        onChange={(e) => void switchVariant({ audioIndex: Number(e.target.value) })}>
-                        {info.audios.map((a) => (
-                            <option key={a.index} value={a.index}>
-                                {[a.language ? getLanguageDisplayName(a.language) : `Track ${a.index + 1}`, a.title, a.channels ? `${a.channels}ch` : null]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                            </option>
-                        ))}
-                    </select>
-                )}
-                {info && info.resolutions.length > 1 && (
-                    <select
-                        aria-label="Quality"
-                        className={SELECT_CLS}
-                        value={String(info.resolutionIndex)}
-                        disabled={switching}
-                        onChange={(e) =>
-                            void switchVariant({ resolutionIndex: e.target.value === "null" ? null : Number(e.target.value) })
-                        }>
-                        {info.resolutions.map((r) => (
-                            <option key={String(r.index)} value={String(r.index)}>
-                                {r.label}
-                            </option>
-                        ))}
-                    </select>
-                )}
-                {src && (
-                    <span className="ml-auto text-xs tracking-widest uppercase text-white/40">
-                        {src === downloadUrl ? "Original" : `Converted for ${device}`}
-                    </span>
-                )}
+            {/* ── Choices: below the video in portrait, over its top edge in landscape ── */}
+            <div
+                className={cn(
+                    "flex gap-2 overflow-x-auto px-3 py-3 [scrollbar-width:none] landscape:absolute landscape:inset-x-0 landscape:top-0 landscape:bg-gradient-to-b landscape:from-black/70 landscape:to-transparent landscape:py-2 landscape:transition-opacity",
+                    !showOverlay && "landscape:pointer-events-none landscape:opacity-0"
+                )}>
+                {chips
+                    .filter((c) => c.show)
+                    .map((chip) => (
+                        <button
+                            key={chip.id}
+                            type="button"
+                            onClick={() => (chip.id === "source" ? openSourcePicker() : setSheet(chip.id))}
+                            className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.08] px-3.5 py-2 text-left active:bg-white/15">
+                            <chip.icon className="size-4 text-white/70" />
+                            <span className="text-xs text-white/60">{chip.label}</span>
+                            <span className="text-sm font-medium">{chip.value}</span>
+                        </button>
+                    ))}
             </div>
+            {src && (
+                <p className="px-4 text-xs text-white/40 landscape:hidden">
+                    {src === downloadUrl ? "Playing the original file" : `Converted for ${device} by your provider`}
+                    {source?.addonName ? ` · ${source.addonName}` : ""}
+                </p>
+            )}
+
+            {/* ── Bottom sheet ── */}
+            {sheet && (
+                <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/50" onClick={() => setSheet(null)}>
+                    <div
+                        className="max-h-[70%] overflow-y-auto rounded-t-2xl bg-neutral-900 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+                        onClick={(e) => e.stopPropagation()}>
+                        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />
+                        <p className="px-5 pb-2 text-xs tracking-widest uppercase text-white/50">{chips.find((c) => c.id === sheet)?.label}</p>
+                        {sheetOptions.map((option) => (
+                            <button
+                                key={option.key}
+                                type="button"
+                                onClick={option.onSelect}
+                                className={cn(
+                                    "flex min-h-12 w-full items-center justify-between px-5 text-left text-[15px] active:bg-white/10",
+                                    option.active && "text-primary"
+                                )}>
+                                {option.label}
+                                {option.active && <span className="size-2 rounded-full bg-primary" />}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

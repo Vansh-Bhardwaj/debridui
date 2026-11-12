@@ -50,6 +50,9 @@ export interface StreamHint {
     /** Exact file name / byte size from the addon (behaviorHints) — matches pack files. */
     fileName?: string;
     fileSize?: number;
+    /** Episode being played — picks the right file inside a season pack. */
+    season?: number;
+    episode?: number;
 }
 
 interface BaseClientOptions {

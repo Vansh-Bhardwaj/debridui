@@ -77,12 +77,27 @@ export function pickPreferredAudio(info: Pick<StreamInfo, "audios" | "audioIndex
     return info.audios.find(matches)?.index ?? null;
 }
 
+/** Video file name at the end of an addon resolve URL (Torrentio-style), if any. */
+function videoNameFromUrl(url: string | undefined): string | undefined {
+    try {
+        const name = decodeURIComponent(new URL(url ?? "").pathname.split("/").pop() ?? "");
+        return /\.(mkv|mp4|m4v|avi|mov|webm|ts)$/i.test(name) ? name : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 /** What a debrid client needs to find an addon source's file in the user's library. */
-export function sourceStreamHint(source: AddonSource | null | undefined): StreamHint {
+export function sourceStreamHint(
+    source: AddonSource | null | undefined,
+    episode?: { season?: number | null; episode?: number | null } | null
+): StreamHint {
     return {
         infoHash: source?.magnet?.match(/btih:([a-f0-9]{40})/i)?.[1],
-        fileName: source?.fileName,
+        fileName: source?.fileName ?? videoNameFromUrl(source?.url),
         fileSize: source?.videoSize,
+        season: episode?.season ?? undefined,
+        episode: episode?.episode ?? undefined,
     };
 }
 
@@ -98,9 +113,9 @@ export const setStreamLinkLookup = (lookup: StreamLinkLookup | null) => {
  * resolving the addon URL. The client caches the result, so the player's own lookup
  * reuses it — this removes most of the wait before iOS can start playback.
  */
-export function prefetchStreamLinks(source: AddonSource): void {
+export function prefetchStreamLinks(source: AddonSource, episode?: { season?: number | null; episode?: number | null } | null): void {
     if (!providerTranscode || !streamLinkLookup) return;
-    const hint = sourceStreamHint(source);
+    const hint = sourceStreamHint(source, episode);
     if (hint.infoHash || hint.fileName || hint.fileSize) void streamLinkLookup(source.url ?? "", hint).catch(() => {});
 }
 
