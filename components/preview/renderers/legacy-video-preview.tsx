@@ -617,7 +617,21 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         return decision;
     }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine]);
 
-    const effectiveUrl = streamingSelection.url;
+    // iOS only loads video on a tap. If that tap lands on the raw file (MKV etc.)
+    // before the provider's HLS lookup returns, Safari fails, the fallbacks run, and
+    // the HLS link that arrives later can't autoplay. Hold the source until the
+    // lookup resolves (undefined = pending, {} = none), capped so a hung lookup
+    // can't block playback.
+    const [hlsWaitExpired, setHlsWaitExpired] = useState(false);
+    const awaitingHls = ios && streamingLinks === undefined && engine !== "original" && !hlsWaitExpired;
+    useEffect(() => {
+        setHlsWaitExpired(false);
+        if (!ios) return;
+        const t = setTimeout(() => setHlsWaitExpired(true), 15_000);
+        return () => clearTimeout(t);
+    }, [downloadUrl, ios]);
+
+    const effectiveUrl = awaitingHls ? "" : streamingSelection.url;
     const isUsingTranscodedStream = streamingSelection.isTranscoded;
 
     // Track if we've tried fallback to transcoded stream
@@ -3181,7 +3195,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 relative">
                     <video
                         ref={videoRef}
-                        src={useHlsJs ? undefined : finalUrl}
+                        src={useHlsJs || !finalUrl ? undefined : finalUrl}
                         autoPlay={!iosTapToPlay && !!finalUrl}
                         playsInline={!ios}
                         preload="metadata"
@@ -4511,7 +4525,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     {/* Cast to device */}
                                     <PlayerCastButton
                                         videoRef={videoRef}
-                                        downloadUrl={effectiveUrl}
+                                        downloadUrl={effectiveUrl || downloadUrl}
                                         title={file.name}
                                         subtitles={subtitles}
                                     />
@@ -4540,7 +4554,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     </div>
 
                     {/* iOS: tap-to-play overlay so playback runs in user gesture context */}
-                    {ios && iosTapToPlay && !isTransitioning && (
+                    {ios && iosTapToPlay && !isTransitioning && !awaitingHls && (
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleIosTapToPlay(); }}
