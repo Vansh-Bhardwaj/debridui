@@ -635,6 +635,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [downloadUrl]);
 
     const effectiveUrl = awaitingHls ? "" : streamingSelection.url;
+
+    // One line per decision so device reports ("why did it play X?") are answerable from the console.
+    useEffect(() => {
+        if (!effectiveUrl) return;
+        console.info(
+            `[playback] ${deviceProfile?.label ?? "unknown device"}: ${streamingSelection.format}` +
+                ` — ${streamingSelection.reason ?? "default"}${originalIssue ? ` (original: ${originalIssue})` : ""}`
+        );
+    }, [effectiveUrl, deviceProfile?.label, streamingSelection.format, streamingSelection.reason, originalIssue]);
     const isUsingTranscodedStream = streamingSelection.isTranscoded;
 
     // Track if we've tried fallback to transcoded stream
@@ -1539,6 +1548,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
             void startDeviceConversion().then((ok) => {
                 if (ok) return;
+                // Nothing on this device can play this file's audio — move on to a
+                // source that plays, instead of leaving silent/black video.
+                if (useStreamingStore.getState().playNextBestSource()) {
+                    showOsd("This file's audio can't play here — trying the next source");
+                    return;
+                }
                 setShowCodecWarning(true);
                 showLoadErrorToast("This file's audio format isn't supported by your browser. Try VLC or another external player.");
             });

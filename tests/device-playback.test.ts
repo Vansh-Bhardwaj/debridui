@@ -114,3 +114,25 @@ describe("auto-select on devices that can't open MKV", () => {
         expect(result.source?.fileName).toBe(mp4720.fileName);
     });
 });
+
+describe("auto-select on desktop browsers (Edge/Chrome)", () => {
+    const settings = {
+        profileId: "custom",
+        customRange: { minResolution: Resolution.SD_480P, maxResolution: "any", minSourceQuality: SourceQuality.WEBRIP, maxSourceQuality: SourceQuality.BLURAY_REMUX },
+        preferCached: true,
+        skipCamReleases: true,
+        rememberFailedSources: false,
+    } as unknown as StreamingSettings;
+    const src = (fileName: string, resolution: Resolution, quality: SourceQuality): AddonSource => ({
+        title: "Addon", description: fileName, fileName, resolution, quality,
+        url: `https://x/${fileName}`, isCached: true, addonId: "a", addonName: "Addon",
+    });
+
+    test("plays what the browser decodes before a file that needs conversion", () => {
+        const dts4k = src("Movie.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.mkv", Resolution.UHD_4K, SourceQuality.BLURAY_REMUX);
+        const aac1080 = src("Movie.1080p.WEB-DL.H.264.AAC.mkv", Resolution.FHD_1080P, SourceQuality.WEB_DL);
+        // Desktop ranking never treats conversion as equal (rankAsConverted is iPhone/iPad only).
+        const result = selectBestSource([dts4k, aac1080], settings, { codecSupport: allCodecs({ dts: false }), transcodeAvailable: false });
+        expect(result.source?.fileName).toBe(aac1080.fileName);
+    });
+});

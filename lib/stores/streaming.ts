@@ -132,17 +132,19 @@ function getCodecSupportForPlayer(player: string | undefined): CodecSupport | un
 }
 
 /**
- * Will the player use the provider's converted stream? iPhone/iPad always do
- * (their route ignores the "Original file" preference); elsewhere unless forced off.
+ * Should ranking treat every source as playable because the provider converts it?
+ * Only on devices that always play the converted stream (iPhone/iPad). Elsewhere a
+ * file the browser plays directly beats one that needs conversion — conversion is
+ * the fallback, not an equal option (it costs startup time and can fail).
  */
-function willTranscode(settings: StreamingSettings): boolean {
-    return isProviderTranscodeAvailable() && (settings.playbackEngine !== "original" || getDeviceProfile()?.route === "native");
+function rankAsConverted(): boolean {
+    return isProviderTranscodeAvailable() && getDeviceProfile()?.route === "native";
 }
 
 /** Shared ranking policy derived from settings + provider capabilities. */
 function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: StreamingSettings) {
     return {
-        transcodeAvailable: !!codecSupport && willTranscode(settings),
+        transcodeAvailable: !!codecSupport && rankAsConverted(),
         mkvPlayable: !codecSupport || (getDeviceProfile()?.mkv ?? true),
         skipCamReleases: settings.skipCamReleases,
         rememberFailedSources: settings.rememberFailedSources,
@@ -836,7 +838,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         if (settings.rememberFailedSources !== false) markSourceFailed(selectedSource, "playback-failed");
 
         const support = getBrowserCodecSupport();
-        const transcode = willTranscode(settings);
+        const transcode = rankAsConverted();
 
         // 1. Try to find the next best source that matches our codec support,
         //    skipping ones that already failed on this device and cam rips.
