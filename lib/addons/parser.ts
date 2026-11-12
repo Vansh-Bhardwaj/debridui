@@ -1,7 +1,7 @@
 import { formatSize } from "../utils";
 import { type AddonStream, type AddonSource, type CatalogMeta, Resolution, SourceQuality } from "./types";
 import { type TraktMediaItem, type TraktMedia, type TraktImages } from "@/lib/trakt";
-import { cdnUrl } from "@/lib/utils/media";
+import { resolveImageUrl } from "@/lib/utils/media";
 
 const HASH_REGEX = /[a-f0-9]{40}/;
 const FILE_SIZE_REGEX = /\b\d+(?:\.\d+)?\s*(?:[KMGT]i?)?B\b/gi;
@@ -261,7 +261,7 @@ export function catalogMetasToMediaItems(metas: CatalogMeta[]): TraktMediaItem[]
             year: parseInt(meta.releaseInfo || "") || 0,
             ids: { trakt: 0, slug: meta.id, tmdb: 0, imdb: meta.id },
             images: meta.poster
-                ? ({ poster: [cdnUrl(meta.poster, { w: 300, h: 450 })] } as Partial<TraktImages> as TraktImages)
+                ? ({ poster: [resolveImageUrl(meta.poster)] } as Partial<TraktImages> as TraktImages)
                 : undefined,
             rating: meta.imdbRating ? parseFloat(meta.imdbRating) : undefined,
             genres: meta.genres,

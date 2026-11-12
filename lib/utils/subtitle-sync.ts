@@ -82,6 +82,22 @@ export function videoToSubtitleTime(videoT: number, state: SubtitleSyncState): n
     return (videoT - offset) / speed - delay;
 }
 
+/** Inverse timing transform for native video captions, including sync anchors. */
+export function subtitleToVideoTime(subT: number, state: SubtitleSyncState): number {
+    const target = (subT + (state.delayMs ?? 0) / 1000) * (state.speed || 1);
+    const { pointA, pointB } = state;
+    if (pointA && pointB && pointA.videoAt !== pointB.videoAt) {
+        const [first, second] = pointA.videoAt < pointB.videoAt ? [pointA, pointB] : [pointB, pointA];
+        const firstOffset = offsetAt(first.videoAt, state);
+        const secondOffset = offsetAt(second.videoAt, state);
+        if (target <= first.videoAt - firstOffset) return target + firstOffset;
+        if (target >= second.videoAt - secondOffset) return target + secondOffset;
+        const slope = (secondOffset - firstOffset) / (second.videoAt - first.videoAt);
+        return (target + firstOffset - slope * first.videoAt) / (1 - slope);
+    }
+    return target + offsetAt(0, state);
+}
+
 /**
  * Capture the *current* subtitle-file time at `videoAt` into a new anchor,
  * so when the user presses "Set point" the sync reference is whatever they

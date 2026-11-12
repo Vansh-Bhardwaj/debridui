@@ -19,6 +19,8 @@ interface CdnOptions {
  * Uses wsrv.nl as a free image proxy/CDN.
  */
 export function cdnUrl(url: string, options?: CdnOptions): string {
+    // wsrv blocks AniList by policy; the source already serves CDN-sized covers.
+    if (/^https?:\/\/(?:[\w-]+\.)*anilist\.co\//i.test(url)) return url;
     const params = new URLSearchParams();
     params.set("url", url);
     if (options?.w) params.set("w", String(options.w));
@@ -38,7 +40,16 @@ export function cdnUrl(url: string, options?: CdnOptions): string {
  * or full URLs (Stremio addons).
  */
 export function resolveImageUrl(url: string): string {
-    return url.startsWith("http") ? url : `https://${url}`;
+    const resolved = url.startsWith("http") ? url : `https://${url}`;
+    // Persisted addon catalogs may still contain the old wsrv wrapper.
+    try {
+        const parsed = new URL(resolved);
+        if (parsed.hostname === "wsrv.nl" || parsed.hostname === "images.weserv.nl") {
+            const source = parsed.searchParams.get("url");
+            if (source && /^https?:\/\//i.test(source)) return source;
+        }
+    } catch { /* Leave malformed addon URLs to the image fallback chain. */ }
+    return resolved;
 }
 
 export function getPosterUrl(images: TraktImages | undefined, fallback?: string): string | null {

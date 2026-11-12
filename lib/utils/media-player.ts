@@ -13,6 +13,7 @@ import { VLCBridgeClient } from "../vlc-bridge";
 import { startVLCProgressSync } from "../vlc-progress";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { toast } from "sonner";
+import { isIOS } from "./codec-support";
 
 // Singleton VLC Bridge client — lazy initialized
 let vlcBridge: VLCBridgeClient | null = null;
@@ -134,9 +135,11 @@ export const detectPlatform = (): Platform => {
     if (cachedPlatform !== null) return cachedPlatform;
 
     if (typeof navigator === "undefined") {
-        cachedPlatform = Platform.UNKNOWN;
-        return cachedPlatform;
+        return Platform.UNKNOWN;
     }
+
+    // iPadOS uses a desktop Mac UA, but needs iOS player links and touch behavior.
+    if (isIOS()) return (cachedPlatform = Platform.IOS);
 
     // Prefer Client Hints — reports real platform even when UA is spoofed (e.g. Android tablets in desktop mode)
     cachedPlatform = detectViaClientHints() ?? parseUserAgent(navigator.userAgent).platform;

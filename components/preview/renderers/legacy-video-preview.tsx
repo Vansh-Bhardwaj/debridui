@@ -12,12 +12,14 @@ import { DiagnosticsOverlay } from "@/components/player/diagnostics-overlay";
 import {
     INITIAL_SUBTITLE_SYNC,
     videoToSubtitleTime,
+    subtitleToVideoTime,
     captureSyncPoint,
     describeSync,
     type SubtitleSyncState,
 } from "@/lib/utils/subtitle-sync";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
-import { decideStream, getUnsupportedCodecs, isAudioSilentlyUnsupported, isSafari, type PlaybackEngine } from "@/lib/utils/codec-support";
+import { decideStream, getUnsupportedCodecs, isAudioSilentlyUnsupported, isIOS, isSafari, type PlaybackEngine } from "@/lib/utils/codec-support";
+import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { channelLabel, codecLabel, getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
 import { isLikelyStub, markSourceFailed } from "@/lib/streaming/source-health";
 import {
@@ -76,16 +78,6 @@ type PlayerSubtitle = AddonSubtitle & {
     source?: "addon" | "embedded";
     trackId?: string;
 };
-
-/** iOS Safari requires user gesture to start playback and often requires Range request support from the server. */
-function isIOS(): boolean {
-    if (typeof navigator === "undefined") return false;
-    // Standard iOS detection
-    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) return true;
-    // iPadOS 13+ sends macOS UA but has touch support
-    if (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1) return true;
-    return false;
-}
 
 type WindowWithWebkitAudioContext = Window & typeof globalThis & {
     webkitAudioContext?: typeof AudioContext;
@@ -404,6 +396,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [showRemainingTime, setShowRemainingTime] = useState(false);
     const ios = isIOS();
+    const [nativeFullscreen, setNativeFullscreen] = useState(false);
     const [iosTapToPlay, setIosTapToPlay] = useState(ios);
     const [showLoadingHint, setShowLoadingHint] = useState(false);
     const loadingHintDismissedRef = useRef(
@@ -1871,11 +1864,19 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const handler = () => {
             const el = containerRef.current;
             const fsElement = document.fullscreenElement;
-            setIsFullscreen(!!el && fsElement === el);
+            const video = videoRef.current as NativeFullscreenVideo | null;
+            setIsFullscreen(!!video?.webkitDisplayingFullscreen || (!!fsElement && (fsElement === el || fsElement === video)));
         };
+        const video = videoRef.current;
+        const onBegin = () => { setNativeFullscreen(true); setIsFullscreen(true); };
+        const onEnd = () => { setNativeFullscreen(false); setIsFullscreen(false); };
         document.addEventListener("fullscreenchange", handler);
+        video?.addEventListener("webkitbeginfullscreen", onBegin);
+        video?.addEventListener("webkitendfullscreen", onEnd);
         return () => {
             document.removeEventListener("fullscreenchange", handler);
+            video?.removeEventListener("webkitbeginfullscreen", onBegin);
+            video?.removeEventListener("webkitendfullscreen", onEnd);
         };
     }, []);
 
@@ -1929,12 +1930,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         if (el.paused || el.ended) {
             showCenterAction("play");
-            void el.play();
+            void el.play().catch(() => { if (ios) setIosTapToPlay(true); });
+            if (ios) enterNativeFullscreen(el);
         } else {
             showCenterAction("pause");
             el.pause();
         }
-    }, [showCenterAction]);
+    }, [showCenterAction, ios]);
 
     const seekTo = useCallback((time: number) => {
         const el = videoRef.current;
@@ -2051,6 +2053,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const el = containerRef.current;
         if (!el) return;
 
+        const video = videoRef.current as NativeFullscreenVideo | null;
+        if (ios && video) {
+            if (video.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+                video.webkitExitFullscreen();
+                return;
+            }
+            if (enterNativeFullscreen(video)) return;
+        }
+
         // Exit fake fullscreen if active
         if (fakeFullscreen) {
             setFakeFullscreen(false);
@@ -2074,7 +2085,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         } else if (document.exitFullscreen) {
             void document.exitFullscreen();
         }
-    }, [fakeFullscreen]);
+    }, [fakeFullscreen, ios]);
 
     // Click to play/pause (desktop only — mobile uses handleMobileTap)
     const handleContainerClick = useCallback((e: React.MouseEvent) => {
@@ -2271,6 +2282,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const sync = () => {
             const found: PlayerSubtitle[] = [];
             for (const t of Array.from(video.textTracks)) {
+                if (t.id === "debridui-native-subtitles") continue;
                 if (t.kind !== "subtitles" && t.kind !== "captions") continue;
                 const lang = (t.language || "").toLowerCase();
                 const label = t.label || "";
@@ -2317,6 +2329,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         video.dataset.activeSubtitle = String(activeSubtitleIndex);
 
         for (const track of Array.from(video.textTracks)) {
+            if (track.id === "debridui-native-subtitles") continue;
             if (track.kind !== "subtitles" && track.kind !== "captions") continue;
             const isSelected = entry?.source === "embedded" && entry.trackId && (
                 track.id === entry.trackId ||
@@ -2403,7 +2416,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const handleIosTapToPlay = useCallback(() => {
         setIosTapToPlay(false);
-        videoRef.current?.play();
+        const video = videoRef.current;
+        if (!video) return;
+        void video.play().catch(() => setIosTapToPlay(true));
+        enterNativeFullscreen(video);
     }, []);
 
     // Keyboard shortcuts - YouTube-style controls:
@@ -3071,11 +3087,37 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         setActiveCueText(activeCue?.text ?? "");
     }, [activeSubtitleIndex, parsedCues, currentTime, syncState]);
 
-    // iOS: ensure playsinline (and webkit prefix for older Safari)
+    // Native fullscreen can't display our HTML subtitle overlay.
+    useEffect(() => {
+        const video = videoRef.current;
+        const cues = parsedCues[activeSubtitleIndex];
+        if (!ios || !video || !cues?.length) return;
+        const element = document.createElement("track");
+        element.id = "debridui-native-subtitles";
+        element.kind = "subtitles";
+        element.label = displayedSubtitles[activeSubtitleIndex]?.name || "Selected subtitles";
+        element.srclang = displayedSubtitles[activeSubtitleIndex]?.lang || "und";
+        video.appendChild(element);
+        const track = element.track;
+        track.mode = "hidden";
+        for (const cue of cues) {
+            const start = subtitleToVideoTime(cue.start, syncState);
+            const end = subtitleToVideoTime(cue.end, syncState);
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= Math.max(0, start)) continue;
+            track.addCue(new VTTCue(Math.max(0, start), end, cue.text));
+        }
+        track.mode = nativeFullscreen ? "showing" : "hidden";
+        return () => {
+            track.mode = "disabled";
+            element.remove();
+        };
+    }, [ios, parsedCues, activeSubtitleIndex, displayedSubtitles, syncState, nativeFullscreen]);
+
+    // iPhone opens Apple's player on play when inline playback isn't requested.
     useEffect(() => {
         const el = videoRef.current;
-        if (el) el.setAttribute("webkit-playsinline", "true");
-    }, []);
+        if (el && !ios) el.setAttribute("webkit-playsinline", "true");
+    }, [ios]);
 
     // Use always-visible compact controls on touch/coarse pointers and narrow layouts.
     useEffect(() => {
@@ -3141,7 +3183,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         ref={videoRef}
                         src={useHlsJs ? undefined : finalUrl}
                         autoPlay={!iosTapToPlay && !!finalUrl}
-                        playsInline
+                        playsInline={!ios}
                         preload="metadata"
                         crossOrigin={isHls || isUsingTranscodedStream || !!finalUrl ? "anonymous" : undefined}
                         className="w-full h-full object-contain bg-black transition-opacity duration-500 ease-premium data-[loading=true]:opacity-[0.88] motion-reduce:transition-none"

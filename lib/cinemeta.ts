@@ -36,6 +36,8 @@ export async function fetchCinemetaMeta(
     imdbId: string,
     type: "movie" | "show"
 ): Promise<CinemetaMeta | null> {
+    // Addons also use mal:, kitsu:, and other IDs Cinemeta cannot resolve.
+    if (!/^tt\d+$/.test(imdbId)) return null;
     const cinemetaType = type === "show" ? "series" : "movie";
     const url = `${CINEMETA_BASE}/meta/${cinemetaType}/${encodeURIComponent(imdbId)}.json`;
 

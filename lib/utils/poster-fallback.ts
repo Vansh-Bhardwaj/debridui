@@ -15,6 +15,7 @@ export async function fetchPosterFromAPIs(
     type: "movie" | "show",
     triedUrls: string[]
 ): Promise<string | null> {
+    if (!/^tt\d+$/.test(imdbId)) return null;
     if (posterApiCache.has(imdbId)) return posterApiCache.get(imdbId) ?? null;
     if (posterApiInFlight.has(imdbId)) return posterApiInFlight.get(imdbId)!;
 
