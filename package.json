@@ -23,7 +23,7 @@
         "start": "node .next/standalone/server.js",
         "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
         "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-        "postinstall": "node scripts/patch-next-node-env.js",
+        "postinstall": "node scripts/patch-next-node-env.js && node scripts/patch-opennext-windows.js",
         "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
         "lint": "tsc --noEmit && eslint .",
         "lint:eslint": "eslint .",
