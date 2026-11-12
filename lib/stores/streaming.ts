@@ -28,7 +28,7 @@ import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
 import { cacheSource } from "@/lib/utils/source-cache";
-import { isProviderTranscodeAvailable, prefetchStreamLinks } from "@/lib/streaming/stream-info";
+import { isProviderTranscodeAvailable, prefetchStreamLinks, verifyCachedSources } from "@/lib/streaming/stream-info";
 import { detectContainer, getDeviceProfile } from "@/lib/playback/device-profile";
 import { getSourceFailure, isCamRelease, markSourceFailed } from "@/lib/streaming/source-health";
 
@@ -1246,6 +1246,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 originalLanguagePromise,
             ]);
 
+            if (requestId !== currentRequestId) return;
+            // The provider's real cache state beats the addon's label (~0.4s for TorBox).
+            await verifyCachedSources(allSources);
             if (requestId !== currentRequestId) return;
             const inlineSubResults: SubtitleQueryResult[] = [];
             for (const source of allSources) {

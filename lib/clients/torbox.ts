@@ -525,6 +525,19 @@ export default class TorBoxClient extends BaseClient {
         }
     }
 
+    /** Which info hashes TorBox has cached right now (instant to play / convert). */
+    async checkCached(hashes: string[]): Promise<Set<string>> {
+        const cached = new Set<string>();
+        for (let i = 0; i < hashes.length; i += 100) {
+            const batch = hashes.slice(i, i + 100).join(",");
+            const data = await this.makeRequest<{ hash: string }[] | null>(
+                `torrents/checkcached?hash=${batch}&format=list&list_files=false`
+            );
+            for (const t of data ?? []) if (t.hash) cached.add(t.hash.toLowerCase());
+        }
+        return cached;
+    }
+
     private async addAndFind(hint: StreamHint, urlName?: string): Promise<{ torrentId: string; fileId: string } | null> {
         // Once per torrent: lookups retry, and an uncached torrent stays "checking" for a while.
         const key = `${this.user.apiKey}:${hint.infoHash!.toLowerCase()}`;

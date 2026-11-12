@@ -877,6 +877,14 @@ input[type="range"]:hover::-moz-range-thumb {
     transition: width 100ms ease;
 }
 
+/* Phone player: lift native captions above the control bar while it's visible. */
+.native-player video::-webkit-media-text-track-container {
+    transition: transform 200ms ease;
+}
+.native-player[data-controls="true"] video::-webkit-media-text-track-container {
+    transform: translateY(-52px);
+}
+
 /* Player popup menus (settings, subtitle, audio, streams) */
 .player-popup {
     border-radius: 10px;

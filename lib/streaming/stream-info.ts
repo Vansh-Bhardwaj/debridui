@@ -108,6 +108,34 @@ export const setStreamLinkLookup = (lookup: StreamLinkLookup | null) => {
     streamLinkLookup = lookup;
 };
 
+type CacheChecker = (hashes: string[]) => Promise<Set<string>>;
+let cacheChecker: CacheChecker | null = null;
+/** Registered by the auth provider when the active account can check its cache (TorBox). */
+export const setCacheChecker = (checker: CacheChecker | null) => {
+    cacheChecker = checker;
+};
+
+/**
+ * Replace addon "cached" labels with the provider's own answer. Addons report
+ * stale/optimistic cache state; an uncached pick sits in "checking" for minutes.
+ * Best-effort: gives up after timeoutMs and keeps the addon labels.
+ */
+export async function verifyCachedSources(sources: AddonSource[], timeoutMs = 4_000): Promise<void> {
+    if (!cacheChecker) return;
+    const hashOf = (s: AddonSource) => s.magnet?.match(/btih:([a-f0-9]{40})/i)?.[1]?.toLowerCase();
+    const hashes = [...new Set(sources.map(hashOf).filter((h): h is string => !!h))];
+    if (hashes.length === 0) return;
+    const cached = await Promise.race([
+        cacheChecker(hashes).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+    if (!cached) return;
+    for (const s of sources) {
+        const hash = hashOf(s);
+        if (hash) s.isCached = cached.has(hash);
+    }
+}
+
 /**
  * Start the provider stream lookup as soon as a source is picked, in parallel with
  * resolving the addon URL. The client caches the result, so the player's own lookup

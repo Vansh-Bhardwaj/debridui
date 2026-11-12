@@ -13,7 +13,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { clearAppCache } from "@/lib/utils";
 import { toast } from "sonner";
 import { syncUser } from "@/lib/actions/auth";
-import { setProviderTranscodeAvailable, setStreamLinkLookup } from "@/lib/streaming/stream-info";
+import { setCacheChecker, setProviderTranscodeAvailable, setStreamLinkLookup } from "@/lib/streaming/stream-info";
 import { AccountType } from "@/lib/schemas";
 
 interface AuthContextType {
@@ -181,7 +181,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     useEffect(() => {
         setStreamLinkLookup(client ? (url, hint) => client.getStreamingLinksFromUrl(url, hint) : null);
-        return () => setStreamLinkLookup(null);
+        const checker = client && "checkCached" in client ? (client as { checkCached: (h: string[]) => Promise<Set<string>> }) : null;
+        setCacheChecker(checker ? (hashes) => checker.checkCached(hashes) : null);
+        return () => {
+            setStreamLinkLookup(null);
+            setCacheChecker(null);
+        };
     }, [client]);
 
     // `rerender-defer-reads` - Stable callback for switching accounts

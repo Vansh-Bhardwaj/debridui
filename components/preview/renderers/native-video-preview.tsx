@@ -409,7 +409,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     return (
         <div className="relative flex h-full w-full flex-col bg-black text-white portrait:overflow-y-auto">
             {/* ── Video (16:9 in portrait, full bleed in landscape) ── */}
-            <div className="relative w-full shrink-0 bg-black portrait:aspect-video landscape:min-h-0 landscape:flex-1">
+            <div
+                className="native-player relative w-full shrink-0 bg-black portrait:aspect-video landscape:min-h-0 landscape:flex-1"
+                data-controls={showOverlay ? "true" : undefined}>
                 {preparing ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6">
                         <p className="text-sm font-medium">Getting this ready for {device}</p>
@@ -569,7 +571,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         <Maximize className="size-5" />
                                     </button>
                                 </div>
-                                <div className="relative h-6">
+                                <div className="relative flex h-6 items-center">
                                     <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25" />
                                     <div className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/40" style={{ width: `${bufferedPct}%` }} />
                                     <div className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
@@ -587,7 +589,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             setTime(video.currentTime);
                                             pokeControls();
                                         }}
-                                        className="pointer-events-auto absolute inset-0 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+                                        className="pointer-events-auto absolute inset-x-0 top-1/2 h-1 w-full -translate-y-1/2 cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
                                     />
                                 </div>
                             </div>
@@ -607,7 +609,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             {/* ── Choices: below the video in portrait, over its top edge in landscape ── */}
             <div
                 className={cn(
-                    "flex gap-2 overflow-x-auto px-3 py-3 [scrollbar-width:none] landscape:absolute landscape:inset-x-0 landscape:top-0 landscape:bg-gradient-to-b landscape:from-black/70 landscape:to-transparent landscape:py-2 landscape:transition-opacity",
+                    "flex shrink-0 gap-2 overflow-x-auto px-3 py-3 [scrollbar-width:none] landscape:absolute landscape:inset-x-0 landscape:top-0 landscape:bg-gradient-to-b landscape:from-black/70 landscape:to-transparent landscape:py-2 landscape:transition-opacity",
                     !showOverlay && "landscape:pointer-events-none landscape:opacity-0"
                 )}>
                 {chips
@@ -625,7 +627,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     ))}
             </div>
             {src && (
-                <p className="px-4 text-xs text-white/40 landscape:hidden">
+                <p className="shrink-0 px-4 text-xs text-white/40 landscape:hidden">
                     {src === downloadUrl ? "Playing the original file" : `Converted for ${device} by your provider`}
                     {source?.addonName ? ` · ${source.addonName}` : ""}
                 </p>
@@ -633,7 +635,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
             {/* Other sources — one tap to switch (portrait; landscape uses the Source chip) */}
             {otherSources.length > 0 && (
-                <div className="mt-4 pb-[max(1rem,env(safe-area-inset-bottom))] landscape:hidden">
+                <div className="mt-4 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] landscape:hidden">
                     <div className="flex items-center justify-between px-4 pb-2">
                         <span className="text-xs tracking-widest uppercase text-white/50">Other sources</span>
                         <button type="button" onClick={openSourcePicker} className="text-xs text-primary">
