@@ -227,48 +227,19 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, completed: true });
         }
 
-        // If user resumed playback, bring hidden entries back into the shelf.
-        // Run hidden delete + dedup check in parallel (2→1 round-trip)
-        const hiddenConditions = buildHiddenConditions(
-            session.user.id,
-            imdbId,
-            normalizedType,
-            safeSeason ?? NaN,
-            safeEpisode ?? NaN
-        );
-
-        const progressConditions = buildProgressConditions(
-            session.user.id,
-            imdbId,
-            normalizedType,
-            safeSeason ?? NaN,
-            safeEpisode ?? NaN
-        );
-
-        const [, existingRows] = await Promise.all([
-            db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
-            normalizedEventType === "play_progress"
-                ? db
-                    .select({ progressSeconds: userProgress.progressSeconds, durationSeconds: userProgress.durationSeconds, updatedAt: userProgress.updatedAt })
-                    .from(userProgress)
-                    .where(and(...progressConditions))
-                    .limit(1)
-                : Promise.resolve([]),
-        ]);
-
-        // Skip redundant heartbeat writes when the position hasn't meaningfully changed.
-        if (normalizedEventType === "play_progress" && existingRows.length > 0) {
-            const previous = existingRows[0];
-            const progressDelta = Math.abs((previous.progressSeconds ?? 0) - safeProgressSeconds);
-            const durationDelta = Math.abs((previous.durationSeconds ?? 0) - safeDurationSeconds);
-            const ageMs = Date.now() - new Date(previous.updatedAt).getTime();
-
-            if (progressDelta <= 2 && durationDelta <= 2 && ageMs < 10_000) {
-                return NextResponse.json({ success: true, deduped: true });
-            }
+        // Heartbeats are a single upsert. Un-hiding a shelf entry only needs to
+        // happen once per session, so it rides on the pause/stop/end events.
+        if (normalizedEventType !== "play_progress") {
+            await db.delete(hiddenContinueWatching).where(and(...buildHiddenConditions(
+                session.user.id,
+                imdbId,
+                normalizedType,
+                safeSeason ?? NaN,
+                safeEpisode ?? NaN
+            )));
         }
 
-        // Single round-trip upsert — watchEvents log was dead (never read), dropped.
+        // Single round-trip upsert.
         await db
             .insert(userProgress)
             .values({

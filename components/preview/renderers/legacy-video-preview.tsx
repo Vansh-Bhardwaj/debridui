@@ -17,7 +17,16 @@ import {
     type SubtitleSyncState,
 } from "@/lib/utils/subtitle-sync";
 import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
-import { selectBestStreamingUrl, isSafari } from "@/lib/utils/codec-support";
+import { decideStream, getUnsupportedCodecs, isAudioSilentlyUnsupported, isSafari, type PlaybackEngine } from "@/lib/utils/codec-support";
+import { channelLabel, codecLabel, getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
+import { isLikelyStub, markSourceFailed } from "@/lib/streaming/source-health";
+import {
+    createDeviceTranscodeSession,
+    DeviceTranscodeError,
+    isDeviceTranscodeSupported,
+    type DeviceTranscodeSession,
+} from "@/lib/playback/device-transcode";
+
 import type { AddonSubtitle } from "@/lib/addons/types";
 import {
     decodeSubtitleFileBytes,
@@ -47,6 +56,9 @@ import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import { cn } from "@/lib/utils";
+
+// Static per page load; checked once instead of on every render.
+const deviceSupported = isDeviceTranscodeSupported();
 
 /** Parsed subtitle cue for manual rendering */
 interface SubtitleCue {
@@ -583,47 +595,128 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const hasCodecIssue = isNonMP4Video(file.name);
 
-    // Smart streaming URL selection based on browser codec support
-    // Uses transcoded streams when native format likely won't work.
-    // When hls.js is available (Chrome/Firefox), prefer HLS over liveMP4 so
-    // that multi-audio tracks are preserved instead of being flattened to one.
+    // ── Stream decision: original file vs provider's compatible (HLS) stream ──
+    // With provider metadata (TorBox createstream) we know the real codecs, so
+    // playable files keep full original quality and only unplayable ones are
+    // transcoded — by the provider, costing neither Cloudflare nor the device.
+    const configuredEngine = useSettingsStore((s) => s.settings.streaming.playbackEngine) ?? "auto";
+    const [engineOverride, setEngineOverride] = useState<PlaybackEngine | null>(null);
+    const engine = engineOverride ?? configuredEngine;
+    /** Active provider variant after an audio/quality switch (new HLS session). */
+    const [variant, setVariant] = useState<StreamInfo | null>(null);
+    const baseStreamInfo = getStreamInfo(streamingLinks?.apple);
+    const streamInfo = variant ?? baseStreamInfo;
+    const hlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
+
+    // New file → forget per-file overrides.
+    useEffect(() => {
+        setEngineOverride(null);
+        setVariant(null);
+    }, [downloadUrl]);
+
     const streamingSelection = useMemo(() => {
-        const base = selectBestStreamingUrl(downloadUrl, streamingLinks, file.name);
-        if (
-            !isSafari() &&
-            Hls.isSupported() &&
-            streamingLinks?.apple &&
-            base.url !== streamingLinks.apple
-        ) {
-            return { url: streamingLinks.apple, isTranscoded: true, format: "HLS" };
+        const links = hlsUrl ? { ...streamingLinks, apple: hlsUrl } : streamingLinks;
+        const decision = decideStream({ downloadUrl, streamingLinks: links, fileName: file.name, info: streamInfo, engine });
+        // Without metadata, hls.js browsers still prefer provider HLS so multi-audio survives.
+        if (!streamInfo && engine === "auto" && hlsUrl && !isSafari() && Hls.isSupported() && decision.url !== hlsUrl) {
+            return { url: hlsUrl, isTranscoded: true, format: "HLS", reason: "Compatible stream" };
         }
-        return base;
-    }, [downloadUrl, streamingLinks, file.name]);
+        return decision;
+    }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine]);
 
     const effectiveUrl = streamingSelection.url;
     const isUsingTranscodedStream = streamingSelection.isTranscoded;
 
     // Track if we've tried fallback to transcoded stream
     const [triedTranscodeFallback, setTriedTranscodeFallback] = useState(false);
-    const [useDirectUrl, _setUseDirectUrl] = useState(false);
 
-    // Track if we've emitted history for the current session to avoid duplicates
     // Server-side URL resolution (for addon redirect URLs)
     const triedUrlResolveRef = useRef(false);
 
-    // Final URL: if user requested direct, use download URL; otherwise use smart selection
-    const finalUrl = useDirectUrl ? downloadUrl : effectiveUrl;
-    const isHlsUrl = finalUrl.includes(".m3u8");
+    // ── On-device conversion (Mediabunny + FFmpeg AC-3 WASM → MSE) ──
+    const [deviceSession, setDeviceSession] = useState<DeviceTranscodeSession | null>(null);
+    const deviceSessionRef = useRef<DeviceTranscodeSession | null>(null);
+    const deviceStartingRef = useRef(false);
+    /** Provider HLS failed for this file — don't bounce back to it. */
+    const hlsFailedRef = useRef(false);
+
+    const stopDeviceSession = useCallback(() => {
+        deviceSessionRef.current?.destroy();
+        deviceSessionRef.current = null;
+        setDeviceSession(null);
+    }, []);
+
+    useEffect(() => {
+        hlsFailedRef.current = false;
+        return stopDeviceSession;
+    }, [downloadUrl, stopDeviceSession]);
+
+    const finalUrl = deviceSession?.url ?? effectiveUrl;
+    // Provider HLS urls don't always end in .m3u8, so trust the stream links too.
+    const isHlsUrl = finalUrl.includes(".m3u8") || (!!hlsUrl && finalUrl === hlsUrl);
     const useHlsJs = isHlsUrl && !isSafari() && Hls.isSupported();
     const speedProbeUrl = useMemo(() => {
-        if (finalUrl.includes(".m3u8")) return downloadUrl;
+        if (isHlsUrl) return downloadUrl;
         return finalUrl;
-    }, [downloadUrl, finalUrl]);
+    }, [downloadUrl, finalUrl, isHlsUrl]);
 
-    // Suppress warning if we're using a transcoded stream
-    // Check if we have an HLS stream available
-    const isHls = !!streamingLinks?.apple;
+    // Suppress warning if we're using (or can fall back to) a transcoded stream
+    const isHls = !!hlsUrl;
     const shouldShowWarning = hasCodecIssue && !isHls && !isUsingTranscodedStream;
+
+    /** Switch provider audio track / resolution; keeps position via the hls.js effect. */
+    const switchStreamVariant = useCallback(
+        async (opts: StreamVariantOptions, label: string) => {
+            if (!streamInfo) return;
+            showOsd(`Switching to ${label}…`);
+            const next = await streamInfo.switchVariant(opts);
+            if (!next) {
+                showOsd("Couldn't switch stream");
+                return;
+            }
+            setVariant(next);
+            setEngineOverride("compatible");
+            showOsd(label);
+        },
+        [streamInfo, showOsd]
+    );
+
+    /** Start converting audio on this device. Resolves false when not possible. */
+    const startDeviceConversion = useCallback(async (): Promise<boolean> => {
+        const video = videoRef.current;
+        if (!video || deviceSessionRef.current || deviceStartingRef.current) return !!deviceSessionRef.current;
+        if (!isDeviceTranscodeSupported()) return false;
+        deviceStartingRef.current = true;
+        showOsd("Converting audio on this device…");
+        try {
+            const session = await createDeviceTranscodeSession(video, downloadUrl, {
+                startAt: video.currentTime > 1 ? video.currentTime : 0,
+                preferredLanguage: useSettingsStore.getState().settings.streaming.preferredLanguage,
+            });
+            deviceSessionRef.current = session;
+            setDeviceSession(session);
+            return true;
+        } catch (error) {
+            const reason = error instanceof DeviceTranscodeError ? error.reason : "unreachable";
+            console.warn("[device-transcode]", error);
+            showOsd(
+                reason === "unreachable"
+                    ? "This host doesn't allow on-device conversion"
+                    : reason === "unsupported-audio"
+                        ? "This audio format can't be converted on-device yet"
+                        : "On-device conversion isn't available for this file"
+            );
+            return false;
+        } finally {
+            deviceStartingRef.current = false;
+        }
+    }, [downloadUrl, showOsd]);
+
+    // Explicit "On this device" engine starts conversion right away.
+    useEffect(() => {
+        if (engine === "device" && !deviceSession) void startDeviceConversion();
+        if (engine !== "device" && engine !== "auto" && deviceSession) stopDeviceSession();
+    }, [engine, deviceSession, startDeviceConversion, stopDeviceSession]);
 
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
@@ -1007,6 +1100,49 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [displayedSubtitles, activeSubtitleIndex, isLoading, preferredSubLang]);
 
+    // Sticky source: once a file has really played, errors are treated as
+    // network hiccups and recovered on the same file (reload at position) rather
+    // than silently swapping to a different release mid-movie.
+    const lockSourceAfterStart = useSettingsStore((s) => s.settings.streaming.lockSourceAfterStart) ?? true;
+    const playbackStartedRef = useRef(false);
+    const lastGoodTimeRef = useRef(0);
+    const recoveryAttemptsRef = useRef(0);
+    useEffect(() => {
+        playbackStartedRef.current = false;
+        lastGoodTimeRef.current = 0;
+        recoveryAttemptsRef.current = 0;
+        const video = videoRef.current;
+        if (!video) return;
+        const onTime = () => {
+            if (video.currentTime > 5) {
+                playbackStartedRef.current = true;
+                lastGoodTimeRef.current = video.currentTime;
+                recoveryAttemptsRef.current = 0;
+            }
+        };
+        video.addEventListener("timeupdate", onTime);
+        return () => video.removeEventListener("timeupdate", onTime);
+    }, [downloadUrl]);
+
+    const tryRecoverSameSource = useCallback((): boolean => {
+        const video = videoRef.current;
+        if (!video || !lockSourceAfterStart || !playbackStartedRef.current || isHlsUrl) return false;
+        const attempt = ++recoveryAttemptsRef.current;
+        if (attempt > 3) return false;
+        const resumeAt = lastGoodTimeRef.current;
+        setIsLoading(true);
+        showOsd(`Reconnecting… (${attempt}/3)`);
+        setTimeout(() => {
+            const onMeta = () => {
+                video.currentTime = resumeAt;
+                video.play().catch(() => { });
+            };
+            video.addEventListener("loadedmetadata", onMeta, { once: true });
+            video.load();
+        }, [2000, 5000, 10000][attempt - 1]);
+        return true;
+    }, [lockSourceAfterStart, isHlsUrl, showOsd]);
+
     const handleError = useCallback(() => {
         setIsLoading(false);
         if (loadingTimeoutRef.current) {
@@ -1015,13 +1151,35 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
         setShowLoadingHint(false);
 
+        if (deviceSessionRef.current) {
+            stopDeviceSession();
+            setEngineOverride("original");
+            showLoadErrorToast("On-device conversion stopped. Try the compatible stream or an external player.");
+            return;
+        }
+
+        if (tryRecoverSameSource()) return;
+        if (lockSourceAfterStart && playbackStartedRef.current) {
+            setError(true);
+            showLoadErrorToast("Playback stopped and couldn't reconnect. Pick another source from the Sources menu.");
+            onError?.(new Error("Playback interrupted"));
+            return;
+        }
+
         // If we haven't tried transcoded stream yet and one is available, try it
         if (!triedTranscodeFallback && streamingLinks && Object.keys(streamingLinks).length > 0 && !isUsingTranscodedStream) {
             setTriedTranscodeFallback(true);
             setIsLoading(true);
 
+            // HLS must go through hls.js (Chrome can't play it as a plain src).
+            if (hlsUrl && hlsUrl !== effectiveUrl) {
+                showOsd("Switching to compatible stream");
+                setEngineOverride("compatible");
+                return;
+            }
+
             // Force use of a transcoded stream
-            const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM || streamingLinks.dash;
+            const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.h264WebM || streamingLinks.dash;
             if (transcodedUrl && transcodedUrl !== effectiveUrl) {
                 showOsd("Switching to compatible stream");
                 // Reset the video element with the transcoded URL
@@ -1085,7 +1243,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 : "The video could not be loaded. This might be due to an unsupported format or a network issue."
         );
         onError?.(new Error(errorMessage));
-    }, [onError, triedTranscodeFallback, streamingLinks, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl, showOsd, showLoadErrorToast]);
+    }, [onError, triedTranscodeFallback, streamingLinks, hlsUrl, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl, showOsd, showLoadErrorToast, tryRecoverSameSource, lockSourceAfterStart, stopDeviceSession]);
 
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
@@ -1101,6 +1259,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             el.defaultPlaybackRate = playbackRate;
             el.playbackRate = playbackRate;
             setDuration(el.duration || 0);
+            // A ~1 minute clip for a movie/episode is a debrid "unavailable" placeholder.
+            const current = useStreamingStore.getState().selectedSource;
+            if (progressKey && current && isLikelyStub(el.duration)) {
+                markSourceFailed(current, "stub");
+                if (useStreamingStore.getState().playNextBestSource()) {
+                    showOsd("That file was a placeholder — trying next source");
+                    return;
+                }
+            }
             if (hasSeenkedToInitialRef.current) {
                 // On transcode fallback/source switch, prefer the user's current
                 // playback position over the initial resume point — the user may
@@ -1121,7 +1288,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setVolume(el.volume);
             setIsMuted(el.muted);
         }
-    }, [originalLanguageCode, preferredAudioLang, playbackRate, startFromSeconds, initialProgress, applyResumePosition]);
+    }, [originalLanguageCode, preferredAudioLang, playbackRate, startFromSeconds, initialProgress, applyResumePosition, progressKey, showOsd]);
 
 
 
@@ -1282,13 +1449,27 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         });
 
+        // Fatal errors get a few in-place recoveries; after that fall back to the
+        // original file instead of looping forever (e.g. CORS-blocked HLS host).
+        let fatalCount = 0;
         hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) {
-                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                    hls.startLoad();
-                } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                    hls.recoverMediaError();
+            if (!data.fatal) return;
+            if (++fatalCount > 3) {
+                hls.destroy();
+                hlsRef.current = null;
+                hlsFailedRef.current = true;
+                if (finalUrl !== downloadUrl) {
+                    showOsd("Compatible stream failed — playing original file");
+                    setEngineOverride("original");
+                } else {
+                    handleError();
                 }
+                return;
+            }
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                hls.recoverMediaError();
             }
         });
 
@@ -1311,6 +1492,34 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [finalUrl, useHlsJs]);
+
+    // Chrome plays files with unsupported audio (AC3/E-AC3/DTS/TrueHD) as silent
+    // video without any error. Probe the decoder counters a few seconds in and
+    // switch to the provider's compatible stream (or offer an external player).
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !finalUrl || isHlsUrl || deviceSession) return;
+        let startedAt: number | null = null;
+        const check = () => {
+            if (video.paused || video.muted || video.readyState < 3) return;
+            startedAt ??= video.currentTime;
+            if (video.currentTime - startedAt < 3) return;
+            video.removeEventListener("timeupdate", check);
+            if (isAudioSilentlyUnsupported(video) !== true) return;
+            if (hlsUrl && !hlsFailedRef.current && configuredEngine !== "device") {
+                showOsd("Audio format not supported here — switching to compatible stream");
+                setEngineOverride("compatible");
+                return;
+            }
+            void startDeviceConversion().then((ok) => {
+                if (ok) return;
+                setShowCodecWarning(true);
+                showLoadErrorToast("This file's audio format isn't supported by your browser. Try VLC or another external player.");
+            });
+        };
+        video.addEventListener("timeupdate", check);
+        return () => video.removeEventListener("timeupdate", check);
+    }, [finalUrl, isHlsUrl, hlsUrl, deviceSession, configuredEngine, showOsd, showLoadErrorToast, startDeviceConversion]);
 
     // hls.js: switch audio track when user selects a different one
     useEffect(() => {
@@ -2006,7 +2215,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [handleMobileTap, seekTo]);
 
-    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | "streams" | null>(null);
+    const [openMenu, setOpenMenu] = useState<"subtitles" | "audio" | "settings" | "streams" | "quality" | null>(null);
     const setOpenMenuTracked = useCallback((val: typeof openMenu) => {
         openMenuRef.current = val;
         setOpenMenu(val);
@@ -3455,8 +3664,194 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
                                 {/* Right: Audio, CC, Settings, Cast, Fullscreen */}
                                 <div className="ml-auto flex items-center gap-1">
-                                    {/* Audio track selector */}
-                                    {audioTrackCount > 1 && (
+                                    {/* On-device conversion: pick which original audio track to convert */}
+                                    {deviceSession && deviceSession.audioTracks.length > 1 && (
+                                        <DropdownMenu
+                                            open={openMenu === "audio"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}
+                                        >
+                                            <DropdownMenuTrigger asChild>
+                                                <button type="button" className={cn(PLAYER_BTN_SM, "text-[11px] font-medium tracking-wide")} data-tv-focusable>
+                                                    Audio
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                <DropdownMenuContent
+                                                    data-player-controls
+                                                    align="end"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className={cn(POPUP_CLS, "min-w-[240px] z-50 p-1")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Audio Tracks</div>
+                                                    {deviceSession.audioTracks.map((track) => (
+                                                        <button
+                                                            key={track.index}
+                                                            onClick={() => {
+                                                                setOpenMenuTracked(null);
+                                                                showOsd(`Audio: ${track.label}`);
+                                                                void deviceSession.switchAudio(track.index);
+                                                            }}
+                                                            className={cn(POPUP_ITEM, "flex items-center justify-between gap-3")}
+                                                            data-active={deviceSession.activeAudioIndex === track.index}
+                                                        >
+                                                            <span className="truncate">{track.label}</span>
+                                                            <span className="shrink-0 text-[10px] text-white/45">
+                                                                {[codecLabel(track.codec), channelLabel(track.channels)].filter(Boolean).join(" ")}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
+
+                                    {/* Provider stream controls (TorBox): real audio tracks with codecs + quality */}
+                                    {!deviceSession && streamInfo && streamInfo.audios.length > 1 && (
+                                        <DropdownMenu
+                                            open={openMenu === "audio"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}
+                                        >
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className={cn(
+                                                        PLAYER_BTN_SM,
+                                                        "text-[11px] font-medium tracking-wide",
+                                                        openMenu === "audio" && "bg-white/[0.12] shadow-[0_0_0_1px_rgba(255,255,255,0.12)] text-white"
+                                                    )}
+                                                    data-tv-focusable
+                                                >
+                                                    Audio
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                <DropdownMenuContent
+                                                    data-player-controls
+                                                    align="end"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onDoubleClick={(e) => e.stopPropagation()}
+                                                    className={cn(POPUP_CLS, "min-w-[240px] z-50 p-1")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Audio Tracks</div>
+                                                    {streamInfo.audios.map((track) => {
+                                                        const active = isUsingTranscodedStream
+                                                            ? streamInfo.audioIndex === track.index
+                                                            : (track.isDefault ?? track.index === 0);
+                                                        const name = [track.language ? getLanguageDisplayName(track.language) : "", track.title?.trim()]
+                                                            .filter(Boolean).join(" · ") || `Track ${track.index + 1}`;
+                                                        const unsupported = getUnsupportedCodecs({ ...streamInfo, videoCodec: undefined }, track.index).length > 0;
+                                                        return (
+                                                            <button
+                                                                key={track.index}
+                                                                onClick={() => {
+                                                                    setOpenMenuTracked(null);
+                                                                    if (!active) void switchStreamVariant({ audioIndex: track.index }, `Audio: ${name}`);
+                                                                }}
+                                                                className={cn(POPUP_ITEM, "flex items-center justify-between gap-3")}
+                                                                data-active={active}
+                                                            >
+                                                                <span className="truncate">{name}</span>
+                                                                <span className={cn("shrink-0 text-[10px] tabular-nums", unsupported ? "text-amber-300/80" : "text-white/45")}>
+                                                                    {[codecLabel(track.codec), channelLabel(track.channels)].filter(Boolean).join(" ")}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
+
+                                    {(streamInfo || deviceSupported) && (
+                                        <DropdownMenu
+                                            open={openMenu === "quality"}
+                                            onOpenChange={(open) => setOpenMenuTracked(open ? "quality" : null)}
+                                        >
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className={cn(
+                                                        PLAYER_BTN_SM,
+                                                        "text-[11px] font-medium tracking-wide",
+                                                        openMenu === "quality" && "bg-white/[0.12] shadow-[0_0_0_1px_rgba(255,255,255,0.12)] text-white"
+                                                    )}
+                                                    title={streamingSelection.reason}
+                                                    data-tv-focusable
+                                                >
+                                                    {deviceSession ? "Device" : isUsingTranscodedStream ? "Compat" : "Original"}
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuPortal container={containerRef.current ?? undefined}>
+                                                <DropdownMenuContent
+                                                    data-player-controls
+                                                    align="end"
+                                                    side="top"
+                                                    sideOffset={4}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onDoubleClick={(e) => e.stopPropagation()}
+                                                    className={cn(POPUP_CLS, "min-w-[240px] z-50 p-1")}
+                                                    style={POPUP_STYLE}
+                                                >
+                                                    <div className={POPUP_LABEL}>Stream</div>
+                                                    {streamingSelection.reason && (
+                                                        <p className="px-2 pb-1.5 text-[11px] leading-snug text-white/50">{streamingSelection.reason}</p>
+                                                    )}
+                                                    <button
+                                                        onClick={() => { setOpenMenuTracked(null); setVariant(null); setEngineOverride(null); showOsd("Auto stream"); }}
+                                                        className={POPUP_ITEM}
+                                                        data-active={engineOverride === null && !variant}
+                                                    >
+                                                        Auto
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setOpenMenuTracked(null); stopDeviceSession(); setEngineOverride("original"); showOsd("Original file"); }}
+                                                        className={cn(POPUP_ITEM, "flex items-center justify-between gap-3")}
+                                                        data-active={!isUsingTranscodedStream && !deviceSession && engineOverride === "original"}
+                                                    >
+                                                        <span>Original file</span>
+                                                        {streamInfo && (
+                                                            <span className="text-[10px] text-white/45">
+                                                                {[codecLabel(streamInfo.videoCodec), streamInfo.height ? `${streamInfo.height}p` : ""].filter(Boolean).join(" ")}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    {deviceSupported && (
+                                                        <button
+                                                            onClick={() => { setOpenMenuTracked(null); setEngineOverride("device"); }}
+                                                            className={cn(POPUP_ITEM, "flex items-center justify-between gap-3")}
+                                                            data-active={!!deviceSession}
+                                                        >
+                                                            <span>On this device</span>
+                                                            <span className="text-[10px] text-white/45">Original video · audio → AAC</span>
+                                                        </button>
+                                                    )}
+                                                    {streamInfo && <div className={cn(POPUP_LABEL, "mt-1")}>Compatible (transcoded by provider)</div>}
+                                                    {streamInfo?.resolutions.map((r) => (
+                                                        <button
+                                                            key={r.label}
+                                                            onClick={() => {
+                                                                setOpenMenuTracked(null);
+                                                                void switchStreamVariant({ resolutionIndex: r.index }, `Compatible · ${r.label}`);
+                                                            }}
+                                                            className={POPUP_ITEM}
+                                                            data-active={isUsingTranscodedStream && !deviceSession && streamInfo.resolutionIndex === r.index}
+                                                        >
+                                                            {r.label}
+                                                        </button>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenuPortal>
+                                        </DropdownMenu>
+                                    )}
+
+                                    {/* Audio track selector (native / hls.js tracks) */}
+                                    {!deviceSession && !(streamInfo && streamInfo.audios.length > 1) && audioTrackCount > 1 && (
                                         <DropdownMenu
                                             open={openMenu === "audio"}
                                             onOpenChange={(open) => setOpenMenuTracked(open ? "audio" : null)}

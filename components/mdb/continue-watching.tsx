@@ -93,13 +93,12 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
     const { data: addons = [] } = useUserAddons();
     const play = useStreamingStore((s) => s.play);
 
-    const activeRequest = useStreamingStore((s) => s.activeRequest);
-
     const handleResume = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
 
-        if (activeRequest) return;
+        // Read at click time: no re-render of every card when a request starts.
+        if (useStreamingStore.getState().activeRequest) return;
 
         const cached = getCachedSource(item);
         const progressKey = {

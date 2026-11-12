@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CORS_PROXY_URL } from "@/lib/constants";
+import { fetchViaProxy } from "@/lib/proxy-fetch";
 
 const UPSTREAM = "https://api.trakt.tv";
 
@@ -107,9 +107,8 @@ async function proxy(req: NextRequest, segments: string[]): Promise<NextResponse
         // Same pattern as TraktClient.exchangeCode / refreshToken: direct Worker→Trakt can be WAF-blocked.
         if (res.status === 403) {
             res.body?.cancel();
-            const proxyBase = process.env.NEXT_PUBLIC_CORS_PROXY_URL || CORS_PROXY_URL;
             try {
-                res = await fetch(`${proxyBase}${encodeURIComponent(target)}`, init);
+                res = await fetchViaProxy(target, init);
             } catch (fallbackErr) {
                 console.error("[trakt/proxy] CORS proxy fallback failed", fallbackErr);
                 return NextResponse.json({ error: "Trakt upstream blocked (403)" }, { status: 502 });

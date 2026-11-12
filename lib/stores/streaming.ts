@@ -28,6 +28,8 @@ import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
 import { cacheSource } from "@/lib/utils/source-cache";
+import { isProviderTranscodeAvailable } from "@/lib/streaming/stream-info";
+import { getSourceFailure, isCamRelease, markSourceFailed } from "@/lib/streaming/source-health";
 
 export interface StreamingRequest {
     imdbId: string;
@@ -126,6 +128,15 @@ function getCodecSupportForPlayer(player: string | undefined): CodecSupport | un
     if (!player || player === MediaPlayer.BROWSER) return getBrowserCodecSupport();
     // External players (VLC, MPV, Kodi, etc.) can play everything — no penalties
     return undefined;
+}
+
+/** Shared ranking policy derived from settings + provider capabilities. */
+function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: StreamingSettings) {
+    return {
+        transcodeAvailable: !!codecSupport && settings.playbackEngine !== "original" && isProviderTranscodeAvailable(),
+        skipCamReleases: settings.skipCamReleases,
+        rememberFailedSources: settings.rememberFailedSources,
+    };
 }
 
 const USER_ADDONS_QUERY_KEY = ["user-addons"] as const;
@@ -531,6 +542,7 @@ async function preloadEpisodeTarget(
         preferredSourceQuality: titleMemory?.preferredSourceQuality,
         codecSupport,
         preferredBingeGroup: titleMemory?.preferredBingeGroup,
+        ...sourcePolicyOptions(codecSupport, streamingSettings),
     });
 
     if (!result.source) return null;
@@ -810,13 +822,24 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         const currentIndex = allFetchedSources.findIndex((s) => s.url === selectedSource.url);
         if (currentIndex === -1 || currentIndex >= allFetchedSources.length - 1) return false;
 
-        const support = getBrowserCodecSupport();
+        const settings = useSettingsStore.getState().get("streaming");
+        if (settings.rememberFailedSources !== false) markSourceFailed(selectedSource, "playback-failed");
 
-        // 1. Try to find the next best source that matches our codec support
+        const support = getBrowserCodecSupport();
+        const transcode = settings.playbackEngine !== "original" && isProviderTranscodeAvailable();
+
+        // 1. Try to find the next best source that matches our codec support,
+        //    skipping ones that already failed on this device and cam rips.
         for (let i = currentIndex + 1; i < allFetchedSources.length; i++) {
             const candidate = allFetchedSources[i];
+            if (getSourceFailure(candidate)) continue;
+            if (settings.skipCamReleases !== false && isCamRelease(candidate)) continue;
 
             let isSupported = true;
+            if (transcode) {
+                playAlternativeSource(candidate);
+                return true;
+            }
             const audio = detectAudioCodec(candidate);
             if (audio === "dts" && !support.dts) isSupported = false;
             if (audio === "truehd" && !support.truehd) isSupported = false;
@@ -1243,6 +1266,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 originalLanguage,
                 codecSupport,
                 preferredBingeGroup: titleMemory?.preferredBingeGroup,
+                ...sourcePolicyOptions(codecSupport, streamingSettings),
             });
             timer.step("selected-source", {
                 hasMatches: result.hasMatches,

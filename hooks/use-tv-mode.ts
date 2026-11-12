@@ -54,7 +54,7 @@ export function useTVMode() {
         // Brand text inside curtain
         const text = document.createElement("div");
         text.className = "tv-curtain-text";
-        text.textContent = entering ? "TV MODE" : "DESKTOP";
+        text.textContent = entering ? "BIG PICTURE" : "DESKTOP";
 
         // Accent line
         const line = document.createElement("div");

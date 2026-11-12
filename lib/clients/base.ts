@@ -44,6 +44,11 @@ export class RateLimiter {
     }
 }
 
+/** Extra context for mapping an addon URL back to a provider file. */
+export interface StreamHint {
+    infoHash?: string;
+}
+
 interface BaseClientOptions {
     user: User;
     rateLimiter?: { maxRequests: number; intervalMs: number };
@@ -142,7 +147,7 @@ export default abstract class BaseClient {
      * the link ID from the URL and call their transcoding endpoint.
      * Default: returns empty (no streaming links derivable from URL alone).
      */
-    async getStreamingLinksFromUrl(_url: string): Promise<Record<string, string>> {
+    async getStreamingLinksFromUrl(_url: string, _hint?: StreamHint): Promise<Record<string, string>> {
         return {};
     }
 

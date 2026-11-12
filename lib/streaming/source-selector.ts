@@ -2,6 +2,7 @@ import { type AddonSource } from "@/lib/addons/types";
 import { getResolutionIndex, getSourceQualityIndex } from "@/lib/addons/parser";
 import { type QualityRange, type StreamingSettings, getActiveRange } from "@/lib/stores/settings";
 import { type CodecSupport } from "@/lib/utils/codec-support";
+import { getSourceFailure, isCamRelease } from "@/lib/streaming/source-health";
 
 const LANGUAGE_PATTERNS: Record<string, RegExp> = {
     english: /\b(eng|english|en)\b/i,
@@ -233,6 +234,9 @@ function calculateScore(
         originalLanguage?: string;
         codecSupport?: CodecSupport;
         preferredBingeGroup?: string;
+        transcodeAvailable?: boolean;
+        skipCamReleases?: boolean;
+        rememberFailedSources?: boolean;
     } = {}
 ): number {
     let score = 0;
@@ -311,7 +315,13 @@ function calculateScore(
     // ── Codec compatibility penalty ──
     // Heavily penalize sources the browser can't play (DTS, AC3, HEVC on unsupported devices).
     // This is applied last so it acts as a strong override without interfering with other factors.
-    score += codecPenalty(source, options.codecSupport);
+    // With provider transcoding the file still plays, so only prefer direct-playable
+    // releases at equal quality instead of burying a 4K REMUX behind a 720p WEB-DL.
+    const penalty = codecPenalty(source, options.codecSupport);
+    score += options.transcodeAvailable && penalty > 0 ? Math.min(penalty * 0.1, 8) : penalty;
+
+    if (options.skipCamReleases !== false && isCamRelease(source)) score += 80;
+    if (options.rememberFailedSources !== false && getSourceFailure(source)) score += 120;
 
     return score;
 }
@@ -337,6 +347,10 @@ export interface SelectionOptions {
     codecSupport?: CodecSupport;
     /** Stremio bingeGroup from the previously played episode for same-pack affinity. */
     preferredBingeGroup?: string;
+    /** Provider can transcode unplayable codecs (TorBox Pro) — soften codec gating. */
+    transcodeAvailable?: boolean;
+    skipCamReleases?: boolean;
+    rememberFailedSources?: boolean;
 }
 
 export function selectBestSource(
@@ -361,7 +375,7 @@ export function selectBestSource(
     // at least one compatible source is available. This keeps "just play what works" as the
     // primary invariant across episodes without leaving the user stuck if nothing is compatible.
     let selectable = matchingSources;
-    if (options.codecSupport && matchingSources.length > 0) {
+    if (options.codecSupport && !options.transcodeAvailable && matchingSources.length > 0) {
         const compatible = matchingSources.filter((s) => codecPenalty(s, options.codecSupport) <= 0);
         if (compatible.length > 0) {
             selectable = compatible;

@@ -1,11 +1,33 @@
-const envValue = (key: string): string | undefined => {
-    return process.env[key];
+// Server-only env access. Secrets set via `wrangler secret put` are not always
+// bridged into process.env by OpenNext, so fall back to the Cloudflare context.
+type CfEnv = Record<string, unknown>;
+let getCfContext: (() => { env?: CfEnv } | null) | null | undefined;
+
+export function getCfEnv(): CfEnv | undefined {
+    if (getCfContext === undefined) {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            getCfContext = require("@opennextjs/cloudflare").getCloudflareContext;
+        } catch {
+            getCfContext = null;
+        }
+    }
+    try {
+        return getCfContext?.()?.env;
+    } catch {
+        return undefined; // outside a request / during build
+    }
+}
+
+export const getEnv = (key: string): string | undefined => {
+    const value = process.env[key];
+    if (value) return value;
+    const cfValue = getCfEnv()?.[key];
+    return typeof cfValue === "string" && cfValue ? cfValue : undefined;
 };
 
-export const getEnv = (key: string): string | undefined => envValue(key);
-
 export const getRequiredEnv = (key: string): string => {
-    const value = envValue(key);
+    const value = getEnv(key);
     if (!value) {
         throw new Error(`[env] Missing ${key}`);
     }
@@ -13,5 +35,5 @@ export const getRequiredEnv = (key: string): string => {
 };
 
 export const getAppUrl = (): string => {
-    return envValue("APP_URL") || envValue("NEXT_PUBLIC_APP_URL") || "http://localhost:3000";
+    return getEnv("APP_URL") || getEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:3000";
 };

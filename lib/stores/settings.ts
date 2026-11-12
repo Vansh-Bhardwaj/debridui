@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { MediaPlayer } from "../types";
 import { Resolution, SourceQuality } from "../addons/types";
+import type { PlaybackEngine } from "../utils/codec-support";
 
 export type StreamingResolution = Resolution | "any";
 
@@ -107,6 +108,17 @@ export interface StreamingSettings {
     preferredLanguage: string;
     /** Prefer cached sources even if lower quality */
     preferCached: boolean;
+    /**
+     * auto: play the original file when the browser can decode it, otherwise the
+     * provider's compatible (transcoded) stream. original/compatible force one.
+     */
+    playbackEngine: PlaybackEngine;
+    /** Once a source starts playing, recover on the same file instead of auto-switching. */
+    lockSourceAfterStart: boolean;
+    /** Rank CAM/telesync/screener rips last. */
+    skipCamReleases: boolean;
+    /** Remember sources that failed or were stubs and rank them last for 7 days. */
+    rememberFailedSources: boolean;
 }
 
 export interface PlaybackSettings {
@@ -259,6 +271,10 @@ const settingsConfig: SettingsConfig = {
             autoPlay: true,
             preferredLanguage: "english",
             preferCached: true,
+            playbackEngine: "auto",
+            lockSourceAfterStart: true,
+            skipCamReleases: true,
+            rememberFailedSources: true,
         },
     },
     playback: {

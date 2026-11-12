@@ -119,19 +119,16 @@ export function PreviewDialog() {
     const { data: fetchedStreamingLinks } = useQuery<Record<string, string>>({
         queryKey: ["preview", "streaming-links", directUrl, currentAccount.id],
         queryFn: async () => {
-            // Try the resolved URL first
-            const links = await client.getStreamingLinksFromUrl(directUrl!);
-            if (Object.keys(links).length > 0) return links;
-
-            // Try each URL in the redirect chain (e.g. TorBox API URL with torrent_id)
-            if (redirectChain?.length) {
-                for (const chainUrl of redirectChain) {
-                    const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
-                    if (Object.keys(chainLinks).length > 0) return chainLinks;
-                }
+            // Try each URL in the redirect chain first (e.g. TorBox API URL with torrent_id),
+            // then the resolved URL with the source's info hash so CDN links that carry
+            // no provider ids can still be matched back to the torrent.
+            for (const chainUrl of redirectChain ?? []) {
+                const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
+                if (Object.keys(chainLinks).length > 0) return chainLinks;
             }
-
-            return {};
+            const magnet = useStreamingStore.getState().selectedSource?.magnet;
+            const infoHash = magnet?.match(/btih:([a-f0-9]{40})/i)?.[1];
+            return client.getStreamingLinksFromUrl(directUrl!, { infoHash });
         },
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,

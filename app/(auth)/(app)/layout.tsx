@@ -22,9 +22,10 @@ import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
 import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { RouteTransition } from "@/components/common/route-transition";
 import { AmbientHeaderSpark } from "@/components/motion/ambient-header-spark";
-import { Keyboard } from "lucide-react";
+import { Keyboard, Tv } from "lucide-react";
 import { TVNavigationBar } from "@/components/tv/tv-navigation";
 import { GamepadHints } from "@/components/tv/gamepad-hints";
+import { BigPictureSession } from "@/components/tv/big-picture-session";
 import { TVCursor } from "@/components/tv/tv-cursor";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import { useTVFocus } from "@/hooks/use-tv-focus";
@@ -40,6 +41,20 @@ function ShortcutsButton() {
             className="size-8 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-[color,background-color,transform] duration-200 ease-premium hover:scale-105 active:scale-95 motion-reduce:transition-colors motion-reduce:hover:scale-100 motion-reduce:active:scale-100 shrink-0"
             aria-label="Keyboard shortcuts">
             <Keyboard className="size-4" />
+        </button>
+    );
+}
+
+// Header entry into Big Picture (hidden on small screens, where it's unavailable)
+function BigPictureButton() {
+    const { toggle } = useTVMode();
+    return (
+        <button
+            onClick={toggle}
+            className="hidden md:flex size-8 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-[color,background-color,transform] duration-200 ease-premium hover:scale-105 active:scale-95 motion-reduce:transition-colors motion-reduce:hover:scale-100 motion-reduce:active:scale-100 shrink-0"
+            aria-label="Enter Big Picture mode"
+            title="Big Picture (⇧T)">
+            <Tv className="size-4" />
         </button>
     );
 }
@@ -60,6 +75,7 @@ function StandardLayout({ children }: { children: React.ReactNode }) {
                     </div>
                     <div className="flex items-center gap-1">
                         <DevicePicker />
+                        <BigPictureButton />
                         <ShortcutsButton />
                         <SearchButton className="shrink-0" />
                     </div>
@@ -90,6 +106,7 @@ function TVLayout({ children }: { children: React.ReactNode }) {
                 </RouteTransition>
             </main>
             <GamepadHints />
+            <BigPictureSession />
             <TVCursor x={cursor.x} y={cursor.y} visible={cursor.visible} hovering={cursor.hovering} targetRect={cursor.targetRect} />
         </div>
     );

@@ -22,6 +22,11 @@
       "localConnectionString": "postgresql://user:password@localhost:5432/dbname?sslmode=require"
     }
   ],
+  // Worker-to-worker call into the CORS proxy (server-side fallbacks, e.g. Trakt WAF 403s).
+  // Same-account workers.dev fetches are unreliable; a service binding is free and skips the network.
+  "services": [
+    { "binding": "CORS_PROXY", "service": "debridui-cors-proxy" }
+  ],
   // Public variables (safe to commit)
   "vars": {
     "APP_URL": "https://debrid.indevs.in",

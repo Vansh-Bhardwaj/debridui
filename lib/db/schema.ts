@@ -4,6 +4,13 @@ import { AccountType } from "../schemas";
 export * from "./auth-schema";
 import { user } from "./auth-schema";
 
+// WARNING: the unique indexes on user_progress, watch_history and
+// hidden_continue_watching are NULLS NOT DISTINCT in the real database
+// (drizzle/0004, 0006, 0008) so movie rows (season/episode NULL) upsert.
+// Drizzle can't express that on indexes, so never `drizzle-kit push` this
+// schema — it would recreate them as NULLS DISTINCT and duplicate rows.
+// Apply hand-written SQL migrations instead.
+
 // User accounts table - stores debrid service accounts
 export const userAccounts = pgTable(
     "user_accounts",

@@ -21,8 +21,9 @@ import { useSettingsStore } from "@/lib/stores/settings";
  *   RB (5) — Next section / seek +10s
  *   LT (6) — Seek -30s (when video active)
  *   RT (7) — Seek +30s (when video active)
+ *   View (8) — Search (when no video is playing)
  *   Start (9) — Toggle play/pause
- *   Guide (16) — Toggle TV mode
+ *   Guide (16) — Toggle Big Picture mode
  */
 export function useTVFocus() {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
@@ -746,6 +747,11 @@ export function useTVFocus() {
                 if (cur[7] && !prev[7]) {
                     anyInput = true;
                     videoSeek(30);
+                }
+
+                // View/Back (8) = Search, like a console dashboard's search key
+                if (cur[8] && !prev[8] && !cachedVideo) {
+                    document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, metaKey: true, bubbles: true }));
                 }
 
                 // Start (9) = Toggle play/pause

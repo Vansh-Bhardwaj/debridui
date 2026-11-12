@@ -13,6 +13,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { clearAppCache } from "@/lib/utils";
 import { toast } from "sonner";
 import { syncUser } from "@/lib/actions/auth";
+import { setProviderTranscodeAvailable } from "@/lib/streaming/stream-info";
+import { AccountType } from "@/lib/schemas";
 
 interface AuthContextType {
     session: ReturnType<typeof authClient.useSession>["data"];
@@ -170,6 +172,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!currentUser) return null;
         return getClientInstance(currentUser);
     }, [currentUser]);
+
+    // TorBox (Pro) transcodes on demand, which makes codec-incompatible releases
+    // playable — source ranking uses this to stop filtering them out.
+    useEffect(() => {
+        setProviderTranscodeAvailable(currentAccount?.type === AccountType.TORBOX);
+    }, [currentAccount?.type]);
 
     // `rerender-defer-reads` - Stable callback for switching accounts
     const switchAccount = useCallback((accountId: string) => {

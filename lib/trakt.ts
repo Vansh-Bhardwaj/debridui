@@ -1085,7 +1085,7 @@ export class TraktClient {
         clientId: string,
         clientSecret: string,
         redirectUri: string,
-        proxyUrl?: string
+        fallbackFetch?: (url: string, init: RequestInit) => Promise<Response>
     ): Promise<TraktTokenResponse> {
         const url = "https://api.trakt.tv/oauth/token";
         const headers: Record<string, string> = {
@@ -1105,9 +1105,9 @@ export class TraktClient {
 
         let res = await fetch(url, { method: "POST", headers, body });
 
-        // Cloudflare WAF may block Worker IPs — retry through CORS proxy
-        if (res.status === 403 && proxyUrl) {
-            res = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, { method: "POST", headers, body });
+        // Cloudflare WAF may block Worker IPs — retry through the proxy worker
+        if (res.status === 403 && fallbackFetch) {
+            res = await fallbackFetch(url, { method: "POST", headers, body });
         }
 
         if (!res.ok) {
@@ -1126,7 +1126,7 @@ export class TraktClient {
         clientId: string,
         clientSecret: string,
         redirectUri: string,
-        proxyUrl?: string
+        fallbackFetch?: (url: string, init: RequestInit) => Promise<Response>
     ): Promise<TraktTokenResponse> {
         const url = "https://api.trakt.tv/oauth/token";
         const headers: Record<string, string> = {
@@ -1146,9 +1146,9 @@ export class TraktClient {
 
         let res = await fetch(url, { method: "POST", headers, body });
 
-        // Cloudflare WAF may block Worker IPs — retry through CORS proxy
-        if (res.status === 403 && proxyUrl) {
-            res = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, { method: "POST", headers, body });
+        // Cloudflare WAF may block Worker IPs — retry through the proxy worker
+        if (res.status === 403 && fallbackFetch) {
+            res = await fallbackFetch(url, { method: "POST", headers, body });
         }
 
         if (!res.ok) {

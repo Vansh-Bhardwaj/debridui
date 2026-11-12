@@ -6,6 +6,32 @@ import { useStreamingStore } from "@/lib/stores/streaming";
 import { type AddonSource, Resolution } from "@/lib/addons/types";
 import { Zap, HardDrive, Check, ArrowDownUp, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
+import { getSourceFailure, isCamRelease } from "@/lib/streaming/source-health";
+import { codecLabel } from "@/lib/streaming/stream-info";
+import { getCodecSupport } from "@/lib/utils/codec-support";
+
+const DV_PATTERN = /\b(dv|dovi|dolby[\s.-]?vision)\b/i;
+const HDR_PATTERN = /\bhdr(10\+?)?\b/i;
+
+/** Format chips parsed from the release title (Harbor-style), plus playability hints. */
+function getSourceTags(source: AddonSource) {
+    const text = `${source.title} ${source.description ?? ""}`;
+    const video = detectVideoCodec(source);
+    const audio = detectAudioCodec(source);
+    const support = getCodecSupport() as unknown as Record<string, boolean>;
+    const needsCompat = [video, audio].some((c) => !!c && c in support && !support[c]);
+    return {
+        formats: [
+            DV_PATTERN.test(text) ? "DV" : HDR_PATTERN.test(text) ? "HDR" : null,
+            video ? codecLabel(video) : null,
+            audio ? codecLabel(audio) : null,
+        ].filter(Boolean) as string[],
+        needsCompat,
+        isCam: isCamRelease(source),
+        failed: getSourceFailure(source),
+    };
+}
 
 type ResolutionFilter = "all" | "2160p" | "1080p" | "720p" | "sd";
 type SortMode = "default" | "resolution" | "size" | "addon";
@@ -57,6 +83,7 @@ const SourceItem = memo(function SourceItem({
     onSelect: (s: AddonSource) => void;
     numberKey?: number;
 }) {
+    const tags = useMemo(() => getSourceTags(source), [source]);
     return (
         <button
             onClick={() => onSelect(source)}
@@ -90,11 +117,30 @@ const SourceItem = memo(function SourceItem({
                     {source.isCached && (
                         <span className="text-[10px] tracking-widest uppercase text-emerald-500">Cached</span>
                     )}
+                    {tags.formats.map((f) => (
+                        <span key={f} className="rounded-sm border border-border/50 px-1 text-[10px] leading-4 text-muted-foreground">
+                            {f}
+                        </span>
+                    ))}
+                    {tags.isCam && (
+                        <span className="text-[10px] tracking-widest uppercase text-amber-500">Cam</span>
+                    )}
+                    {tags.failed && (
+                        <span className="text-[10px] tracking-widest uppercase text-destructive" title="Failed on this device recently">
+                            {tags.failed === "stub" ? "Placeholder" : "Failed"}
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                     {source.size && <span>{source.size}</span>}
                     {source.size && source.addonName && <span className="text-border">·</span>}
                     <span className="truncate">{source.addonName}</span>
+                    {tags.needsCompat && (
+                        <>
+                            <span className="text-border">·</span>
+                            <span className="shrink-0" title="Your browser can't decode this codec directly">Compatible stream</span>
+                        </>
+                    )}
                 </div>
             </div>
 

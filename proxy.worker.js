@@ -18,16 +18,29 @@ const ALLOWED_ORIGINS = [
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+// Writes (POST/PUT/PATCH/DELETE) are only relayed to these APIs so the proxy
+// can't be used as a generic write relay. TorBox needs them for add/delete/control.
+const WRITE_HOSTS = new Set(["api.torbox.app", "api.trakt.tv"]);
+const READ_METHODS = new Set(["GET", "HEAD"]);
+
 function corsHeaders(origin) {
     const allow = ALLOWED_ORIGINS.includes("*") ? "*" : origin;
     return {
         "Access-Control-Allow-Origin": allow,
-        "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
+        "Access-Control-Allow-Methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
         "Vary": "Origin",
     };
 }
 
-function isOriginAllowed(request) {
+// Server-to-server calls (main worker via service binding) carry no Origin;
+// they authenticate with the shared SIGNING_SECRET instead.
+function isServerCall(request, env) {
+    const key = request.headers.get("x-proxy-key");
+    return !!key && !!env?.SIGNING_SECRET && key === env.SIGNING_SECRET;
+}
+
+function isOriginAllowed(request, env) {
+    if (isServerCall(request, env)) return true;
     const origin = request.headers.get("Origin");
     if (!origin) return false;
     return ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin);
@@ -403,31 +416,35 @@ async function handleResolve(request, env) {
 }
 
 // ── Generic root handler (original /?url=... behavior) ───────────────────
-async function handleGeneric(request, context) {
+async function handleGeneric(request, context, env) {
     const url = new URL(request.url);
     const targetUrl = url.searchParams.get("url");
     if (!targetUrl) {
         return new Response("Missing url parameter", { status: 400 });
     }
-    if (!isOriginAllowed(request)) {
+    if (!isOriginAllowed(request, env)) {
         return new Response("Origin not allowed", { status: 403 });
     }
     if (!isSafeHttp(targetUrl) || isBlockedTarget(targetUrl)) {
         return new Response("Invalid or blocked url", { status: 400 });
+    }
+    const isWrite = !READ_METHODS.has(request.method);
+    if (isWrite && !WRITE_HOSTS.has(new URL(targetUrl).hostname)) {
+        return new Response("Method not allowed for this host", { status: 405 });
     }
 
     const requestOrigin = request.headers.get("Origin");
 
     try {
         const cleanHeaders = new Headers();
-        const stripPrefixes = ["origin", "referer", "sec-", "cf-", "cookie", "host"];
+        const stripPrefixes = ["origin", "referer", "sec-", "cf-", "cookie", "host", "x-proxy-key"];
         for (const [key, value] of request.headers) {
             if (!stripPrefixes.some((p) => key.toLowerCase().startsWith(p))) {
                 cleanHeaders.set(key, value);
             }
         }
         cleanHeaders.set("user-agent", UA);
-        cleanHeaders.set("accept", "application/json, text/plain, */*");
+        if (!cleanHeaders.has("accept")) cleanHeaders.set("accept", "application/json, text/plain, */*");
         cleanHeaders.set("accept-language", "en-US,en;q=0.9");
 
         const parsedTarget = new URL(targetUrl);
@@ -437,7 +454,7 @@ async function handleGeneric(request, context) {
         const isSubtitles = path.includes("/subtitles/");
         const isStream = path.includes("/stream/");
         const isTmdbImage = targetUrl.includes("image.tmdb.org");
-        const isCacheable = (isCatalog || isMeta || isSubtitles || isTmdbImage) && !isStream;
+        const isCacheable = !isWrite && (isCatalog || isMeta || isSubtitles || isTmdbImage) && !isStream;
 
         if (!isCacheable) {
             cleanHeaders.set("cache-control", "no-cache");
@@ -460,6 +477,7 @@ async function handleGeneric(request, context) {
         const proxyRequest = new Request(targetUrl, {
             method: request.method,
             headers: cleanHeaders,
+            body: isWrite ? request.body : undefined,
             redirect: "follow",
         });
         const upstream = await fetch(proxyRequest);
@@ -512,7 +530,7 @@ export default {
         const url = new URL(request.url);
 
         if (request.method === "OPTIONS") {
-            if (!isOriginAllowed(request)) {
+            if (!isOriginAllowed(request, env)) {
                 return new Response(null, { status: 403 });
             }
             return new Response(null, {
@@ -525,7 +543,8 @@ export default {
             });
         }
 
-        if (request.method !== "GET" && request.method !== "HEAD") {
+        // Signed/OG routes are read-only; only the generic route relays writes.
+        if (!READ_METHODS.has(request.method) && url.pathname !== "/") {
             return new Response("Method not allowed", { status: 405 });
         }
 
@@ -537,7 +556,7 @@ export default {
             case "/resolve":
                 return handleResolve(request, env);
             default:
-                return handleGeneric(request, context);
+                return handleGeneric(request, context, env);
         }
     },
 };

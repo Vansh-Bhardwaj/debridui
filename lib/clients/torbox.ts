@@ -17,7 +17,14 @@ import {
     WebDownloadStatus,
     WebDownloadList,
 } from "@/lib/types";
-import BaseClient from "./base";
+import BaseClient, { type StreamHint } from "./base";
+import {
+    registerStreamInfo,
+    setProviderTranscodeAvailable,
+    type StreamInfo,
+    type StreamResolution,
+    type StreamVariantOptions,
+} from "@/lib/streaming/stream-info";
 import { USER_AGENT } from "../constants";
 import { getProxyUrl } from "@/lib/utils";
 
@@ -104,6 +111,36 @@ interface TorBoxResponse<T> {
     error?: string;
     detail?: string;
     data?: T;
+}
+
+interface TorBoxStreamData {
+    hls_url?: string;
+    audio_index?: number;
+    resolution_index?: number | null;
+    needs_transcoding?: boolean;
+    metadata?: {
+        video?: { codec?: string; width?: number; height?: number };
+        audios?: { codec: string; language?: string; language_full?: string; title?: string; channels?: number; default?: boolean }[];
+    };
+}
+
+// TorBox chosen_resolution_index values (it never upscales).
+const TORBOX_RESOLUTIONS: StreamResolution[] = [
+    { index: 7, label: "2160p", height: 2160 },
+    { index: 6, label: "1440p", height: 1440 },
+    { index: 5, label: "1080p", height: 1080 },
+    { index: 4, label: "720p", height: 720 },
+    { index: 3, label: "480p", height: 480 },
+];
+
+const VIDEO_FILE = /\.(mkv|mp4|m4v|avi|mov|webm|ts|wmv)$/i;
+
+function safeDecode(value: string): string {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
 }
 
 interface TorBoxWebDownload {
@@ -322,52 +359,106 @@ export default class TorBoxClient extends BaseClient {
     }
 
     async getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>> {
-        try {
-            const [torrentId, targetFileId] = (fileNode?.id || id).split(":");
-            if (!torrentId || !targetFileId) return {};
-
-            // 1. Create stream to get a token
-            const token = await this.makeRequest<string>(
-                `stream/createstream?id=${torrentId}&file_id=${targetFileId}&type=torrent`,
-                { method: "GET" }
-            );
-
-            if (!token) return {};
-
-            // 2. Get stream data using the token and API key as presigned_token
-            // The API documentation says it returns a string (the direct stream URL)
-            const streamUrl = await this.makeRequest<string>(
-                `stream/getstreamdata?token=${token}&presigned_token=${this.user.apiKey}`,
-                { method: "GET" }
-            );
-
-            if (!streamUrl) return {};
-
-            return {
-                native: streamUrl,
-            };
-        } catch (error) {
-            console.error("[TorBox] Failed to get streaming links:", error);
-            return {};
-        }
+        const [torrentId, fileId] = (fileNode?.id || id).split(":");
+        if (!torrentId || !fileId) return {};
+        const info = await this.createStream(torrentId, fileId);
+        return info ? { apple: info.hlsUrl } : {};
     }
 
     /**
-     * Extract torrent_id and file_id from a TorBox API URL and fetch streaming links.
-     * TorBox download URLs follow the pattern:
-     *   https://api.torbox.app/v1/api/torrents/requestdl?token=...&torrent_id={id}&file_id={fid}&redirect=true
-     * These URLs appear in the redirect chain when addons (Torrentio, etc.) return
-     * TorBox download links.
+     * Create a TorBox web-stream session (Pro only). The response carries an
+     * HLS url that TorBox transcodes server-side, plus real codec metadata.
+     * Docs: https://api-docs.torbox.app -> Stream -> Create Stream.
      */
-    override async getStreamingLinksFromUrl(url: string): Promise<Record<string, string>> {
+    async createStream(torrentId: string, fileId: string, opts: StreamVariantOptions = {}): Promise<StreamInfo | null> {
+        const params = new URLSearchParams({ id: torrentId, file_id: fileId, type: "torrent" });
+        if (opts.audioIndex != null) params.set("chosen_audio_index", String(opts.audioIndex));
+        if (opts.resolutionIndex != null) params.set("chosen_resolution_index", String(opts.resolutionIndex));
+        try {
+            const data = await this.makeRequest<TorBoxStreamData>(`stream/createstream?${params}`);
+            if (!data?.hls_url) return null;
+            const info = this.toStreamInfo(data, torrentId, fileId);
+            registerStreamInfo(info);
+            return info;
+        } catch (error) {
+            // Web streaming is Pro-only; stop treating this account as transcode-capable.
+            if (String(error).includes("PLAN_RESTRICTED") || String(error).toLowerCase().includes("upgrade your plan")) {
+                setProviderTranscodeAvailable(false);
+            }
+            console.warn("[TorBox] createstream failed:", error);
+            return null;
+        }
+    }
+
+    private toStreamInfo(data: TorBoxStreamData, torrentId: string, fileId: string): StreamInfo {
+        const video = data.metadata?.video;
+        const height = video?.height || undefined;
+        const resolutions: StreamResolution[] = [
+            { index: null, label: height ? `Original (${height}p)` : "Original", height: height ?? null },
+            ...TORBOX_RESOLUTIONS.filter((r) => !height || (r.height ?? 0) < height),
+        ];
+        return {
+            provider: "torbox",
+            hlsUrl: data.hls_url!,
+            videoCodec: video?.codec,
+            width: video?.width,
+            height,
+            audios: (data.metadata?.audios ?? []).map((a, i) => ({
+                index: i,
+                codec: a.codec,
+                language: a.language_full || a.language,
+                title: a.title,
+                channels: a.channels,
+                isDefault: a.default,
+            })),
+            audioIndex: data.audio_index ?? 0,
+            resolutionIndex: data.resolution_index ?? null,
+            resolutions,
+            needsTranscoding: data.needs_transcoding,
+            switchVariant: (next) =>
+                this.createStream(torrentId, fileId, {
+                    audioIndex: next.audioIndex ?? data.audio_index ?? 0,
+                    resolutionIndex: next.resolutionIndex === undefined ? (data.resolution_index ?? null) : next.resolutionIndex,
+                }),
+        };
+    }
+
+    /**
+     * Map an addon source (info hash) to the torrent in the user's TorBox list.
+     * Addons like Torrentio/Comet redirect straight to the CDN, so the URL alone
+     * has no torrent_id, but the torrent they added is in `mylist`.
+     */
+    private async findFileByHash(infoHash: string, fileName?: string): Promise<{ torrentId: string; fileId: string } | null> {
+        const hash = infoHash.toLowerCase();
+        const torrents = await this.makeRequest<TorBoxTorrent[]>("torrents/mylist?bypass_cache=true&limit=1000");
+        const torrent = (Array.isArray(torrents) ? torrents : []).find((t) => t.hash?.toLowerCase() === hash);
+        const files = torrent?.files ?? [];
+        if (!torrent || files.length === 0) return null;
+
+        const name = fileName ? safeDecode(fileName).toLowerCase() : "";
+        const byName = name
+            ? files.find((f) => (f.short_name || f.name).toLowerCase() === name || f.name.toLowerCase().endsWith(`/${name}`))
+            : undefined;
+        const videos = files.filter((f) => VIDEO_FILE.test(f.name));
+        const largest = (videos.length ? videos : files).reduce((a, b) => (b.size > a.size ? b : a));
+        return { torrentId: String(torrent.id), fileId: String((byName ?? largest).id) };
+    }
+
+    /**
+     * Streaming links for an addon-resolved URL: either a TorBox API url with
+     * torrent_id/file_id, or a CDN url matched back to the torrent via info hash.
+     */
+    override async getStreamingLinksFromUrl(url: string, hint?: StreamHint): Promise<Record<string, string>> {
         try {
             const parsed = new URL(url);
-            // Match TorBox API URLs
-            if (!parsed.hostname.includes("torbox")) return {};
-            const torrentId = parsed.searchParams.get("torrent_id");
-            const fileId = parsed.searchParams.get("file_id");
-            if (!torrentId || !fileId) return {};
-            return this.getStreamingLinks(`${torrentId}:${fileId}`);
+            if (parsed.hostname.includes("torbox")) {
+                const torrentId = parsed.searchParams.get("torrent_id");
+                const fileId = parsed.searchParams.get("file_id");
+                if (torrentId && fileId) return this.getStreamingLinks(`${torrentId}:${fileId}`);
+            }
+            if (!hint?.infoHash) return {};
+            const match = await this.findFileByHash(hint.infoHash, parsed.pathname.split("/").pop());
+            return match ? this.getStreamingLinks(`${match.torrentId}:${match.fileId}`) : {};
         } catch {
             return {};
         }

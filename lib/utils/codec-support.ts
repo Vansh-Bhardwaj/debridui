@@ -3,6 +3,8 @@
  * Helps determine which audio/video formats can be played natively
  */
 
+import { codecLabel, normalizeCodec, type StreamInfo } from "@/lib/streaming/stream-info";
+
 export interface CodecSupport {
     h264: boolean;
     hevc: boolean;
@@ -236,6 +238,92 @@ export function selectBestStreamingUrl(
 
     // Default to direct download
     return { url: downloadUrl, isTranscoded: false, format: "direct" };
+}
+
+/**
+ * auto: original when playable, else provider stream, else on-device conversion.
+ * device: original video + audio converted on this device (WASM + WebCodecs).
+ */
+export type PlaybackEngine = "auto" | "original" | "compatible" | "device";
+
+export interface StreamDecision {
+    url: string;
+    isTranscoded: boolean;
+    format: string;
+    /** Human-readable reason, shown in the player's stream menu. */
+    reason?: string;
+}
+
+let cachedSupport: CodecSupport | null = null;
+/** Cached per session — probing creates DOM elements. */
+export function getCodecSupport(): CodecSupport {
+    return (cachedSupport ??= detectCodecSupport());
+}
+
+/** Which of a file's real codecs (from provider metadata) this browser can't decode. */
+export function getUnsupportedCodecs(info: StreamInfo, audioIndex = info.audioIndex): string[] {
+    const support = getCodecSupport() as unknown as Record<string, boolean>;
+    const video = normalizeCodec(info.videoCodec);
+    const audioTrack = info.audios[audioIndex] ?? info.audios.find((a) => a.isDefault) ?? info.audios[0];
+    const audio = normalizeCodec(audioTrack?.codec);
+    const blocked: string[] = [];
+    if (video && video in support && !support[video]) blocked.push(codecLabel(video));
+    if (audio && audio in support && !support[audio]) blocked.push(codecLabel(audio));
+    return blocked;
+}
+
+/**
+ * Choose between the original file and the provider's compatible (transcoded HLS)
+ * stream. With provider metadata we know the real codecs, so compatible files
+ * keep full original quality and only unplayable ones get transcoded.
+ */
+export function decideStream({
+    downloadUrl,
+    streamingLinks,
+    fileName,
+    info,
+    engine,
+}: {
+    downloadUrl: string;
+    streamingLinks?: Record<string, string>;
+    fileName: string;
+    info?: StreamInfo;
+    engine: PlaybackEngine;
+}): StreamDecision {
+    const hls = streamingLinks?.apple;
+    if (engine === "device") {
+        return { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original video, audio converted on this device" };
+    }
+    if (engine === "original" || !hls) {
+        return engine === "original"
+            ? { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original file (set in preferences)" }
+            : selectBestStreamingUrl(downloadUrl, streamingLinks, fileName);
+    }
+    if (engine === "compatible") {
+        return { url: hls, isTranscoded: true, format: "HLS", reason: "Compatible stream (set in preferences)" };
+    }
+    if (!info) return selectBestStreamingUrl(downloadUrl, streamingLinks, fileName);
+
+    // Safari can't open MKV/AVI containers at all, whatever the codecs.
+    if ((isSafari() || isIOS()) && !/\.(mp4|m4v|mov)$/i.test(fileName)) {
+        return { url: hls, isTranscoded: true, format: "HLS", reason: "Safari can't open this container" };
+    }
+    const blocked = getUnsupportedCodecs(info);
+    if (blocked.length > 0) {
+        return { url: hls, isTranscoded: true, format: "HLS", reason: `Browser can't decode ${blocked.join(" + ")}` };
+    }
+    return { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original file plays natively" };
+}
+
+/**
+ * Chrome-only probe: video frames decoding while zero audio bytes decode means
+ * the audio codec is unsupported (Chrome plays such files silently, no error).
+ * Returns null when the browser doesn't expose the counters.
+ */
+export function isAudioSilentlyUnsupported(video: HTMLVideoElement): boolean | null {
+    const v = video as HTMLVideoElement & { webkitAudioDecodedByteCount?: number; webkitVideoDecodedByteCount?: number };
+    if (typeof v.webkitAudioDecodedByteCount !== "number" || typeof v.webkitVideoDecodedByteCount !== "number") return null;
+    return v.webkitVideoDecodedByteCount > 0 && v.webkitAudioDecodedByteCount === 0;
 }
 
 /**

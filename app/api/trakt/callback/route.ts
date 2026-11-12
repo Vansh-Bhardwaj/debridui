@@ -5,32 +5,7 @@ import { userSettings } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { TraktClient } from "@/lib/trakt";
 import { getAppUrl, getEnv } from "@/lib/env";
-
-/**
- * Resolve TRAKT_CLIENT_SECRET from process.env or Cloudflare context.
- * Secrets set via `wrangler secret put` may only be available through
- * the Cloudflare context env binding, not process.env.
- */
-// Cache the require'd function to avoid repeated dynamic require overhead
-let _getCfCtx: (() => { env?: Record<string, unknown> } | null) | undefined;
-
-function getTraktSecret(): string | undefined {
-    const fromEnv = getEnv("TRAKT_CLIENT_SECRET");
-    if (fromEnv) return fromEnv;
-
-    try {
-        if (!_getCfCtx) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const mod = require("@opennextjs/cloudflare");
-            _getCfCtx = mod.getCloudflareContext;
-        }
-        const ctx = _getCfCtx!();
-        const secret = ctx?.env?.TRAKT_CLIENT_SECRET;
-        if (typeof secret === "string" && secret) return secret;
-    } catch { /* not running on Cloudflare */ }
-
-    return undefined;
-}
+import { fetchViaProxy } from "@/lib/proxy-fetch";
 
 /**
  * GET /api/trakt/callback?code=XXX
@@ -58,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
-    const clientSecret = getTraktSecret();
+    const clientSecret = getEnv("TRAKT_CLIENT_SECRET");
 
     if (!clientId || !clientSecret) {
         console.error("[trakt] Missing env:", {
@@ -69,10 +44,9 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectUri = `${getAppUrl()}/api/trakt/callback`;
-    const proxyUrl = getEnv("NEXT_PUBLIC_CORS_PROXY_URL");
 
     try {
-        const tokens = await TraktClient.exchangeCode(code, clientId, clientSecret, redirectUri, proxyUrl);
+        const tokens = await TraktClient.exchangeCode(code, clientId, clientSecret, redirectUri, fetchViaProxy);
 
         const expiresAt = tokens.created_at + tokens.expires_in;
         const updates = {

@@ -114,7 +114,7 @@ export function NavUser() {
                                 {!isMobile && (
                                     <DropdownMenuItem onClick={() => { setDropdownOpen(false); toggleTV(); }}>
                                         <Tv />
-                                        TV Mode
+                                        Big Picture
                                     </DropdownMenuItem>
                                 )}
                             </DropdownMenuGroup>

@@ -30,7 +30,7 @@ function buildShortcutGroups(mod: string): ShortcutGroup[] {
                 { keys: ["/"], description: "Open search" },
                 { keys: [mod, "B"], description: "Toggle sidebar" },
                 { keys: ["?"], description: "Keyboard shortcuts" },
-                { keys: ["⇧", "T"], description: "Toggle TV mode" },
+                { keys: ["⇧", "T"], description: "Toggle Big Picture mode" },
             ],
         },
         {

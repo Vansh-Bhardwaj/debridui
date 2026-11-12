@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { serverSettingsSchema } from "@/lib/schemas";
 import { TraktClient } from "@/lib/trakt";
 import { getAppUrl, getEnv } from "@/lib/env";
+import { fetchViaProxy } from "@/lib/proxy-fetch";
 import type { ServerSettings } from "@/lib/types";
 
 export async function getUserSettings(): Promise<ServerSettings | null> {
@@ -81,26 +82,6 @@ export async function disconnectTrakt() {
 
 // ── Trakt Token Refresh ────────────────────────────────────────────────
 
-// Cache the require'd function to avoid repeated dynamic require overhead
-let _getCfCtx: (() => { env?: Record<string, unknown> } | null) | undefined;
-
-function getTraktSecret(): string | undefined {
-    const fromEnv = getEnv("TRAKT_CLIENT_SECRET");
-    if (fromEnv) return fromEnv;
-
-    try {
-        if (!_getCfCtx) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const mod = require("@opennextjs/cloudflare");
-            _getCfCtx = mod.getCloudflareContext;
-        }
-        const secret = _getCfCtx!()?.env?.TRAKT_CLIENT_SECRET;
-        if (typeof secret === "string" && secret) return secret;
-    } catch { /* not running on Cloudflare */ }
-
-    return undefined;
-}
-
 /**
  * Refreshes the Trakt access token using the stored refresh token.
  * Returns the new access token on success, or null if refresh fails.
@@ -121,14 +102,13 @@ export async function refreshTraktToken(): Promise<string | null> {
         if (!refreshToken) return null;
 
         const clientId = getEnv("NEXT_PUBLIC_TRAKT_CLIENT_ID");
-        const clientSecret = getTraktSecret();
+        const clientSecret = getEnv("TRAKT_CLIENT_SECRET");
         if (!clientId || !clientSecret) return null;
 
         const redirectUri = `${getAppUrl()}/api/trakt/callback`;
-        const proxyUrl = getEnv("NEXT_PUBLIC_CORS_PROXY_URL");
 
         const tokens = await TraktClient.refreshToken(
-            refreshToken, clientId, clientSecret, redirectUri, proxyUrl
+            refreshToken, clientId, clientSecret, redirectUri, fetchViaProxy
         );
 
         const expiresAt = tokens.created_at + tokens.expires_in;

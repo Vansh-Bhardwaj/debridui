@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { getEnv } from "@/lib/env";
 
 /**
  * GET /api/remote/token — Generate HMAC-signed token for device sync WebSocket auth.
@@ -13,7 +14,7 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const secret = process.env.SYNC_TOKEN_SECRET;
+    const secret = getEnv("SYNC_TOKEN_SECRET");
     if (!secret) {
         return NextResponse.json({ error: "SYNC_TOKEN_SECRET not configured" }, { status: 500 });
     }

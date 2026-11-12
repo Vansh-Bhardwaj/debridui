@@ -28,6 +28,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { formatDistanceToNow, format } from "date-fns";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionDivider } from "@/components/common/section-divider";
+import { PlaybackCompatibility } from "@/components/settings/playback-compatibility";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { detectPlatform, isSupportedPlayer, PLAYER_PLATFORM_SUPPORT } from "@/lib/utils/media-player";
 import { getPlayerSetupInstruction } from "./player-setup-instructions";
@@ -419,11 +420,11 @@ export default function SettingsPage() {
                             <Tv className="size-5 text-primary" />
                         </div>
                         <div className="space-y-0.5 min-w-0">
-                            <Label htmlFor="tv-mode" className="text-sm font-medium">TV Mode</Label>
+                            <Label htmlFor="tv-mode" className="text-sm font-medium">Big Picture Mode</Label>
                             <p className="text-xs text-muted-foreground">
                                 {isMobile
-                                    ? "TV mode requires a larger screen"
-                                    : "10-foot UI with large cards, arrow key & gamepad navigation"}
+                                    ? "Big Picture needs a larger screen"
+                                    : "Fullscreen 10-foot UI for TVs: large cards, arrow-key & controller navigation (⇧T or the Guide button)"}
                             </p>
                         </div>
                     </div>
@@ -845,7 +846,7 @@ export default function SettingsPage() {
                             data-tv-focusable="list"
                         />
                     </div>
-                    {/* Playback Speed */}                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
                         <div className="space-y-0.5 min-w-0">
                             <div className="flex items-center gap-2">
                                 <Zap className="size-4 text-muted-foreground shrink-0" />
@@ -944,6 +945,8 @@ export default function SettingsPage() {
                         </Select>
                     </div>
                 </div>
+
+                <PlaybackCompatibility streaming={streaming} updateStreaming={updateStreaming} />
             </section>
 
             {/* ─── Appearance ─── */}

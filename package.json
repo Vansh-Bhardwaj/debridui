@@ -34,6 +34,7 @@
     "dependencies": {
         "@bprogress/next": "^3.2.12",
         "@hookform/resolvers": "^5.2.2",
+        "@mediabunny/ac3": "1.65.2",
         "@neondatabase/auth": "^0.2.0-beta.1",
         "@opennextjs/cloudflare": "^1.17.1",
         "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -65,6 +66,7 @@
         "hls.js": "^1.6.15",
         "idb-keyval": "^6.2.2",
         "lucide-react": "^0.575.0",
+        "mediabunny": "1.65.2",
         "next": "16.1.6",
         "next-themes": "^0.4.6",
         "postgres": "^3.4.8",

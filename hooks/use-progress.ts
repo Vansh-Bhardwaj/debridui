@@ -34,8 +34,9 @@ const RESUME_MIN_SECONDS = 10;
 const RESUME_MIN_PERCENT = 1;
 const CONTINUE_MAX_PERCENT = 95;
 
-// Sync interval in milliseconds (15 seconds)
-const SYNC_INTERVAL = 15_000;
+// Heartbeat interval. Pause/stop/pagehide flush immediately, so 30s only bounds
+// crash-loss while halving Worker requests + DB writes vs 15s.
+const SYNC_INTERVAL = 30_000;
 
 // Minimum playback advancement to trigger an additional sync
 const MIN_SYNC_PROGRESS_DELTA_SECONDS = 10;
