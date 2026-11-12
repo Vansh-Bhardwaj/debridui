@@ -21,7 +21,7 @@ import { getProxyUrl, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { decideStream, getUnsupportedCodecs, isAudioSilentlyUnsupported, isIOS, isSafari, type PlaybackEngine } from "@/lib/utils/codec-support";
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { detectContainer, getDeviceProfile, getOriginalIssue } from "@/lib/playback/device-profile";
-import { channelLabel, codecLabel, getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
+import { channelLabel, codecLabel, getStreamInfo, isProviderTranscodeAvailable, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
 import { isLikelyStub, markSourceFailed } from "@/lib/streaming/source-health";
 import {
     createDeviceTranscodeSession,
@@ -722,9 +722,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
     }, [downloadUrl, showOsd]);
 
-    // Explicit "On this device" engine starts conversion right away.
+    // Explicit "On this device" engine starts conversion right away. If the audio
+    // can't be converted (DTS/TrueHD) fall back to the compatible stream, else the original.
+    const hlsAvailableRef = useRef(false);
+    hlsAvailableRef.current = !!hlsUrl && !hlsFailedRef.current;
     useEffect(() => {
-        if (engine === "device" && !deviceSession) void startDeviceConversion();
+        if (engine === "device" && !deviceSession) {
+            void startDeviceConversion().then((ok) => {
+                if (!ok) setEngineOverride(hlsAvailableRef.current ? "compatible" : "original");
+            });
+        }
         if (engine !== "device" && engine !== "auto" && deviceSession) stopDeviceSession();
     }, [engine, deviceSession, startDeviceConversion, stopDeviceSession]);
 
@@ -1163,8 +1170,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         if (deviceSessionRef.current) {
             stopDeviceSession();
-            setEngineOverride("original");
-            showLoadErrorToast("On-device conversion stopped. Try the compatible stream or an external player.");
+            if (hlsUrl && !hlsFailedRef.current) {
+                showOsd("On-device conversion stopped — switching to compatible stream");
+                setEngineOverride("compatible");
+            } else {
+                setEngineOverride("original");
+                showLoadErrorToast("On-device conversion stopped. Try an external player.");
+            }
             return;
         }
 
@@ -1509,6 +1521,10 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     useEffect(() => {
         const video = videoRef.current;
         if (!video || !finalUrl || isHlsUrl || deviceSession) return;
+        // The provider lookup can take ~10s; deciding before it returns would try
+        // on-device conversion (Dolby only) on files the provider would convert.
+        // Re-runs once streamingLinks resolves.
+        if (streamingLinks === undefined && isProviderTranscodeAvailable()) return;
         let startedAt: number | null = null;
         const check = () => {
             if (video.paused || video.muted || video.readyState < 3) return;
@@ -1529,7 +1545,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         video.addEventListener("timeupdate", check);
         return () => video.removeEventListener("timeupdate", check);
-    }, [finalUrl, isHlsUrl, hlsUrl, deviceSession, configuredEngine, showOsd, showLoadErrorToast, startDeviceConversion]);
+    }, [finalUrl, isHlsUrl, hlsUrl, streamingLinks, deviceSession, configuredEngine, showOsd, showLoadErrorToast, startDeviceConversion]);
 
     // hls.js: switch audio track when user selects a different one
     useEffect(() => {

@@ -10,7 +10,7 @@ import { CORS_PROXY_URL } from "@/lib/constants";
  * (separate 10ms CPU budget), so the main worker only pays the cost of one
  * session check + one HMAC sign per resource.
  *
- * GET /api/sign?kind=addon|resolve&url=<target>
+ * GET /api/sign?kind=addon|resolve|hls|vtt&url=<target>
  * → { url: "<proxy-worker>/addon?url=&exp=&sig=", expiresAt: unix_seconds }
  */
 
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
     const kind = searchParams.get("kind");
     const url = searchParams.get("url") ?? "";
 
-    if (kind !== "addon" && kind !== "resolve") {
+    if (kind !== "addon" && kind !== "resolve" && kind !== "hls" && kind !== "vtt") {
         return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
     }
     if (!url || !isSafeHttpUrl(url)) {

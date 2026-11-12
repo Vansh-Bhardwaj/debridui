@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ExternalLink, Loader2, RefreshCw, SkipBack, SkipForward } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { getProxyUrl } from "@/lib/utils";
 import { MediaPlayer, type DebridFileNode } from "@/lib/types";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
@@ -13,14 +12,8 @@ import { useSettingsStore } from "@/lib/stores/settings";
 import { getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
 import { detectContainer, getDeviceProfile, isMp4Family } from "@/lib/playback/device-profile";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
-import {
-    decodeSubtitleFileBytes,
-    getLanguageDisplayName,
-    getSubtitleLabel,
-    isSubtitleLanguage,
-    parseSubtitleCues,
-    type SubtitleCue,
-} from "@/lib/utils/subtitles";
+import { getLanguageDisplayName } from "@/lib/utils/subtitles";
+import { buildNativeHlsUrl, pickNativeSubtitles } from "@/lib/playback/native-hls";
 
 /** Cold provider lookups (library listing + createstream) can take ~10s on mobile data. */
 const LINKS_WAIT_MS = 30_000;
@@ -42,8 +35,9 @@ interface NativeVideoPreviewProps {
 /**
  * Player route for devices that can only play the provider's transcoded stream
  * (iPhone / iPad). Apple's native <video controls> handles playback, fullscreen,
- * AirPlay and captions; this component only picks the stream and offers the
- * choices native controls can't (audio language, quality, addon subtitles).
+ * AirPlay and subtitles (addon subtitles are carried inside the stream — see
+ * lib/playback/native-hls.ts); this component picks the stream and offers what
+ * native controls can't: audio language and quality.
  */
 export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev }: NativeVideoPreviewProps) {
     const device = getDeviceProfile()?.label.split(" · ")[0] ?? "this device";
@@ -67,12 +61,36 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const hlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
     const info = variant ?? getStreamInfo(hlsUrl);
     const container = detectContainer(source?.fileName, file.name, downloadUrl);
-    // Converted stream first. The original only when it's an MP4-family file (or
-    // unknown — Safari tries, and a failure lands on the "can't play" screen).
-    const src = pending ? null : (hlsUrl ?? (container && !isMp4Family(container) ? null : downloadUrl));
+
+    // Subtitles must be inside the HLS stream — Apple's player ignores tracks the
+    // page adds. Lock the set at first play so late subtitles don't reload the video.
+    const pickedSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
+    const [lockedSubs, setLockedSubs] = useState<{ url: string; list: AddonSubtitle[] } | null>(null);
+    const nativeSubs = lockedSubs && lockedSubs.url === hlsUrl ? lockedSubs.list : pickedSubs;
+    const masterKey = hlsUrl ? [hlsUrl, ...nativeSubs.map((s) => s.url)].join(" ") : null;
+    const [master, setMaster] = useState<{ key: string; url: string } | null>(null);
+    useEffect(() => {
+        if (!hlsUrl || !masterKey) return;
+        let cancelled = false;
+        buildNativeHlsUrl(hlsUrl, nativeSubs, subtitleLanguage)
+            .catch(() => hlsUrl) // signing failed: the stream still plays, without subtitles
+            .then((url) => {
+                if (!cancelled) setMaster({ key: masterKey, url });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [hlsUrl, masterKey, nativeSubs, subtitleLanguage]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
-    const failed = !pending && (!src || failedSrc === src);
+    const masterUrl = master?.key === masterKey ? master.url : null;
+    // Wrapper playlist failed → play the provider stream directly (no subtitles).
+    const streamUrl = masterUrl && failedSrc === masterUrl ? hlsUrl : masterUrl;
+    // Converted stream first. The original only when it's an MP4-family file (or
+    // unknown — Safari tries, and a failure lands on the "can't play" screen).
+    const preparing = pending || (!!hlsUrl && !streamUrl);
+    const src = preparing ? null : (hlsUrl ? streamUrl : container && !isMp4Family(container) ? null : downloadUrl);
+    const failed = !preparing && (!src || failedSrc === src);
 
     // ── Progress: resume, periodic save, completion ──
     const resumeAtRef = useRef<number | null>(null);
@@ -106,43 +124,6 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         else toast.error("Couldn't switch the stream. Try again in a moment.");
     }, [info, downloadUrl]);
 
-    // ── Addon subtitles → native text track (shows in Apple's player + CC menu) ──
-    // null = automatic (preferred language); a number = the user's pick.
-    const [chosenSub, setChosenSub] = useState<number | null>(null);
-    const subIndex = chosenSub ?? subtitles?.findIndex((s) => !!s.url && isSubtitleLanguage(s, subtitleLanguage)) ?? -1;
-    const subUrl = subtitles?.[subIndex]?.url;
-    const [loadedCues, setLoadedCues] = useState<{ url: string; cues: SubtitleCue[] } | null>(null);
-    const cues = loadedCues && loadedCues.url === subUrl ? loadedCues.cues : null;
-    useEffect(() => {
-        if (!subUrl) return;
-        const controller = new AbortController();
-        fetch(getProxyUrl(subUrl), { signal: controller.signal })
-            .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
-            .then((buf) => setLoadedCues({ url: subUrl, cues: parseSubtitleCues(decodeSubtitleFileBytes(buf)) }))
-            .catch(() => {
-                if (!controller.signal.aborted) toast.error("Couldn't load those subtitles.");
-            });
-        return () => controller.abort();
-    }, [subUrl]);
-    useEffect(() => {
-        const video = videoRef.current;
-        const sub = subtitles?.[subIndex];
-        if (!video || !src || !sub || !cues?.length) return;
-        const element = document.createElement("track");
-        element.kind = "subtitles";
-        element.label = getSubtitleLabel(sub);
-        element.srclang = sub.lang || "und";
-        video.appendChild(element);
-        const track = element.track;
-        track.mode = "hidden";
-        for (const cue of cues) if (cue.end > cue.start) track.addCue(new VTTCue(cue.start, cue.end, cue.text));
-        track.mode = "showing";
-        return () => {
-            track.mode = "disabled";
-            element.remove();
-        };
-    }, [cues, src, subtitles, subIndex]);
-
     const tryNextSource = () => {
         if (!useStreamingStore.getState().playNextBestSource()) toast.error("No other sources to try.");
     };
@@ -151,7 +132,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     return (
         <div className="flex h-full w-full flex-col bg-black text-white">
             <div className="relative flex min-h-0 flex-1 items-center justify-center">
-                {pending ? (
+                {preparing ? (
                     <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
                         <Loader2 className="size-6 animate-spin text-white/60" />
                         <p className="text-sm font-medium">Preparing a stream for {device}</p>
@@ -165,7 +146,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div className="space-y-1.5">
                             <p className="text-sm font-medium">This file can&apos;t play on {device}</p>
                             <p className="text-xs leading-relaxed text-white/50">
-                                {failedSrc === hlsUrl && hlsUrl
+                                {hlsUrl && failedSrc === src
                                     ? "The converted stream didn't load."
                                     : `${device} only plays converted streams and MP4 files, and no converted stream is available for this source.`}
                             </p>
@@ -199,9 +180,10 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         className="h-full w-full bg-black object-contain"
                         onLoadedMetadata={handleLoadedMetadata}
                         onTimeUpdate={handleTimeUpdate}
+                        onPlay={() => hlsUrl && !lockedSubs && setLockedSubs({ url: hlsUrl, list: nativeSubs })}
                         onPause={() => forceSync()}
                         onEnded={() => markCompleted()}
-                        onError={() => setFailedSrc(src)}
+                        onError={() => setFailedSrc(src ?? null)}
                     />
                 )}
                 {switching && (
@@ -255,23 +237,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         ))}
                     </select>
                 )}
-                {!!subtitles?.length && (
-                    <select
-                        aria-label="Subtitles"
-                        className={SELECT_CLS}
-                        value={subIndex}
-                        onChange={(e) => setChosenSub(Number(e.target.value))}>
-                        <option value={-1}>Subtitles off</option>
-                        {subtitles.map((sub, i) => (
-                            <option key={`${sub.url}-${i}`} value={i}>
-                                {getSubtitleLabel(sub)}
-                            </option>
-                        ))}
-                    </select>
-                )}
                 {src && (
                     <span className="ml-auto text-xs tracking-widest uppercase text-white/40">
-                        {src === hlsUrl ? `Converted for ${device}` : "Original"}
+                        {src === downloadUrl ? "Original" : `Converted for ${device}`}
                     </span>
                 )}
             </div>

@@ -11,7 +11,7 @@
 
 import { CORS_PROXY_URL } from "./constants";
 
-type SignKind = "addon" | "resolve";
+type SignKind = "addon" | "resolve" | "hls" | "vtt";
 
 interface SignedEntry {
     url: string;
