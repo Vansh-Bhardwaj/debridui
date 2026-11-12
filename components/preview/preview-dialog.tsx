@@ -16,6 +16,7 @@ import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";
 import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { sourceStreamHint } from "@/lib/streaming/stream-info";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -126,9 +127,7 @@ export function PreviewDialog() {
                 const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
                 if (Object.keys(chainLinks).length > 0) return chainLinks;
             }
-            const magnet = useStreamingStore.getState().selectedSource?.magnet;
-            const infoHash = magnet?.match(/btih:([a-f0-9]{40})/i)?.[1];
-            return client.getStreamingLinksFromUrl(directUrl!, { infoHash });
+            return client.getStreamingLinksFromUrl(directUrl!, sourceStreamHint(useStreamingStore.getState().selectedSource));
         },
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,

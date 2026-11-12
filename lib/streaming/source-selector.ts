@@ -2,6 +2,7 @@ import { type AddonSource } from "@/lib/addons/types";
 import { getResolutionIndex, getSourceQualityIndex } from "@/lib/addons/parser";
 import { type QualityRange, type StreamingSettings, getActiveRange } from "@/lib/stores/settings";
 import { type CodecSupport } from "@/lib/utils/codec-support";
+import { detectContainer } from "@/lib/playback/device-profile";
 import { getSourceFailure, isCamRelease } from "@/lib/streaming/source-health";
 
 const LANGUAGE_PATTERNS: Record<string, RegExp> = {
@@ -107,10 +108,13 @@ export function detectVideoCodec(source: AddonSource): DetectedVideoCodec {
  * Deliberately high values so incompatible sources sink below compatible ones,
  * but never filtered out entirely (so you're not stuck with "no sources").
  */
-function codecPenalty(source: AddonSource, support: CodecSupport | undefined): number {
+function codecPenalty(source: AddonSource, support: CodecSupport | undefined, mkvPlayable = true): number {
     if (!support) return 0; // No codec info (e.g. external player target) → no penalty
 
     let penalty = 0;
+
+    // ── Container penalty ── Safari/iOS can't open MKV whatever the codecs.
+    if (!mkvPlayable && detectContainer(source.fileName, source.description, source.title) === "mkv") penalty += 100;
 
     // ── Audio codec penalty ──
     const audio = detectAudioCodec(source);
@@ -235,6 +239,7 @@ function calculateScore(
         codecSupport?: CodecSupport;
         preferredBingeGroup?: string;
         transcodeAvailable?: boolean;
+        mkvPlayable?: boolean;
         skipCamReleases?: boolean;
         rememberFailedSources?: boolean;
     } = {}
@@ -317,7 +322,7 @@ function calculateScore(
     // This is applied last so it acts as a strong override without interfering with other factors.
     // With provider transcoding the file still plays, so only prefer direct-playable
     // releases at equal quality instead of burying a 4K REMUX behind a 720p WEB-DL.
-    const penalty = codecPenalty(source, options.codecSupport);
+    const penalty = codecPenalty(source, options.codecSupport, options.mkvPlayable);
     score += options.transcodeAvailable && penalty > 0 ? Math.min(penalty * 0.1, 8) : penalty;
 
     if (options.skipCamReleases !== false && isCamRelease(source)) score += 80;
@@ -349,6 +354,8 @@ export interface SelectionOptions {
     preferredBingeGroup?: string;
     /** Provider can transcode unplayable codecs (TorBox Pro) — soften codec gating. */
     transcodeAvailable?: boolean;
+    /** False on browsers that can't open MKV (Safari / iOS). */
+    mkvPlayable?: boolean;
     skipCamReleases?: boolean;
     rememberFailedSources?: boolean;
 }

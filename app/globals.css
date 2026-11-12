@@ -894,6 +894,29 @@ input[type="range"]:hover::-moz-range-thumb {
     }
 }
 
+/* Phones: player menus become bottom sheets with thumb-sized rows. Radix positions
+   menus with an inline transform on its wrapper, so override that wrapper. */
+@media (pointer: coarse) and (max-width: 640px), (pointer: coarse) and (max-height: 480px) {
+    [data-radix-popper-content-wrapper]:has(> .player-popup) {
+        position: fixed !important;
+        transform: none !important;
+        inset: auto 8px max(8px, env(safe-area-inset-bottom)) 8px !important;
+        min-width: 0 !important;
+    }
+
+    .player-popup {
+        width: 100% !important;
+        max-height: min(70vh, 520px) !important;
+        border-radius: 14px;
+        transform-origin: bottom center;
+    }
+
+    .player-popup-item {
+        min-height: 44px;
+        font-size: 15px;
+    }
+}
+
 @keyframes player-popup-in {
     from {
         opacity: 0;

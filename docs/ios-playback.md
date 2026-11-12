@@ -1,23 +1,36 @@
-# iOS browser playback
+# Device playback routes
 
-On iPhone and iPad, tapping Play requests Apple's native fullscreen video player. The fullscreen button also uses the native video API when available. Exiting fullscreen returns to the page; playback progress continues to use the same video element.
+`lib/playback/device-profile.ts` detects the device once and picks a route.
 
-Unlike desktop and Android playback, iOS does not set `playsinline` or `webkit-playsinline`. Requests to `webkitEnterFullscreen()` run synchronously in the tap handler, without awaiting `play()`. Safari can reject fullscreen before metadata loads; on iPhone, playback without `playsinline` also enters fullscreen automatically.
+| Device | Player | What plays |
+| --- | --- | --- |
+| iPhone / iPad (any iOS browser) | `NativeVideoPreview` — Apple's `<video controls>` | Provider's converted HLS stream. MP4 originals only when no stream exists. MKV is never tried. |
+| Mac Safari | Custom player | MP4 originals; MKV and undecodable codecs only via the converted stream (Safari's built-in HLS). |
+| Chrome / Edge / Firefox / Android | Custom player | Original when the browser can open and decode it; otherwise only the converted stream (hls.js), or on-device Dolby conversion. |
 
-Selected subtitles are copied into a native text track because the HTML caption overlay cannot appear over Apple's player. Cue times include subtitle delay, speed, and sync anchors. Styling and controls in native fullscreen are managed by iOS.
+Rules shared by every route:
 
-Native fullscreen uses Safari's existing decoders. It does not add MKV, DTS, or TrueHD support. Use the provider's compatible HLS stream for files Safari cannot open; unsupported files without a compatible provider stream still need another source or an external player. This change adds no server-side conversion or dependencies.
+- **No doomed starts.** When the device can't play the original (`getOriginalIssue`), the player waits for the provider lookup (max 30s) instead of starting the file and failing.
+- **Early lookup.** Picking a source starts the TorBox lookup in parallel with resolving the addon URL (`prefetchStreamLinks`). The client caches the library listing (60s) and stream sessions (2 min), so the player reuses the result.
+- **Library matching.** Debrid-configured addons drop `infoHash`, so the source is matched to the TorBox library by the hash in its resolve URL, then by the addon's exact byte size (`behaviorHints.videoSize`), then by file name. Season packs never fall back to "largest file".
+- **Audio language.** TorBox defaults to the first audio track. The stream is re-requested in the user's preferred language (Settings → Streaming) because native HLS players only receive one track.
+- **Source ranking.** On browsers that can't open MKV, MKV sources rank lower (softened when the provider can convert them).
 
-## Verify on an iPhone and iPad
+## iPhone / iPad player
 
-1. Open Safari and play a supported MP4, then a TorBox compatible HLS stream. Confirm Apple's fullscreen controls appear after the tap.
-2. Pause, seek, and close native fullscreen. Confirm playback position and continue-watching progress remain correct.
-3. Reopen with the fullscreen button. Confirm the button's state resets after closing Apple's player.
-4. Select an addon subtitle before playing. Confirm captions appear in fullscreen and turning them off in the app removes them. Repeat with a subtitle delay and embedded HLS captions.
-5. In iPad desktop website mode, confirm playback follows the iOS path and external player options use iOS links.
-6. Check desktop and Android still use inline playback and the existing custom fullscreen player.
+Apple's controls handle play, fullscreen, AirPlay, PiP and captions. Without `playsinline`, iPhone opens Apple's fullscreen player on play. The bar under the video offers what native controls can't: audio language and quality (new TorBox session at the same position), addon subtitles (added as a native text track), and previous/next. If nothing playable exists, the player shows why, with "Try another source" and Infuse/VLC/Kodi.
+
+Phones on the custom player get bottom-sheet menus with 44px rows (`app/globals.css`).
+
+## Verify on a device
+
+1. iPhone: play an MKV from addons and from Files. Expect "Preparing a stream for iPhone", then Apple's player, in your audio language.
+2. Change audio language and quality mid-play; position is kept.
+3. Pick a subtitle; it appears in Apple's player and its CC menu.
+4. Settings → Streaming shows "This device" with the route.
+5. Desktop Chrome: MKV with AAC plays the original; E-AC-3/DTS switches to the converted stream without trying the file first.
 
 ## References
 
-- [WebKit video policies: user gestures and inline versus fullscreen playback](https://webkit.org/blog/6784/new-video-policies-for-ios/)
-- [WebKit Managed Media Source requirements](https://webkit.org/blog/14735/webkit-features-in-safari-17-1/) — relevant to future on-device conversion support; this change preserves native HLS playback.
+- [WebKit video policies](https://webkit.org/blog/6784/new-video-policies-for-ios/)
+- [TorBox API](https://api-docs.torbox.app/)

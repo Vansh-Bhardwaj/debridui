@@ -126,6 +126,9 @@ export interface AddonSource {
     inlineSubtitles?: AddonSubtitle[];
     /** Stremio bingeGroup identifier — groups episodes from the same torrent pack. */
     bingeGroup?: string;
+    /** Exact file name and byte size (behaviorHints) — used to find the file in the debrid library. */
+    fileName?: string;
+    videoSize?: number;
 }
 
 export interface Addon {

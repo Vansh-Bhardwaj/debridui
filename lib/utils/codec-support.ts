@@ -21,12 +21,6 @@ export interface CodecSupport {
     truehd: boolean;
 }
 
-// Common problematic audio codecs in MKV/video files
-const _PROBLEMATIC_AUDIO_CODECS = ["ac3", "ac-3", "eac3", "e-ac-3", "dts", "truehd", "dtshd"];
-
-// File extensions that commonly contain problematic codecs
-const PROBLEMATIC_EXTENSIONS = [".mkv", ".avi", ".wmv", ".flv"];
-
 const HDR_MARKER_REGEX = /(?:\b(?:hdr10\+?|hdr|hlg|pq|dolby[\s.-]?vision|bt\.?2020|rec\.?2020)\b|\bdv\b)/i;
 
 /**
@@ -111,40 +105,6 @@ export function detectCodecSupport(): CodecSupport {
         mp3: canPlayType('audio/mpeg'),
         truehd: canPlayType('audio/mp4; codecs="mlpa"'),
     };
-}
-
-/**
- * Check if a file extension likely has codec compatibility issues
- */
-export function hasLikelyCodecIssues(filename: string): boolean {
-    const lower = filename.toLowerCase();
-    return PROBLEMATIC_EXTENSIONS.some(ext => lower.endsWith(ext));
-}
-
-/**
- * Get a description of potentially problematic codecs
- */
-export function getCodecCompatibilityInfo(): { supported: string[]; unsupported: string[] } {
-    const support = detectCodecSupport();
-    const supported: string[] = [];
-    const unsupported: string[] = [];
-
-    // Video
-    if (support.h264) supported.push("H.264"); else unsupported.push("H.264");
-    if (support.hevc) supported.push("HEVC/H.265"); else unsupported.push("HEVC/H.265");
-    if (support.vp9) supported.push("VP9"); else unsupported.push("VP9");
-    if (support.av1) supported.push("AV1"); else unsupported.push("AV1");
-    if (support.hdr) supported.push("HDR Playback"); else unsupported.push("HDR Playback");
-
-    // Audio - the problematic ones
-    if (support.aac) supported.push("AAC"); else unsupported.push("AAC");
-    if (support.ac3) supported.push("AC3/Dolby Digital"); else unsupported.push("AC3/Dolby Digital");
-    if (support.eac3) supported.push("E-AC3/Dolby Digital Plus"); else unsupported.push("E-AC3/Dolby Digital Plus");
-    if (support.dts) supported.push("DTS"); else unsupported.push("DTS");
-    if (support.truehd) supported.push("Dolby TrueHD"); else unsupported.push("Dolby TrueHD");
-    if (support.opus) supported.push("Opus"); else unsupported.push("Opus");
-
-    return { supported, unsupported };
 }
 
 /**
@@ -324,89 +284,4 @@ export function isAudioSilentlyUnsupported(video: HTMLVideoElement): boolean | n
     const v = video as HTMLVideoElement & { webkitAudioDecodedByteCount?: number; webkitVideoDecodedByteCount?: number };
     if (typeof v.webkitAudioDecodedByteCount !== "number" || typeof v.webkitVideoDecodedByteCount !== "number") return null;
     return v.webkitVideoDecodedByteCount > 0 && v.webkitAudioDecodedByteCount === 0;
-}
-
-/**
- * Get iOS-specific playback recommendations
- */
-export function getIOSPlaybackRecommendation(filename: string, hasStreamingLinks: boolean, hasAppleLink: boolean): {
-    canPlay: "likely" | "maybe" | "unlikely";
-    recommendation: string;
-} {
-    const ext = filename.toLowerCase();
-    
-    // HLS stream available - should work
-    if (hasAppleLink) {
-        return {
-            canPlay: "likely",
-            recommendation: "This video should play in your browser.",
-        };
-    }
-    
-    // MP4 with H.264 usually works
-    if (ext.endsWith(".mp4")) {
-        return {
-            canPlay: "maybe",
-            recommendation: "This MP4 should play, but audio may not work if it uses AC3/DTS.",
-        };
-    }
-    
-    // MKV/AVI rarely work on iOS
-    if (ext.endsWith(".mkv") || ext.endsWith(".avi") || ext.endsWith(".wmv")) {
-        return {
-            canPlay: "unlikely",
-            recommendation: "This format doesn't play on iOS Safari. Use VLC or Infuse app.",
-        };
-    }
-    
-    // Unknown format
-    return {
-        canPlay: "maybe",
-        recommendation: "This format may not play on iOS. If it fails, use VLC or Infuse app.",
-    };
-}
-
-/**
- * Check if video playback has audio issues (no audio playing despite video working)
- * This can be used to detect codec issues at runtime
- */
-export function createAudioDetector(video: HTMLVideoElement): {
-    hasAudio: () => boolean;
-    cleanup: () => void;
-} {
-    let audioDetected = false;
-    let audioContext: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let source: MediaElementAudioSourceNode | null = null;
-
-    try {
-        audioContext = new AudioContext();
-        analyser = audioContext.createAnalyser();
-        source = audioContext.createMediaElementSource(video);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
-        analyser.fftSize = 256;
-    } catch {
-        // Audio context creation failed
-    }
-
-    return {
-        hasAudio: () => {
-            if (!analyser) return true; // Assume audio if we can't detect
-            
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-            
-            // Check if there's any audio signal
-            const sum = dataArray.reduce((a, b) => a + b, 0);
-            audioDetected = audioDetected || sum > 0;
-            
-            return audioDetected;
-        },
-        cleanup: () => {
-            source?.disconnect();
-            analyser?.disconnect();
-            audioContext?.close();
-        },
-    };
 }

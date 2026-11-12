@@ -28,7 +28,8 @@ import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
 import { cacheSource } from "@/lib/utils/source-cache";
-import { isProviderTranscodeAvailable } from "@/lib/streaming/stream-info";
+import { isProviderTranscodeAvailable, prefetchStreamLinks } from "@/lib/streaming/stream-info";
+import { detectContainer, getDeviceProfile } from "@/lib/playback/device-profile";
 import { getSourceFailure, isCamRelease, markSourceFailed } from "@/lib/streaming/source-health";
 
 export interface StreamingRequest {
@@ -134,6 +135,7 @@ function getCodecSupportForPlayer(player: string | undefined): CodecSupport | un
 function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: StreamingSettings) {
     return {
         transcodeAvailable: !!codecSupport && settings.playbackEngine !== "original" && isProviderTranscodeAvailable(),
+        mkvPlayable: !codecSupport || (getDeviceProfile()?.mkv ?? true),
         skipCamReleases: settings.skipCamReleases,
         rememberFailedSources: settings.rememberFailedSources,
     };
@@ -849,6 +851,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const video = detectVideoCodec(candidate);
             if (video === "hevc" && !support.hevc) isSupported = false;
             if (video === "av1" && !support.av1) isSupported = false;
+            if (getDeviceProfile()?.mkv === false && detectContainer(candidate.fileName, candidate.description, candidate.title) === "mkv") {
+                isSupported = false;
+            }
 
             if (isSupported) {
                 playAlternativeSource(candidate);
@@ -1003,6 +1008,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                     });
                 }
             }
+
+            // Look up the provider's compatible stream while the addon URL resolves.
+            if (mediaPlayer === MediaPlayer.BROWSER && !syncStore.activeTarget) prefetchStreamLinks(source);
 
             // Resolve addon proxy/redirect URL to the actual debrid download link
             let resolved: { url: string; chain?: string[] };

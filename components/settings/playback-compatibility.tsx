@@ -9,9 +9,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getCodecSupport, type CodecSupport, type PlaybackEngine } from "@/lib/utils/codec-support";
 import { clearFailedSources } from "@/lib/streaming/source-health";
+import { getDeviceProfile, type DeviceProfile } from "@/lib/playback/device-profile";
 import type { StreamingSettings } from "@/lib/stores/settings";
 
 const noopSubscribe = () => () => {};
+
+function routeSummary(p: DeviceProfile): string {
+    if (p.route === "native") return "Converted stream in Apple's player. MKV and Dolby TrueHD/DTS files are converted by your provider first.";
+    const hls = p.hls === "native" ? "Safari's built-in HLS" : "hls.js";
+    return p.mkv
+        ? `Original file when this browser can decode it, otherwise the converted stream (${hls}).`
+        : `MP4 originals play directly; MKV and unsupported codecs use the converted stream (${hls}).`;
+}
 
 const ENGINES: { id: PlaybackEngine; name: string; description: string }[] = [
     { id: "auto", name: "Auto", description: "Original file when your browser can decode it, otherwise a compatible stream" },
@@ -76,6 +85,7 @@ export function PlaybackCompatibility({
 }) {
     // Codec probing needs the DOM: null on the server, cached result on the client.
     const support = useSyncExternalStore(noopSubscribe, getCodecSupport, () => null);
+    const device = useSyncExternalStore(noopSubscribe, getDeviceProfile, () => null);
 
     return (
         <div className="space-y-4 pt-2">
@@ -101,6 +111,16 @@ export function PlaybackCompatibility({
                         </button>
                     ))}
                 </div>
+
+                {device && (
+                    <div className="rounded-sm border border-border/50 bg-muted/10 p-3 space-y-1">
+                        <div className="flex items-baseline justify-between gap-3">
+                            <span className="text-xs tracking-widest uppercase text-muted-foreground">This device</span>
+                            <span className="text-sm">{device.label}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{routeSummary(device)}</p>
+                    </div>
+                )}
 
                 {support && (
                     <div className="rounded-sm border border-border/50 bg-muted/10 p-3 space-y-2">

@@ -289,3 +289,40 @@ export function normalizeSubtitleCueText(raw: string): string {
     s = stripSubtitleCueMarkup(s);
     return s;
 }
+
+export interface SubtitleCue {
+    start: number;
+    end: number;
+    text: string;
+}
+
+function parseCueTime(t: string): number | null {
+    const parts = t.trim().replace(",", ".").split(":");
+    if (parts.length !== 2 && parts.length !== 3) return null;
+    const [h, m, rest] = parts.length === 3 ? parts : ["0", parts[0], parts[1]];
+    const [sec, ms = "0"] = rest.split(".");
+    const values = [Number(h), Number(m), Number(sec), Number(ms.padEnd(3, "0"))];
+    if (!values.every(Number.isFinite)) return null;
+    return values[0] * 3600 + values[1] * 60 + values[2] + values[3] / 1000;
+}
+
+/** Parse SRT or WebVTT text into cues (STYLE and NOTE blocks skipped). */
+export function parseSubtitleCues(text: string): SubtitleCue[] {
+    const raw = text.replace(/\r\n?/g, "\n").trim().replace(/^\uFEFF/, "");
+    const body = raw.startsWith("WEBVTT") ? raw.replace(/^WEBVTT[^\n]*\n+/, "") : raw;
+    const withoutNotes = body.replace(/^NOTE\b[^\n]*\n(?:(?!\n\n)[\s\S])*?\n{2,}/gm, "");
+    const cues: SubtitleCue[] = [];
+    for (const block of withoutNotes.split(/\n{2,}/)) {
+        const lines = block.split("\n").filter(Boolean);
+        if (lines.length < 2 || lines[0].startsWith("STYLE")) continue;
+        const timeIdx = /^\d+$/.test(lines[0]) ? 1 : 0;
+        const timeLine = lines[timeIdx];
+        if (!timeLine?.includes("-->")) continue;
+        const [startRaw, endRaw] = timeLine.split("-->");
+        const start = parseCueTime(startRaw);
+        const end = parseCueTime(endRaw.trim().split(/\s+/)[0] ?? "");
+        const cueText = normalizeSubtitleCueText(lines.slice(timeIdx + 1).join("\n"));
+        if (start != null && end != null && cueText) cues.push({ start, end, text: cueText });
+    }
+    return cues;
+}

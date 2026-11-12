@@ -109,7 +109,9 @@ export function extractHash(stream: AddonStream): string | undefined {
         }
     }
 
-    return undefined;
+    // Priority 3: debrid-configured addons (Torrentio, Comet, MediaFusion) drop
+    // infoHash but carry it in the resolve URL path or query.
+    return stream.url?.toLowerCase().match(/(?:^|[/=])([a-f0-9]{40})(?=$|[/?&])/)?.[1];
 }
 
 export function extractSize(stream: AddonStream): string | undefined {
@@ -229,6 +231,8 @@ export function parseStream(stream: AddonStream, addonId: string, addonName: str
         addonName,
         ...(inlineSubtitles?.length ? { inlineSubtitles } : {}),
         ...(bingeGroup ? { bingeGroup } : {}),
+        ...(stream.behaviorHints?.filename ? { fileName: stream.behaviorHints.filename } : {}),
+        ...(stream.behaviorHints?.videoSize ? { videoSize: stream.behaviorHints.videoSize } : {}),
     };
 }
 

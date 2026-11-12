@@ -47,6 +47,9 @@ export class RateLimiter {
 /** Extra context for mapping an addon URL back to a provider file. */
 export interface StreamHint {
     infoHash?: string;
+    /** Exact file name / byte size from the addon (behaviorHints) — matches pack files. */
+    fileName?: string;
+    fileSize?: number;
 }
 
 interface BaseClientOptions {

@@ -7,6 +7,10 @@
  * that the provider transcodes for us (no Cloudflare or device cost).
  */
 
+import type { AddonSource } from "@/lib/addons/types";
+import type { StreamHint } from "@/lib/clients/base";
+import { getLanguageDisplayName } from "@/lib/utils/subtitles";
+
 export interface StreamAudio {
     /** Relative index the provider expects when choosing this track. */
     index: number;
@@ -55,6 +59,50 @@ export const setProviderTranscodeAvailable = (value: boolean) => {
     providerTranscode = value;
 };
 export const isProviderTranscodeAvailable = () => providerTranscode;
+
+/**
+ * Provider index of the audio track in the user's language ("english" or "eng"),
+ * or null when the current track already matches / nothing matches.
+ */
+export function pickPreferredAudio(info: Pick<StreamInfo, "audios" | "audioIndex">, language?: string): number | null {
+    const want = language?.trim().toLowerCase();
+    if (!want) return null;
+    const matches = (a: StreamAudio) => {
+        const lang = (a.language ?? "").toLowerCase();
+        return lang === want || lang.startsWith(want) || (lang.length === 3 && lang === getLanguageDisplayName(want).toLowerCase())
+            || getLanguageDisplayName(lang).toLowerCase() === want;
+    };
+    const current = info.audios.find((a) => a.index === info.audioIndex);
+    if (current && matches(current)) return null;
+    return info.audios.find(matches)?.index ?? null;
+}
+
+/** What a debrid client needs to find an addon source's file in the user's library. */
+export function sourceStreamHint(source: AddonSource | null | undefined): StreamHint {
+    return {
+        infoHash: source?.magnet?.match(/btih:([a-f0-9]{40})/i)?.[1],
+        fileName: source?.fileName,
+        fileSize: source?.videoSize,
+    };
+}
+
+type StreamLinkLookup = (url: string, hint: StreamHint) => Promise<Record<string, string>>;
+let streamLinkLookup: StreamLinkLookup | null = null;
+/** Registered by the auth provider for the active debrid account. */
+export const setStreamLinkLookup = (lookup: StreamLinkLookup | null) => {
+    streamLinkLookup = lookup;
+};
+
+/**
+ * Start the provider stream lookup as soon as a source is picked, in parallel with
+ * resolving the addon URL. The client caches the result, so the player's own lookup
+ * reuses it — this removes most of the wait before iOS can start playback.
+ */
+export function prefetchStreamLinks(source: AddonSource): void {
+    if (!providerTranscode || !streamLinkLookup) return;
+    const hint = sourceStreamHint(source);
+    if (hint.infoHash || hint.fileName || hint.fileSize) void streamLinkLookup(source.url ?? "", hint).catch(() => {});
+}
 
 const registry = new Map<string, StreamInfo>();
 const MAX_ENTRIES = 50;

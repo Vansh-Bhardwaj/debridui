@@ -17,7 +17,13 @@ const LegacyVideoPreview = dynamic(
         ),
     }
 );
+// iPhone / iPad route: Apple's native player on the provider's converted stream.
+const NativeVideoPreview = dynamic(
+    () => import("./native-video-preview").then((mod) => mod.NativeVideoPreview),
+    { ssr: false, loading: () => <div className="h-full w-full bg-black" /> }
+);
 import type { AddonSubtitle } from "@/lib/addons/types";
+import { getDeviceProfile } from "@/lib/playback/device-profile";
 import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
 
@@ -49,8 +55,21 @@ class VideoPreviewErrorBoundary extends Component<
     }
 }
 
-/** Picks Video.js v10 or legacy native player from settings. Falls back to legacy on error. */
+/** Routes each device to the player it can actually use. Falls back to legacy on error. */
 export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev, onPreload, onLoad, onError }: VideoPreviewProps & { onNext?: () => void; onPrev?: () => void; onPreload?: () => void; progressKey?: ProgressKey }) {
+    if (getDeviceProfile()?.route === "native") {
+        return (
+            <NativeVideoPreview
+                file={file}
+                downloadUrl={downloadUrl}
+                streamingLinks={streamingLinks}
+                subtitles={subtitles}
+                progressKey={progressKey}
+                onNext={onNext}
+                onPrev={onPrev}
+            />
+        );
+    }
     const legacy = (
         <LegacyVideoPreview
             file={file}

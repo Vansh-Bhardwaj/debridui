@@ -13,7 +13,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { clearAppCache } from "@/lib/utils";
 import { toast } from "sonner";
 import { syncUser } from "@/lib/actions/auth";
-import { setProviderTranscodeAvailable } from "@/lib/streaming/stream-info";
+import { setProviderTranscodeAvailable, setStreamLinkLookup } from "@/lib/streaming/stream-info";
 import { AccountType } from "@/lib/schemas";
 
 interface AuthContextType {
@@ -178,6 +178,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     useEffect(() => {
         setProviderTranscodeAvailable(currentAccount?.type === AccountType.TORBOX);
     }, [currentAccount?.type]);
+
+    useEffect(() => {
+        setStreamLinkLookup(client ? (url, hint) => client.getStreamingLinksFromUrl(url, hint) : null);
+        return () => setStreamLinkLookup(null);
+    }, [client]);
 
     // `rerender-defer-reads` - Stable callback for switching accounts
     const switchAccount = useCallback((accountId: string) => {

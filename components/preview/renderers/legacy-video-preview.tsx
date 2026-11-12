@@ -17,9 +17,10 @@ import {
     describeSync,
     type SubtitleSyncState,
 } from "@/lib/utils/subtitle-sync";
-import { getProxyUrl, isNonMP4Video, openInPlayer, isSupportedPlayer } from "@/lib/utils";
+import { getProxyUrl, openInPlayer, isSupportedPlayer } from "@/lib/utils";
 import { decideStream, getUnsupportedCodecs, isAudioSilentlyUnsupported, isIOS, isSafari, type PlaybackEngine } from "@/lib/utils/codec-support";
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
+import { detectContainer, getDeviceProfile, getOriginalIssue } from "@/lib/playback/device-profile";
 import { channelLabel, codecLabel, getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
 import { isLikelyStub, markSourceFailed } from "@/lib/streaming/source-health";
 import {
@@ -35,6 +36,8 @@ import {
     getLanguageDisplayName,
     isSubtitleLanguage,
     normalizeSubtitleCueText,
+    parseSubtitleCues,
+    type SubtitleCue,
     SUBTITLE_SYMBOL_FONT_FALLBACK,
 } from "@/lib/utils/subtitles";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -61,13 +64,6 @@ import { cn } from "@/lib/utils";
 
 // Static per page load; checked once instead of on every render.
 const deviceSupported = isDeviceTranscodeSupported();
-
-/** Parsed subtitle cue for manual rendering */
-interface SubtitleCue {
-    start: number;
-    end: number;
-    text: string;
-}
 
 /** Unified subtitle entry for the player picker. "addon" entries come from
  *  Stremio addons (have a URL to fetch and parse). "embedded" entries come
@@ -586,8 +582,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [useCompactControls, setUseCompactControls] = useState(false);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const hasCodecIssue = isNonMP4Video(file.name);
-
     // ── Stream decision: original file vs provider's compatible (HLS) stream ──
     // With provider metadata (TorBox createstream) we know the real codecs, so
     // playable files keep full original quality and only unplayable ones are
@@ -607,29 +601,38 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         setVariant(null);
     }, [downloadUrl]);
 
+    // Why this device can't play the original (container it can't open, codecs it
+    // can't decode). When set, the original is never tried — only the converted stream.
+    const deviceProfile = getDeviceProfile();
+    const originalIssue = deviceProfile
+        ? getOriginalIssue(deviceProfile, detectContainer(selectedSourceFromStore?.fileName, file.name, downloadUrl), streamInfo)
+        : null;
+    const hasCodecIssue = !!originalIssue;
+
     const streamingSelection = useMemo(() => {
         const links = hlsUrl ? { ...streamingLinks, apple: hlsUrl } : streamingLinks;
+        if (engine === "auto" && originalIssue && hlsUrl) {
+            return { url: hlsUrl, isTranscoded: true, format: "HLS", reason: originalIssue };
+        }
         const decision = decideStream({ downloadUrl, streamingLinks: links, fileName: file.name, info: streamInfo, engine });
         // Without metadata, hls.js browsers still prefer provider HLS so multi-audio survives.
         if (!streamInfo && engine === "auto" && hlsUrl && !isSafari() && Hls.isSupported() && decision.url !== hlsUrl) {
             return { url: hlsUrl, isTranscoded: true, format: "HLS", reason: "Compatible stream" };
         }
         return decision;
-    }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine]);
+    }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine, originalIssue]);
 
-    // iOS only loads video on a tap. If that tap lands on the raw file (MKV etc.)
-    // before the provider's HLS lookup returns, Safari fails, the fallbacks run, and
-    // the HLS link that arrives later can't autoplay. Hold the source until the
-    // lookup resolves (undefined = pending, {} = none), capped so a hung lookup
-    // can't block playback.
+    // Don't start a file this device can't play while the provider's converted
+    // stream may still be on its way: the failure fires fallbacks and warnings, and
+    // on iOS it burns the tap. Hold the source until the lookup resolves
+    // (undefined = pending, {} = none), capped so a hung lookup can't block playback.
     const [hlsWaitExpired, setHlsWaitExpired] = useState(false);
-    const awaitingHls = ios && streamingLinks === undefined && engine !== "original" && !hlsWaitExpired;
+    const awaitingHls = (ios || !!originalIssue) && streamingLinks === undefined && engine !== "original" && !hlsWaitExpired;
     useEffect(() => {
         setHlsWaitExpired(false);
-        if (!ios) return;
-        const t = setTimeout(() => setHlsWaitExpired(true), 15_000);
+        const t = setTimeout(() => setHlsWaitExpired(true), 30_000);
         return () => clearTimeout(t);
-    }, [downloadUrl, ios]);
+    }, [downloadUrl]);
 
     const effectiveUrl = awaitingHls ? "" : streamingSelection.url;
     const isUsingTranscodedStream = streamingSelection.isTranscoded;
@@ -2972,21 +2975,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const controller = new AbortController();
 
 
-        const parseTime = (t: string): number | null => {
-            const s = t.trim().replace(",", ".");
-            const parts = s.split(":");
-            if (parts.length !== 2 && parts.length !== 3) return null;
 
-            const [left, mid, rightRaw] = parts.length === 3 ? parts : ["0", parts[0], parts[1]];
-            const [rightSecRaw, msRaw = "0"] = rightRaw.split(".");
-
-            const hh = Number(left);
-            const mm = Number(mid);
-            const ss = Number(rightSecRaw);
-            const ms = Number(msRaw.padEnd(3, "0"));
-            if (![hh, mm, ss, ms].every(Number.isFinite)) return null;
-            return hh * 3600 + mm * 60 + ss + ms / 1000;
-        };
 
         const fetchSubtitleText = async (url: string): Promise<string | null> => {
             const perRequestController = new AbortController();
@@ -3010,38 +2999,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
         };
 
-        const parseCuesFromText = (text: string): SubtitleCue[] => {
-            const cues: SubtitleCue[] = [];
-            const raw = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-            // Strip UTF-8 BOM if present
-            const clean = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
-            const body = clean.startsWith("WEBVTT") ? clean.replace(/^WEBVTT[^\n]*\n+/, "") : clean;
-            // Strip NOTE blocks (VTT comments)
-            const withoutNotes = body.replace(/^NOTE\b[^\n]*\n(?:(?!\n\n)[\s\S])*?\n{2,}/gm, "");
-            const blocks = withoutNotes.split(/\n{2,}/);
-
-            for (const block of blocks) {
-                const lines = block.split("\n").filter(Boolean);
-                if (lines.length < 2) continue;
-
-                // Skip STYLE blocks
-                if (lines[0]!.startsWith("STYLE")) continue;
-
-                const timeLineIdx = /^\d+$/.test(lines[0]!) ? 1 : 0;
-                const timeLine = lines[timeLineIdx];
-                if (!timeLine?.includes("-->")) continue;
-
-                const [startRaw, endRaw] = timeLine.split("-->").map((p) => p.trim());
-                const start = parseTime(startRaw);
-                const end = parseTime(endRaw.split(/\s+/)[0] ?? "");
-                if (start == null || end == null) continue;
-
-                const cueText = normalizeSubtitleCueText(lines.slice(timeLineIdx + 1).join("\n"));
-
-                if (cueText) cues.push({ start, end, text: cueText });
-            }
-            return cues;
-        };
 
         const run = async () => {
             setParsedCues(subtitles.map(() => []));
@@ -3060,7 +3017,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 const prioritizedText = await fetchSubtitleText(subtitles[prioritizedIndex]!.url);
                 if (controller.signal.aborted) return;
                 if (prioritizedText) {
-                    allCues[prioritizedIndex] = parseCuesFromText(prioritizedText);
+                    allCues[prioritizedIndex] = parseSubtitleCues(prioritizedText);
                     setParsedCues([...allCues]);
                 }
             }
@@ -3071,7 +3028,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     if (!sub.url) return [];
 
                     const txt = await fetchSubtitleText(sub.url);
-                    return txt ? parseCuesFromText(txt) : [];
+                    return txt ? parseSubtitleCues(txt) : [];
                 })
             );
 

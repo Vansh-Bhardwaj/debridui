@@ -19,6 +19,7 @@ import {
 } from "@/lib/types";
 import BaseClient, { type StreamHint } from "./base";
 import {
+    pickPreferredAudio,
     registerStreamInfo,
     setProviderTranscodeAvailable,
     type StreamInfo,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/streaming/stream-info";
 import { USER_AGENT } from "../constants";
 import { getProxyUrl } from "@/lib/utils";
+import { useSettingsStore } from "@/lib/stores/settings";
 
 // TorBox Search API types
 export interface TorBoxSearchResult {
@@ -142,6 +144,24 @@ function safeDecode(value: string): string {
         return value;
     }
 }
+
+/** Short-lived per-account caches: the library listing is ~3 MB on big accounts, and
+ *  the same lookup runs twice per play (prefetch at source pick + player mount). */
+const LIBRARY_TTL_MS = 60_000;
+const STREAM_TTL_MS = 120_000;
+const libraryCache = new Map<string, { at: number; promise: Promise<TorBoxTorrent[]> }>();
+const streamLinksCache = new Map<string, { at: number; promise: Promise<Record<string, string>> }>();
+
+function cached<T>(map: Map<string, { at: number; promise: Promise<T> }>, key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+    const hit = map.get(key);
+    if (hit && Date.now() - hit.at < ttl) return hit.promise;
+    const promise = load();
+    map.set(key, { at: Date.now(), promise });
+    promise.catch(() => map.delete(key));
+    return promise;
+}
+
+const baseName = (name: string) => safeDecode(name).split("/").pop()!.toLowerCase();
 
 interface TorBoxWebDownload {
     id: number;
@@ -361,8 +381,16 @@ export default class TorBoxClient extends BaseClient {
     async getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>> {
         const [torrentId, fileId] = (fileNode?.id || id).split(":");
         if (!torrentId || !fileId) return {};
-        const info = await this.createStream(torrentId, fileId);
-        return info ? { apple: info.hlsUrl } : {};
+        // Failures reject so they aren't cached; the next attempt retries.
+        return cached(streamLinksCache, `${this.user.apiKey}:${torrentId}:${fileId}`, STREAM_TTL_MS, async () => {
+            let info = await this.createStream(torrentId, fileId);
+            if (!info) throw new Error("No stream");
+            // TorBox defaults to the first audio track (often a dub). Native HLS players
+            // (iOS) only get that one track, so request the user's language up front.
+            const audioIndex = pickPreferredAudio(info, useSettingsStore.getState().settings.streaming.preferredLanguage);
+            if (audioIndex != null) info = (await info.switchVariant({ audioIndex })) ?? info;
+            return { apple: info.hlsUrl };
+        }).catch(() => ({}));
     }
 
     /**
@@ -423,43 +451,65 @@ export default class TorBoxClient extends BaseClient {
         };
     }
 
-    /**
-     * Map an addon source (info hash) to the torrent in the user's TorBox list.
-     * Addons like Torrentio/Comet redirect straight to the CDN, so the URL alone
-     * has no torrent_id, but the torrent they added is in `mylist`.
-     */
-    private async findFileByHash(infoHash: string, fileName?: string): Promise<{ torrentId: string; fileId: string } | null> {
-        const hash = infoHash.toLowerCase();
-        const torrents = await this.makeRequest<TorBoxTorrent[]>("torrents/mylist?bypass_cache=true&limit=1000");
-        const torrent = (Array.isArray(torrents) ? torrents : []).find((t) => t.hash?.toLowerCase() === hash);
-        const files = torrent?.files ?? [];
-        if (!torrent || files.length === 0) return null;
+    private getLibrary(fresh = false): Promise<TorBoxTorrent[]> {
+        if (fresh) libraryCache.delete(this.user.apiKey);
+        return cached(libraryCache, this.user.apiKey, LIBRARY_TTL_MS, async () => {
+            const torrents = await this.makeRequest<TorBoxTorrent[]>("torrents/mylist?bypass_cache=true&limit=1000");
+            return Array.isArray(torrents) ? torrents : [];
+        });
+    }
 
-        const name = fileName ? safeDecode(fileName).toLowerCase() : "";
-        const byName = name
-            ? files.find((f) => (f.short_name || f.name).toLowerCase() === name || f.name.toLowerCase().endsWith(`/${name}`))
-            : undefined;
-        const videos = files.filter((f) => VIDEO_FILE.test(f.name));
-        const largest = (videos.length ? videos : files).reduce((a, b) => (b.size > a.size ? b : a));
-        return { torrentId: String(torrent.id), fileId: String((byName ?? largest).id) };
+    /**
+     * Map an addon source to a file in the user's TorBox library. Debrid-configured
+     * addons redirect straight to the CDN, so the URL has no torrent/file ids; match
+     * by info hash, then the addon's exact byte size, then the exact file name.
+     */
+    private findFile(torrents: TorBoxTorrent[], hint: StreamHint, urlName?: string): { torrentId: string; fileId: string } | null {
+        const names = [hint.fileName, urlName].filter(Boolean).map((n) => baseName(n!));
+        const pick = (files: TorBoxFile[]) =>
+            (hint.fileSize ? files.find((f) => f.size === hint.fileSize) : undefined) ??
+            files.find((f) => names.includes(baseName(f.short_name || f.name)));
+        const result = (t: TorBoxTorrent, f: TorBoxFile) => ({ torrentId: String(t.id), fileId: String(f.id) });
+
+        const hash = hint.infoHash?.toLowerCase();
+        const byHash = hash ? torrents.find((t) => t.hash?.toLowerCase() === hash && t.files?.length) : undefined;
+        if (byHash) {
+            const files = byHash.files!;
+            const match = pick(files);
+            if (match) return result(byHash, match);
+            // Only guess for single-video torrents — in a season pack "largest" is the wrong episode.
+            const videos = files.filter((f) => VIDEO_FILE.test(f.name));
+            return videos.length === 1 ? result(byHash, videos[0]) : null;
+        }
+        if (!hint.fileSize && names.length === 0) return null;
+        for (const t of torrents) {
+            const match = t.files?.length ? pick(t.files) : undefined;
+            if (match) return result(t, match);
+        }
+        return null;
     }
 
     /**
      * Streaming links for an addon-resolved URL: either a TorBox API url with
-     * torrent_id/file_id, or a CDN url matched back to the torrent via info hash.
+     * torrent_id/file_id, or a CDN url matched back to the user's library.
      */
-    override async getStreamingLinksFromUrl(url: string, hint?: StreamHint): Promise<Record<string, string>> {
+    override async getStreamingLinksFromUrl(url: string, hint: StreamHint = {}): Promise<Record<string, string>> {
         try {
-            const parsed = new URL(url);
-            if (parsed.hostname.includes("torbox")) {
+            const parsed = url ? new URL(url) : null;
+            if (parsed?.hostname.includes("torbox")) {
                 const torrentId = parsed.searchParams.get("torrent_id");
                 const fileId = parsed.searchParams.get("file_id");
                 if (torrentId && fileId) return this.getStreamingLinks(`${torrentId}:${fileId}`);
             }
-            if (!hint?.infoHash) return {};
-            const match = await this.findFileByHash(hint.infoHash, parsed.pathname.split("/").pop());
+            if (!hint.infoHash && !hint.fileName && !hint.fileSize) return {};
+            const urlName = parsed?.pathname.split("/").pop();
+            // The addon may have added the torrent moments ago — retry once on a fresh listing.
+            const match =
+                this.findFile(await this.getLibrary(), hint, urlName) ??
+                this.findFile(await this.getLibrary(true), hint, urlName);
             return match ? this.getStreamingLinks(`${match.torrentId}:${match.fileId}`) : {};
-        } catch {
+        } catch (error) {
+            console.warn("[TorBox] stream lookup failed:", error);
             return {};
         }
     }
