@@ -108,13 +108,10 @@ export function detectVideoCodec(source: AddonSource): DetectedVideoCodec {
  * Deliberately high values so incompatible sources sink below compatible ones,
  * but never filtered out entirely (so you're not stuck with "no sources").
  */
-function codecPenalty(source: AddonSource, support: CodecSupport | undefined, mkvPlayable = true): number {
+function codecPenalty(source: AddonSource, support: CodecSupport | undefined): number {
     if (!support) return 0; // No codec info (e.g. external player target) → no penalty
 
     let penalty = 0;
-
-    // ── Container penalty ── Safari/iOS can't open MKV whatever the codecs.
-    if (!mkvPlayable && detectContainer(source.fileName, source.description, source.title) === "mkv") penalty += 100;
 
     // ── Audio codec penalty ──
     const audio = detectAudioCodec(source);
@@ -322,8 +319,18 @@ function calculateScore(
     // This is applied last so it acts as a strong override without interfering with other factors.
     // With provider transcoding the file still plays, so only prefer direct-playable
     // releases at equal quality instead of burying a 4K REMUX behind a 720p WEB-DL.
-    const penalty = codecPenalty(source, options.codecSupport, options.mkvPlayable);
+    const penalty = codecPenalty(source, options.codecSupport);
     score += options.transcodeAvailable && penalty > 0 ? Math.min(penalty * 0.1, 8) : penalty;
+
+    // Safari/iOS can't open MKV — but the provider's converted stream plays it like any
+    // other file, so only penalize MKV when nothing will convert it.
+    if (
+        options.mkvPlayable === false &&
+        !options.transcodeAvailable &&
+        detectContainer(source.fileName, source.description, source.title) === "mkv"
+    ) {
+        score += 100;
+    }
 
     if (options.skipCamReleases !== false && isCamRelease(source)) score += 80;
     if (options.rememberFailedSources !== false && getSourceFailure(source)) score += 120;

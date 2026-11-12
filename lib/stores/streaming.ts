@@ -131,10 +131,18 @@ function getCodecSupportForPlayer(player: string | undefined): CodecSupport | un
     return undefined;
 }
 
+/**
+ * Will the player use the provider's converted stream? iPhone/iPad always do
+ * (their route ignores the "Original file" preference); elsewhere unless forced off.
+ */
+function willTranscode(settings: StreamingSettings): boolean {
+    return isProviderTranscodeAvailable() && (settings.playbackEngine !== "original" || getDeviceProfile()?.route === "native");
+}
+
 /** Shared ranking policy derived from settings + provider capabilities. */
 function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: StreamingSettings) {
     return {
-        transcodeAvailable: !!codecSupport && settings.playbackEngine !== "original" && isProviderTranscodeAvailable(),
+        transcodeAvailable: !!codecSupport && willTranscode(settings),
         mkvPlayable: !codecSupport || (getDeviceProfile()?.mkv ?? true),
         skipCamReleases: settings.skipCamReleases,
         rememberFailedSources: settings.rememberFailedSources,
@@ -828,7 +836,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
         if (settings.rememberFailedSources !== false) markSourceFailed(selectedSource, "playback-failed");
 
         const support = getBrowserCodecSupport();
-        const transcode = settings.playbackEngine !== "original" && isProviderTranscodeAvailable();
+        const transcode = willTranscode(settings);
 
         // 1. Try to find the next best source that matches our codec support,
         //    skipping ones that already failed on this device and cam rips.

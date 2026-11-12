@@ -4,6 +4,9 @@ import { detectContainer, getOriginalIssue, type DeviceProfile } from "../lib/pl
 import { pickPreferredAudio, type StreamInfo } from "../lib/streaming/stream-info";
 import { parseSubtitleCues } from "../lib/utils/subtitles";
 import type { CodecSupport } from "../lib/utils/codec-support";
+import { selectBestSource } from "../lib/streaming/source-selector";
+import { Resolution, SourceQuality, type AddonSource } from "../lib/addons/types";
+import type { StreamingSettings } from "../lib/stores/settings";
 
 const HASH = "59fc622486a1b2c3d4e5f60718293a4b5c6d7e8f";
 const allCodecs = (overrides: Partial<CodecSupport> = {}): CodecSupport => ({
@@ -76,5 +79,38 @@ describe("subtitle parsing", () => {
             { start: 60, end: 61, text: "World" },
         ]);
         expect(parseSubtitleCues("WEBVTT\n\n00:01.000 --> 00:02.000 align:start\nHi")).toEqual([{ start: 1, end: 2, text: "Hi" }]);
+    });
+});
+
+describe("auto-select on devices that can't open MKV", () => {
+    const settings = {
+        profileId: "custom",
+        customRange: { minResolution: Resolution.SD_480P, maxResolution: "any", minSourceQuality: SourceQuality.WEBRIP, maxSourceQuality: SourceQuality.BLURAY },
+        preferCached: true,
+        skipCamReleases: true,
+        rememberFailedSources: false,
+    } as unknown as StreamingSettings;
+    const source = (fileName: string, resolution: Resolution): AddonSource => ({
+        title: "Addon", description: fileName, fileName, resolution, quality: SourceQuality.BLURAY,
+        url: `https://x/${fileName}`, isCached: true, addonId: "a", addonName: "Addon",
+    });
+    const mkv4k = source("Friends.S03E01.2160p.BluRay.H.264.AAC.mkv", Resolution.UHD_4K);
+    const mp4720 = source("Friends.S03E01.720p.BluRay.H.264.AAC.mp4", Resolution.HD_720P);
+    const safari = allCodecs();
+
+    test("keeps the best MKV when the provider converts it", () => {
+        const result = selectBestSource([mp4720, mkv4k], settings, { codecSupport: safari, mkvPlayable: false, transcodeAvailable: true });
+        expect(result.source?.fileName).toBe(mkv4k.fileName);
+    });
+
+    test("doesn't let the MKV container cost it a quality tier when converted", () => {
+        const mp4Web = { ...source("Friends.S03E01.2160p.WEB-DL.H.264.AAC.mp4", Resolution.UHD_4K), quality: SourceQuality.WEB_DL };
+        const result = selectBestSource([mp4Web, mkv4k], settings, { codecSupport: safari, mkvPlayable: false, transcodeAvailable: true });
+        expect(result.source?.fileName).toBe(mkv4k.fileName);
+    });
+
+    test("prefers a playable MP4 when nothing converts the MKV", () => {
+        const result = selectBestSource([mkv4k, mp4720], settings, { codecSupport: safari, mkvPlayable: false, transcodeAvailable: false });
+        expect(result.source?.fileName).toBe(mp4720.fileName);
     });
 });
