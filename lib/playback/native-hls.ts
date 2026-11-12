@@ -6,16 +6,39 @@
  */
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getSignedProxyUrl } from "@/lib/signed-proxy";
-import { getSubtitleLabel, isSubtitleLanguage } from "@/lib/utils/subtitles";
+import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
 
 const MAX_TRACKS = 10;
+/** Several in the user's language (releases differ in timing), one per other language. */
+const MAX_PREFERRED = 4;
 
-/** Preferred language first, then English, then the rest — deduped, capped. */
+/** Preferred language first (up to 4), then one track per other language — deduped, capped. */
 export function pickNativeSubtitles(subtitles: AddonSubtitle[] | undefined, preferredLang: string): AddonSubtitle[] {
     const seen = new Set<string>();
     const withUrl = (subtitles ?? []).filter((s) => s.url && !seen.has(s.url) && seen.add(s.url));
-    const rank = (s: AddonSubtitle) => (isSubtitleLanguage(s, preferredLang) ? 0 : isSubtitleLanguage(s, "english") ? 1 : 2);
-    return withUrl.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).slice(0, MAX_TRACKS).map(({ s }) => s);
+    const preferred = withUrl.filter((s) => isSubtitleLanguage(s, preferredLang)).slice(0, MAX_PREFERRED);
+    const perLanguage = new Map<string, AddonSubtitle>();
+    for (const s of withUrl) {
+        const lang = getLanguageDisplayName(s.lang || "und");
+        if (!isSubtitleLanguage(s, preferredLang) && !perLanguage.has(lang)) perLanguage.set(lang, s);
+    }
+    const english = [...perLanguage.values()].filter((s) => isSubtitleLanguage(s, "english"));
+    const others = [...perLanguage.values()].filter((s) => !isSubtitleLanguage(s, "english"));
+    return [...preferred, ...english, ...others].slice(0, MAX_TRACKS);
+}
+
+/**
+ * Apple's player merges renditions with the same name (picking one snaps back to
+ * the first), so every track gets a distinct name: "English", "English 2", …
+ */
+export function nativeSubtitleNames(subtitles: AddonSubtitle[]): string[] {
+    const counts = new Map<string, number>();
+    return subtitles.map((s) => {
+        const lang = getLanguageDisplayName(s.lang || "und");
+        const n = (counts.get(lang) ?? 0) + 1;
+        counts.set(lang, n);
+        return n === 1 ? lang : `${lang} ${n}`;
+    });
 }
 
 const toBase64Url = (text: string) =>
@@ -27,10 +50,11 @@ export async function buildNativeHlsUrl(hlsUrl: string, subtitles: AddonSubtitle
         getSignedProxyUrl("hls", hlsUrl),
         ...subtitles.map((s) => getSignedProxyUrl("vtt", s.url)),
     ]);
+    const names = nativeSubtitleNames(subtitles);
     const tracks = subtitles.map((s, i) => ({
         u: vtts[i],
         l: s.lang,
-        n: getSubtitleLabel(s),
+        n: names[i],
         d: i === 0 && isSubtitleLanguage(s, preferredLang),
     }));
     return `${master}&subs=${toBase64Url(JSON.stringify(tracks))}`;

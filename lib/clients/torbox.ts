@@ -151,6 +151,8 @@ const LIBRARY_TTL_MS = 60_000;
 const STREAM_TTL_MS = 120_000;
 const libraryCache = new Map<string, { at: number; promise: Promise<TorBoxTorrent[]> }>();
 const streamLinksCache = new Map<string, { at: number; promise: Promise<Record<string, string>> }>();
+/** Torrents this session already added for playback (see addAndFind). */
+const addedTorrents = new Set<string>();
 
 function cached<T>(map: Map<string, { at: number; promise: Promise<T> }>, key: string, ttl: number, load: () => Promise<T>): Promise<T> {
     const hit = map.get(key);
@@ -510,14 +512,30 @@ export default class TorBoxClient extends BaseClient {
             if (!hint.infoHash && !hint.fileName && !hint.fileSize) return {};
             const urlName = parsed?.pathname.split("/").pop();
             // The addon may have added the torrent moments ago — retry once on a fresh listing.
-            const match =
+            let match =
                 this.findFile(await this.getLibrary(), hint, urlName) ??
                 this.findFile(await this.getLibrary(true), hint, urlName);
+            // Cached on TorBox but not in this account (Comet/AIOStreams don't always add it):
+            // add it ourselves — instant for cached torrents — and match inside it.
+            if (!match && hint.infoHash) match = await this.addAndFind(hint, urlName);
             return match ? this.getStreamingLinks(`${match.torrentId}:${match.fileId}`) : {};
         } catch (error) {
             console.warn("[TorBox] stream lookup failed:", error);
             return {};
         }
+    }
+
+    private async addAndFind(hint: StreamHint, urlName?: string): Promise<{ torrentId: string; fileId: string } | null> {
+        // Once per torrent: lookups retry, and an uncached torrent stays "checking" for a while.
+        const key = `${this.user.apiKey}:${hint.infoHash!.toLowerCase()}`;
+        if (addedTorrents.has(key)) return null;
+        addedTorrents.add(key);
+        const added = Object.values(await this.addMagnetLinks([`magnet:?xt=urn:btih:${hint.infoHash}`]))[0];
+        if (!added?.success || !added.id) return null;
+        libraryCache.delete(this.user.apiKey);
+        // Just this torrent — files are listed immediately when it was already cached.
+        const torrent = await this.makeRequest<TorBoxTorrent | TorBoxTorrent[]>(`torrents/mylist?id=${added.id}&bypass_cache=true`);
+        return this.findFile([torrent].flat(), hint, urlName);
     }
 
     private async getResolvedDownloadLink(torrentId: string, targetFileId: string): Promise<string> {

@@ -17,6 +17,7 @@ import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { isProviderTranscodeAvailable, sourceStreamHint } from "@/lib/streaming/stream-info";
+import { getDeviceProfile } from "@/lib/playback/device-profile";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -246,6 +247,8 @@ export function PreviewDialog() {
     if (!activeFile) return null;
 
     const hasNav = (!isSingleMode && previewableFiles.length > 1) || (isSingleMode && !!episodeContext);
+    // Phones get the full screen; their player has its own previous/next controls.
+    const phone = getDeviceProfile()?.route === "native";
     const position =
         isSingleMode && episodeContext
             ? `S${episodeContext.season} E${episodeContext.episode}`
@@ -255,8 +258,8 @@ export function PreviewDialog() {
         <Dialog open={isOpen} onOpenChange={closePreview}>
             <DialogContent
                 className={
-                    tvMode
-                        ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-screen p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%]"
+                    tvMode || phone
+                        ? "max-w-[100vw] sm:max-w-[100vw] w-screen h-dvh p-0 gap-0 flex flex-col overflow-hidden outline-none! rounded-none border-0 translate-x-[-50%] translate-y-[-50%] pt-[env(safe-area-inset-top)]"
                         : "sm:max-w-[95vw] h-[95vh] p-0 gap-0 flex flex-col overflow-hidden outline-none!"
                 }
                 overlayClassName="bg-black/70 backdrop-blur-none sm:bg-black/65"
@@ -268,11 +271,11 @@ export function PreviewDialog() {
                 </p>
                 {/* Header — hidden in TV mode for immersive playback */}
                 {!tvMode && (
-                    <div className="flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background">
+                    <div className={phone ? "flex items-center justify-between px-3 py-2 shrink-0 bg-black" : "flex items-center justify-between p-3 sm:p-4 border-b shrink-0 bg-background"}>
                         <div className="flex-1 min-w-0 mr-4">
-                            <h2 className="text-lg font-light truncate">{activeTitle}</h2>
+                            <h2 className={phone ? "text-sm font-medium truncate" : "text-lg font-light truncate"}>{activeTitle}</h2>
                             {/* Meta info: size, position */}
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className={phone ? "flex items-center gap-2" : "flex items-center gap-2 mt-1"}>
                                 {!isSingleMode && activeFile.size && (
                                     <span className="text-sm text-muted-foreground">{formatSize(activeFile.size)}</span>
                                 )}
@@ -346,7 +349,7 @@ export function PreviewDialog() {
                     )}
 
                     {/* Navigation Arrows (Dialog Overlay) */}
-                    {hasNav && (
+                    {hasNav && !phone && (
                         <>
                             <Button
                                 ref={previousButtonRef}

@@ -77,6 +77,12 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const videoRef = useRef<HTMLVideoElement>(null);
     const source = useStreamingStore((s) => s.selectedSource);
     const openSourcePicker = useStreamingStore((s) => s.openSourcePicker);
+    const allSources = useStreamingStore((s) => s.allFetchedSources);
+    const playAlternativeSource = useStreamingStore((s) => s.playAlternativeSource);
+    const otherSources = useMemo(
+        () => allSources.filter((s) => s.url && s.url !== source?.url).slice(0, 8),
+        [allSources, source?.url]
+    );
     const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
 
@@ -433,7 +439,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             <p className="max-w-sm text-xs leading-relaxed text-white/50">
                                 {hlsUrl
                                     ? "Your provider didn't finish converting this file in time."
-                                    : "This file isn't in your provider's library, so it can't be converted. Another source usually works."}
+                                    : "Your provider doesn't have this file ready yet (it may still be downloading). A cached source usually plays right away."}
                             </p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-2">
@@ -623,6 +629,42 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     {src === downloadUrl ? "Playing the original file" : `Converted for ${device} by your provider`}
                     {source?.addonName ? ` · ${source.addonName}` : ""}
                 </p>
+            )}
+
+            {/* Other sources — one tap to switch (portrait; landscape uses the Source chip) */}
+            {otherSources.length > 0 && (
+                <div className="mt-4 pb-[max(1rem,env(safe-area-inset-bottom))] landscape:hidden">
+                    <div className="flex items-center justify-between px-4 pb-2">
+                        <span className="text-xs tracking-widest uppercase text-white/50">Other sources</span>
+                        <button type="button" onClick={openSourcePicker} className="text-xs text-primary">
+                            See all
+                        </button>
+                    </div>
+                    {otherSources.map((s) => (
+                        <button
+                            key={s.url}
+                            type="button"
+                            onClick={() => playAlternativeSource(s)}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left active:bg-white/10">
+                            <span
+                                className={cn(
+                                    "flex size-9 shrink-0 items-center justify-center rounded-md text-[11px] font-medium",
+                                    s.isCached ? "bg-primary/15 text-primary" : "bg-white/10 text-white/60"
+                                )}>
+                                {s.resolution?.replace(/p$/, "") ?? "SD"}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm">
+                                    {[s.resolution, s.quality].filter(Boolean).join(" ") || "Unknown quality"}
+                                    {s.isCached ? <span className="text-primary"> · Cached</span> : null}
+                                </span>
+                                <span className="block truncate text-xs text-white/45">
+                                    {[s.size, s.addonName, s.fileName].filter(Boolean).join(" · ")}
+                                </span>
+                            </span>
+                        </button>
+                    ))}
+                </div>
             )}
 
             {/* ── Bottom sheet ── */}

@@ -136,3 +136,22 @@ describe("auto-select on desktop browsers (Edge/Chrome)", () => {
         expect(result.source?.fileName).toBe(aac1080.fileName);
     });
 });
+
+describe("subtitles inside the iPhone stream", () => {
+    const sub = (lang: string, n: number) => ({ url: `https://subs/${lang}/${n}`, lang });
+
+    test("several in the preferred language, one per other language", async () => {
+        const { pickNativeSubtitles } = await import("../lib/playback/native-hls");
+        const list = [sub("eng", 1), sub("eng", 2), sub("spa", 1), sub("eng", 3), sub("spa", 2), sub("eng", 4), sub("eng", 5), sub("fre", 1)];
+        expect(pickNativeSubtitles(list, "english").map((s) => s.url)).toEqual([
+            "https://subs/eng/1", "https://subs/eng/2", "https://subs/eng/3", "https://subs/eng/4", "https://subs/spa/1", "https://subs/fre/1",
+        ]);
+    });
+
+    test("every track gets a distinct name so Apple's menu can select it", async () => {
+        const { nativeSubtitleNames } = await import("../lib/playback/native-hls");
+        const names = nativeSubtitleNames([sub("eng", 1), sub("eng", 2), sub("spa", 1), sub("eng", 3)]);
+        expect(names).toEqual(["English", "English 2", "Spanish", "English 3"]);
+        expect(new Set(names).size).toBe(names.length);
+    });
+});
