@@ -10,7 +10,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { getProxyUrl } from "@/lib/utils";
 
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 
@@ -54,7 +53,7 @@ export const MovieCollection = memo(function MovieCollection({ tmdbId, currentTm
                         const isCurrent = movie.id === currentTmdbId;
                         const year = movie.release_date?.slice(0, 4);
                         const posterUrl = movie.poster_path
-                            ? getProxyUrl(`${TMDB_IMAGE_BASE}${movie.poster_path}`)
+                            ? `${TMDB_IMAGE_BASE}${movie.poster_path}`
                             : `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(movie.title)}`;
 
                         return (

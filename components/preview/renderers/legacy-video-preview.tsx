@@ -3677,6 +3677,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -3729,6 +3731,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -3789,6 +3793,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -3871,6 +3877,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -3946,6 +3954,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -4013,6 +4023,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                             </DropdownMenuTrigger>
                                             <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                                 <DropdownMenuContent
+                                                    collisionBoundary={containerRef.current ?? undefined}
+                                                    collisionPadding={8}
                                                     data-player-controls
                                                     align="end"
                                                     side="top"
@@ -4085,6 +4097,8 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         </DropdownMenuTrigger>
                                         <DropdownMenuPortal container={containerRef.current ?? undefined}>
                                             <DropdownMenuContent
+                                                collisionBoundary={containerRef.current ?? undefined}
+                                                collisionPadding={8}
                                                 data-player-controls
                                                 align="end"
                                                 side="top"
@@ -4190,18 +4204,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 {/* === Speed sub-panel === */}
                                                 {settingsPanel === "speed" && (
                                                     <div
-                                                        className="py-1"
-                                                        onWheel={(e) => {
-                                                            e.stopPropagation();
-                                                            setPlaybackRate((prev) => {
-                                                                const next = e.deltaY < 0
-                                                                    ? Math.min(4, +(prev + 0.25).toFixed(2))
-                                                                    : Math.max(0.25, +(prev - 0.25).toFixed(2));
-                                                                showSpeedOsd(next);
-                                                                return next;
-                                                            });
-                                                        }}
-                                                    >
+                                                        className="py-1">
                                                         <button onClick={() => setSettingsPanel(null)} className={cn(POPUP_ITEM, "gap-1.5 text-white/50 hover:text-white")} data-tv-focusable>
                                                             <ArrowLeft className="size-3.5" /> <span className="text-[12px]">Back</span>
                                                         </button>
@@ -4231,7 +4234,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Size</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => { e.stopPropagation(); setSubtitleSize((s) => Math.max(12, Math.min(64, s + (e.deltaY < 0 ? 2 : -2)))); }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
@@ -4251,7 +4253,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Position</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => { e.stopPropagation(); setSubtitlePosition((s) => Math.max(0, Math.min(400, s + (e.deltaY < 0 ? 4 : -4)))); }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
@@ -4271,7 +4272,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Delay</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => { e.stopPropagation(); setSubtitleDelay((s) => s + (e.deltaY < 0 ? 500 : -500)); }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"
@@ -4297,13 +4297,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <div className={POPUP_LABEL}>Speed</div>
                                                         <div
                                                             className="player-stepper flex items-center justify-between px-3.5 pt-1 pb-2"
-                                                            onWheel={(e) => {
-                                                                e.stopPropagation();
-                                                                setSyncState((s) => ({
-                                                                    ...s,
-                                                                    speed: Math.max(0.9, Math.min(1.1, +(s.speed + (e.deltaY < 0 ? 0.001 : -0.001)).toFixed(4))),
-                                                                }));
-                                                            }}
                                                         >
                                                             <button
                                                                 className="player-stepper-btn w-[30px] h-[30px] inline-flex items-center justify-center rounded-full bg-white/[0.06] border-none text-white/70 cursor-pointer transition-all hover:bg-white/[0.12] hover:text-white active:scale-[0.88]"

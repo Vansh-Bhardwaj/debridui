@@ -54,4 +54,5 @@ export const queryClient = new QueryClient({
 });
 
 const persister = createIDBPersister("DEBRIDUI_CACHE");
-export const persistOptions = { persister, maxAge: QUERY_CACHE_IDB_MAX_AGE };
+// Bump buster to drop persisted caches whose shape/URLs changed (v2: TMDB images no longer proxied).
+export const persistOptions = { persister, maxAge: QUERY_CACHE_IDB_MAX_AGE, buster: "v2" };
