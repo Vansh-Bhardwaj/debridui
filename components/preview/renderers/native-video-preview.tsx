@@ -5,6 +5,7 @@ import {
     AlertCircle,
     AudioLines,
     Captions,
+    Check,
     ChevronRight,
     ExternalLink,
     Gauge,
@@ -31,12 +32,14 @@ import { detectContainer, getDeviceProfile, isMp4Family } from "@/lib/playback/d
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
-import { buildNativeHlsUrl, pickNativeSubtitles } from "@/lib/playback/native-hls";
+import { buildNativeHlsUrl, isPlaylistReachable, pickNativeSubtitles, waitForHlsReady } from "@/lib/playback/native-hls";
 
-/** Cold provider lookups (library listing + createstream) can take ~10s on mobile data. */
-const LINKS_WAIT_MS = 30_000;
-/** Give background subtitle fetches a moment so the first stream already carries them. */
-const SUBTITLE_GRACE_MS = 2_500;
+/** Library lookup incl. retries while a just-added torrent appears (see preview-dialog). */
+const LINKS_WAIT_MS = 90_000;
+/** How long the provider may take to produce the first converted segment. */
+const CONVERT_WAIT_MS = 120_000;
+/** Give background subtitle fetches time so the stream starts with them built in. */
+const SUBTITLE_GRACE_MS = 6_000;
 const SAVE_EVERY_S = 5;
 const HIDE_CONTROLS_MS = 3_000;
 const DOUBLE_TAP_MS = 260;
@@ -77,51 +80,84 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
 
-    // ── Stream selection ──────────────────────────────────────────────────
-    // streamingLinks is undefined while the provider lookup runs; cap the wait.
-    // State is tagged with the URL it belongs to, so a new file starts fresh.
-    const [expired, setExpired] = useState<{ links?: string; subs?: string }>({});
+    // ── Preparation: find the file → provider converts → subtitles → ready ──
+    // Every step waits patiently and shows progress. The player is keyed per source
+    // (video-preview.tsx), and nothing here swaps the stream once it is playing.
+    const [linksTimedOut, setLinksTimedOut] = useState(false);
+    const [subsGraceOver, setSubsGraceOver] = useState(false);
     useEffect(() => {
-        const links = setTimeout(() => setExpired((e) => ({ ...e, links: downloadUrl })), LINKS_WAIT_MS);
-        const subs = setTimeout(() => setExpired((e) => ({ ...e, subs: downloadUrl })), SUBTITLE_GRACE_MS);
+        const links = setTimeout(() => setLinksTimedOut(true), LINKS_WAIT_MS);
+        const subs = setTimeout(() => setSubsGraceOver(true), SUBTITLE_GRACE_MS);
         return () => {
             clearTimeout(links);
             clearTimeout(subs);
         };
-    }, [downloadUrl]);
-    const pending = !downloadUrl || (streamingLinks === undefined && expired.links !== downloadUrl);
+    }, []);
+    const findingFile = !downloadUrl || (streamingLinks === undefined && !linksTimedOut);
 
-    const [variantState, setVariantState] = useState<{ url: string; info: StreamInfo } | null>(null);
-    const variant = variantState?.url === downloadUrl ? variantState.info : null;
+    const [variant, setVariant] = useState<StreamInfo | null>(null);
     const hlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
     const info = variant ?? getStreamInfo(hlsUrl);
     const container = detectContainer(source?.fileName, file.name, downloadUrl);
 
-    const nativeSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
-    const waitingForSubs = nativeSubs.length === 0 && expired.subs !== downloadUrl;
-    const masterKey = hlsUrl && !waitingForSubs ? [hlsUrl, ...nativeSubs.map((s) => s.url)].join(" ") : null;
-    const [master, setMaster] = useState<{ key: string; url: string } | null>(null);
+    // Video step: the provider has produced the first converted segment.
+    const [videoCheck, setVideoCheck] = useState<{ url: string; ok: boolean } | null>(null);
     useEffect(() => {
-        if (!hlsUrl || !masterKey) return;
+        if (!hlsUrl) return;
+        const controller = new AbortController();
+        void waitForHlsReady(hlsUrl, controller.signal, CONVERT_WAIT_MS).then((ok) => {
+            if (!controller.signal.aborted) setVideoCheck((c) => (c?.url === hlsUrl ? c : { url: hlsUrl, ok }));
+        });
+        return () => controller.abort();
+    }, [hlsUrl]);
+    const videoReady = videoCheck && videoCheck.url === hlsUrl ? videoCheck.ok : null; // null = still converting
+
+    // Subtitle step: built into the stream once (never rebuilt mid-play).
+    const nativeSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
+    const subsSettled = nativeSubs.length > 0 || subsGraceOver;
+    const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[] } | null>(null);
+    const masterForStream = master && master.hls === hlsUrl ? master : null;
+    useEffect(() => {
+        if (!hlsUrl || !subsSettled || masterForStream) return;
         let cancelled = false;
-        buildNativeHlsUrl(hlsUrl, nativeSubs, subtitleLanguage)
-            .catch(() => hlsUrl) // signing failed: the stream still plays, without subtitles
+        const subs = nativeSubs;
+        buildNativeHlsUrl(hlsUrl, subs, subtitleLanguage)
+            .then(async (url) => (url === hlsUrl || (await isPlaylistReachable(url)) ? url : hlsUrl))
+            .catch(() => hlsUrl)
             .then((url) => {
-                if (!cancelled) setMaster({ key: masterKey, url });
+                if (!cancelled) setMaster({ hls: hlsUrl, url, subs: url === hlsUrl ? [] : subs });
             });
         return () => {
             cancelled = true;
         };
-    }, [hlsUrl, masterKey, nativeSubs, subtitleLanguage]);
+    }, [hlsUrl, subsSettled, masterForStream, nativeSubs, subtitleLanguage]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
-    const masterUrl = master?.key === masterKey ? master.url : null;
-    // Wrapper playlist failed → play the provider stream directly (no subtitles).
-    const streamUrl = masterUrl && failedSrc === masterUrl ? hlsUrl : masterUrl;
-    const preparing = pending || (!!hlsUrl && !streamUrl);
-    // Converted stream first; the original only for MP4-family (or unknown) files.
-    const src = preparing ? null : hlsUrl ? streamUrl : container && !isMp4Family(container) ? null : downloadUrl;
-    const failed = !preparing && (!src || failedSrc === src);
+    // Converted stream when the provider has one; the original only for MP4-family (or unknown) files.
+    const src = hlsUrl
+        ? videoReady && masterForStream
+            ? masterForStream.url
+            : null
+        : !findingFile && !(container && !isMp4Family(container))
+          ? downloadUrl
+          : null;
+    const failed = (!findingFile && (hlsUrl ? videoReady === false : !src)) || (!!src && failedSrc === src);
+    const preparing = !src && !failed;
+    const steps: { label: string; state: "done" | "active" | "waiting" }[] = [
+        { label: "Finding the file in your library", state: findingFile ? "active" : "done" },
+        {
+            label: `Converting video${info?.height ? ` (${info.height}p)` : ""}`,
+            state: !hlsUrl ? "waiting" : videoReady ? "done" : "active",
+        },
+        {
+            label: masterForStream
+                ? masterForStream.subs.length
+                    ? `Subtitles ready (${masterForStream.subs.length})`
+                    : "No subtitles available"
+                : "Loading subtitles",
+            state: !hlsUrl ? "waiting" : masterForStream ? "done" : "active",
+        },
+    ];
 
     // ── Playback state ────────────────────────────────────────────────────
     const [playing, setPlaying] = useState(false);
@@ -138,14 +174,10 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [activeTrack, setActiveTrack] = useState(-1);
     const [switching, setSwitching] = useState(false);
 
-    // Position survives src changes (audio/quality switch, subtitles arriving) on the same element.
+    // Position survives an audio/quality switch on the same element.
     const positionRef = useRef(0);
     const wasPlayingRef = useRef(false);
     const lastSavedRef = useRef(0);
-    useEffect(() => {
-        positionRef.current = 0;
-        wasPlayingRef.current = false;
-    }, [downloadUrl]);
 
     const handleLoadedMetadata = useCallback(() => {
         const video = videoRef.current;
@@ -277,18 +309,29 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         else enterNativeFullscreen(video);
     }, []);
 
+    // Audio/quality: prepare the new provider session fully (converted + subtitles)
+    // while the current one keeps playing, then swap in one step at the same position.
     const switchVariant = useCallback(
         async (opts: StreamVariantOptions) => {
             if (!info) return;
             setSheet(null);
             setSwitching(true);
-            wasPlayingRef.current = !videoRef.current?.paused;
             const next = await info.switchVariant(opts).catch(() => null);
+            const ready = next ? await waitForHlsReady(next.hlsUrl, new AbortController().signal, CONVERT_WAIT_MS) : false;
+            if (!next || !ready) {
+                setSwitching(false);
+                toast.error("Couldn't switch the stream. Try again in a moment.");
+                return;
+            }
+            const subs = master?.subs ?? [];
+            const url = await buildNativeHlsUrl(next.hlsUrl, subs, subtitleLanguage).catch(() => next.hlsUrl);
+            wasPlayingRef.current = !videoRef.current?.paused;
+            setVideoCheck({ url: next.hlsUrl, ok: true });
+            setMaster({ hls: next.hlsUrl, url, subs: url === next.hlsUrl ? [] : subs });
+            setVariant(next);
             setSwitching(false);
-            if (next) setVariantState({ url: downloadUrl, info: next });
-            else toast.error("Couldn't switch the stream. Try again in a moment.");
         },
-        [info, downloadUrl]
+        [info, master, subtitleLanguage]
     );
 
     const tryNextSource = () => {
@@ -362,11 +405,24 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             {/* ── Video (16:9 in portrait, full bleed in landscape) ── */}
             <div className="relative w-full shrink-0 bg-black portrait:aspect-video landscape:min-h-0 landscape:flex-1">
                 {preparing ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-                        <Loader2 className="size-7 animate-spin text-white/70" />
-                        <p className="text-sm font-medium">Preparing a stream for {device}</p>
-                        <p className="max-w-xs text-xs leading-relaxed text-white/50">
-                            Your provider converts this file so {device} can play it. This can take a few seconds.
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6">
+                        <p className="text-sm font-medium">Getting this ready for {device}</p>
+                        <ul className="space-y-2.5">
+                            {steps.map((step) => (
+                                <li key={step.label} className={cn("flex items-center gap-2.5 text-sm", step.state === "waiting" && "text-white/35")}>
+                                    {step.state === "done" ? (
+                                        <Check className="size-4 text-primary" />
+                                    ) : step.state === "active" ? (
+                                        <Loader2 className="size-4 animate-spin text-white/70" />
+                                    ) : (
+                                        <span className="size-4 rounded-full border border-white/25" />
+                                    )}
+                                    {step.label}
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="max-w-xs text-center text-xs leading-relaxed text-white/45">
+                            Your provider converts the file so it plays here. Large files can take a minute.
                         </p>
                     </div>
                 ) : failed ? (
@@ -375,9 +431,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div className="space-y-1">
                             <p className="text-sm font-medium">This source can&apos;t play on {device}</p>
                             <p className="max-w-sm text-xs leading-relaxed text-white/50">
-                                {hlsUrl && failedSrc === src
-                                    ? "The converted stream didn't load."
-                                    : "Your provider couldn't convert this file. Another source usually works."}
+                                {hlsUrl
+                                    ? "Your provider didn't finish converting this file in time."
+                                    : "This file isn't in your provider's library, so it can't be converted. Another source usually works."}
                             </p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-2">
@@ -429,7 +485,12 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             }}
                             onError={() => {
                                 setBuffering(false);
-                                setFailedSrc(src ?? null);
+                                // Subtitle wrapper failed → play the provider stream without it.
+                                if (masterForStream && src === masterForStream.url && src !== hlsUrl) {
+                                    setMaster({ ...masterForStream, url: masterForStream.hls, subs: [] });
+                                } else {
+                                    setFailedSrc(src ?? null);
+                                }
                             }}
                         />
 

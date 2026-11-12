@@ -59,7 +59,9 @@ class VideoPreviewErrorBoundary extends Component<
 export function VideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, onNext, onPrev, onPreload, onLoad, onError }: VideoPreviewProps & { onNext?: () => void; onPrev?: () => void; onPreload?: () => void; progressKey?: ProgressKey }) {
     if (getDeviceProfile()?.route === "native") {
         return (
+            // One instance per source: nothing from a failed source can leak into the next.
             <NativeVideoPreview
+                key={downloadUrl}
                 file={file}
                 downloadUrl={downloadUrl}
                 streamingLinks={streamingLinks}

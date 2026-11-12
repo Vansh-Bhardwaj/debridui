@@ -16,7 +16,7 @@ import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";
 import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { sourceStreamHint } from "@/lib/streaming/stream-info";
+import { isProviderTranscodeAvailable, sourceStreamHint } from "@/lib/streaming/stream-info";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -119,7 +119,7 @@ export function PreviewDialog() {
     // extract torrent_id/file_id from API URLs in the redirect chain.
     const { data: fetchedStreamingLinks } = useQuery<Record<string, string>>({
         queryKey: ["preview", "streaming-links", directUrl, currentAccount.id],
-        queryFn: async () => {
+        queryFn: async ({ signal }) => {
             // Try each URL in the redirect chain first (e.g. TorBox API URL with torrent_id),
             // then the resolved URL with the source's info hash so CDN links that carry
             // no provider ids can still be matched back to the torrent.
@@ -127,7 +127,16 @@ export function PreviewDialog() {
                 const chainLinks = await client.getStreamingLinksFromUrl(chainUrl);
                 if (Object.keys(chainLinks).length > 0) return chainLinks;
             }
-            return client.getStreamingLinksFromUrl(directUrl!, sourceStreamHint(useStreamingStore.getState().selectedSource, effectiveProgressKey));
+            const hint = sourceStreamHint(useStreamingStore.getState().selectedSource, effectiveProgressKey);
+            // A torrent the addon just added can take a while to appear in the library and
+            // to start converting. Keep trying (the player shows progress meanwhile)
+            // rather than declaring the source unplayable after one miss.
+            const deadline = Date.now() + (isProviderTranscodeAvailable() ? 60_000 : 0);
+            for (let attempt = 0; ; attempt++) {
+                const links = await client.getStreamingLinksFromUrl(directUrl!, hint);
+                if (Object.keys(links).length > 0 || Date.now() >= deadline || signal.aborted) return links;
+                await new Promise((resolve) => setTimeout(resolve, Math.min(4_000 + attempt * 2_000, 10_000)));
+            }
         },
         enabled: isOpen && isSingleMode && !!directUrl && !directStreamingLinks,
         staleTime: 5 * 60 * 1000,
