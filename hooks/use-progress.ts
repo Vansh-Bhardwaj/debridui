@@ -1,5 +1,7 @@
 "use client";
 
+import { useProfile } from "./use-profile";
+import { progressStorageKey } from "./profile-storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
@@ -66,22 +68,12 @@ function isContinueWatchingEligible(progressSeconds: number, durationSeconds: nu
 }
 
 /**
- * Generate a storage key for localStorage
- */
-function getStorageKey(key: ProgressKey): string {
-    if (key.type === "show" && key.season !== undefined && key.episode !== undefined) {
-        return `progress:${key.imdbId}:s${key.season}e${key.episode}`;
-    }
-    return `progress:${key.imdbId}`;
-}
-
-/**
  * Read progress from localStorage
  */
-function readLocalProgress(key: ProgressKey): ProgressData | null {
+function readLocalProgress(profileId: string, key: ProgressKey): ProgressData | null {
     if (typeof window === "undefined") return null;
     try {
-        const stored = localStorage.getItem(getStorageKey(key));
+        const stored = localStorage.getItem(progressStorageKey(profileId, key));
         return stored ? JSON.parse(stored) : null;
     } catch {
         return null;
@@ -91,10 +83,10 @@ function readLocalProgress(key: ProgressKey): ProgressData | null {
 /**
  * Write progress to localStorage
  */
-function writeLocalProgress(key: ProgressKey, data: ProgressData): void {
+function writeLocalProgress(profileId: string, key: ProgressKey, data: ProgressData): void {
     if (typeof window === "undefined") return;
     try {
-        localStorage.setItem(getStorageKey(key), JSON.stringify(data));
+        localStorage.setItem(progressStorageKey(profileId, key), JSON.stringify(data));
     } catch {
         // Storage quota exceeded or other error - ignore
     }
@@ -141,13 +133,14 @@ async function syncToServer(key: ProgressKey, data: ProgressData, meta?: SyncMet
  * - Returns initial progress for resume functionality
  */
 export function useProgress(key: ProgressKey | null) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data: session } = authClient.useSession();
     const isLoggedIn = !!session?.user;
     const queryClient = useQueryClient();
 
     const [initialProgress, setInitialProgress] = useState<number | null>(() => {
         if (!key) return null;
-        const local = readLocalProgress(key);
+        const local = readLocalProgress(profileId, key);
         if (local && local.progressSeconds > 0 && isResumeEligible(local.progressSeconds, local.durationSeconds)) {
             return local.progressSeconds;
         }
@@ -189,7 +182,7 @@ export function useProgress(key: ProgressKey | null) {
         sequenceRef.current = 0;
         sessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
 
-        const local = readLocalProgress(key);
+        const local = readLocalProgress(profileId, key);
         if (local && local.progressSeconds > 0) {
             queueMicrotask(() => setInitialProgress(isResumeEligible(local.progressSeconds, local.durationSeconds) ? local.progressSeconds : null));
         } else {
@@ -199,8 +192,8 @@ export function useProgress(key: ProgressKey | null) {
         // Invalidate the continue-watching cache so the dashboard reflects the
         // newly started item (and any just-completed one) without waiting for staleTime.
         // Only when a real key is present (null key means no item is being tracked).
-        if (key) queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
-    }, [key, queryClient]);
+        if (key) queryClient.invalidateQueries({ queryKey: ["continue-watching", profileId] });
+    }, [key, queryClient, profileId]);
 
     const syncNow = useCallback((force = false, eventType: ProgressEventType = "play_progress", reason?: string) => {
         if (!key || !isLoggedIn || !lastProgressRef.current) return;
@@ -319,11 +312,11 @@ export function useProgress(key: ProgressKey | null) {
                 const srv = (data as { progress: ServerItem | null } | null)?.progress;
                 if (!srv) return;
                 const srvUpdatedAt = new Date(srv.updatedAt).getTime();
-                const local = readLocalProgress(key);
+                const local = readLocalProgress(profileId, key);
 
                 // Only apply server value if it is more recent than local
                 if (!local || srvUpdatedAt > local.updatedAt) {
-                    writeLocalProgress(key, {
+                    writeLocalProgress(profileId, key, {
                         progressSeconds: srv.progressSeconds,
                         durationSeconds: srv.durationSeconds,
                         updatedAt: srvUpdatedAt,
@@ -338,7 +331,7 @@ export function useProgress(key: ProgressKey | null) {
             controller.abort();
             clearTimeout(timeout);
         };
-    }, [key, isLoggedIn]);
+    }, [key, isLoggedIn, profileId]);
 
     /**
      * Update progress (called on timeupdate, throttled by caller)
@@ -357,9 +350,9 @@ export function useProgress(key: ProgressKey | null) {
         };
 
         // Always write to localStorage
-        writeLocalProgress(key, data);
+        writeLocalProgress(profileId, key, data);
         lastProgressRef.current = data;
-    }, [key]);
+    }, [key, profileId]);
 
     /**
      * Force sync to server (call on pause or video end)
@@ -384,7 +377,7 @@ export function useProgress(key: ProgressKey | null) {
 
         // Remove completed episode from localStorage
         try {
-            localStorage.removeItem(getStorageKey(key));
+            localStorage.removeItem(progressStorageKey(profileId, key));
         } catch { }
 
         // Seed next episode progress locally so Continue Watching updates instantly
@@ -395,7 +388,7 @@ export function useProgress(key: ProgressKey | null) {
                 season: nextEpisode.season,
                 episode: nextEpisode.episode,
             };
-            writeLocalProgress(nextKey, {
+            writeLocalProgress(profileId, nextKey, {
                 progressSeconds: 0,
                 durationSeconds: 1, // placeholder — will be overwritten on actual playback
                 updatedAt: Date.now(),
@@ -419,8 +412,8 @@ export function useProgress(key: ProgressKey | null) {
         }
 
         // Invalidate cache so the dashboard reflects the change immediately
-        queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
-    }, [key, isLoggedIn, queryClient]);
+        queryClient.invalidateQueries({ queryKey: ["continue-watching", profileId] });
+    }, [key, isLoggedIn, queryClient, profileId]);
 
     return {
         initialProgress,
@@ -436,12 +429,13 @@ export function useProgress(key: ProgressKey | null) {
  * on every mount, shared across components, participates in global staleTime.
  */
 export function useContinueWatching() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data: session } = authClient.useSession();
     const isLoggedIn = !!session?.user;
 
     const { data = [], isLoading } = useQuery({
-        queryKey: ["continue-watching", isLoggedIn],
-        queryFn: () => fetchContinueWatching(isLoggedIn),
+        queryKey: ["continue-watching", profileId, isLoggedIn],
+        queryFn: () => fetchContinueWatching(profileId, isLoggedIn),
         staleTime: 30 * 1000, // 30 seconds — keeps data reasonably fresh without hammering the server
         gcTime: 5 * 60 * 1000,
         refetchOnWindowFocus: true,
@@ -450,18 +444,18 @@ export function useContinueWatching() {
     return { progress: data, loading: isLoading };
 }
 
-async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<ProgressKey & ProgressData>> {
+async function fetchContinueWatching(profileId: string, isLoggedIn: boolean): Promise<Array<ProgressKey & ProgressData>> {
     // Gather from localStorage
     const localItems: Array<ProgressKey & ProgressData> = [];
     if (typeof window !== "undefined") {
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (!key?.startsWith("progress:")) continue;
+                if (!key?.startsWith(`progress:${profileId}:`)) continue;
 
                 try {
                     const data = JSON.parse(localStorage.getItem(key) || "");
-                    const parts = key.replace("progress:", "").split(":");
+                    const parts = key.replace(`progress:${profileId}:`, "").split(":");
                     const imdbId = parts[0];
 
                     let season: number | undefined;
@@ -504,7 +498,7 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
                 // Server items are sorted by updatedAt DESC — keep the first (newest) per key
                 for (const item of serverProgress) {
                     const key: ProgressKey = { imdbId: item.imdbId, type: item.type, season: item.season, episode: item.episode };
-                    const storageKey = getStorageKey(key);
+                    const storageKey = progressStorageKey(profileId, key);
                     // Skip duplicates (from NULL unique index bug) — first entry is newest
                     if (merged.has(storageKey)) continue;
                     const serverUpdatedAt = new Date(item.updatedAt).getTime();
@@ -520,7 +514,7 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
 
                 // Local items: include if not on server, or if more recent than server entry
                 for (const item of localItems) {
-                    const storageKey = getStorageKey(item);
+                    const storageKey = progressStorageKey(profileId, item);
                     const existing = merged.get(storageKey);
                     if (!existing || item.updatedAt > existing.updatedAt) {
                         merged.set(storageKey, item);
@@ -555,18 +549,18 @@ async function fetchContinueWatching(isLoggedIn: boolean): Promise<Array<Progres
 
 const WATCHED_THRESHOLD = 85;
 
-function scanWatchedIds(): string[] {
+function scanWatchedIds(profileId: string): string[] {
     if (typeof window === "undefined") return [];
     const watched: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key?.startsWith("progress:")) continue;
+        if (!key?.startsWith(`progress:${profileId}:`)) continue;
         try {
             const data: ProgressData = JSON.parse(localStorage.getItem(key) || "");
             if (data.durationSeconds > 0) {
                 const percent = (data.progressSeconds / data.durationSeconds) * 100;
                 if (percent >= WATCHED_THRESHOLD) {
-                    const imdbId = key.replace("progress:", "").split(":")[0];
+                    const imdbId = key.replace(`progress:${profileId}:`, "").split(":")[0];
                     watched.push(imdbId);
                 }
             }
@@ -581,9 +575,10 @@ function scanWatchedIds(): string[] {
  * Cached via React Query — shared across all components.
  */
 export function useWatchedIds(): Set<string> {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data } = useQuery({
-        queryKey: ["watched-ids", "v2"],
-        queryFn: scanWatchedIds,
+        queryKey: ["watched-ids", "v2", profileId],
+        queryFn: () => scanWatchedIds(profileId),
         staleTime: 60_000,
         gcTime: 5 * 60_000,
         refetchOnWindowFocus: true,

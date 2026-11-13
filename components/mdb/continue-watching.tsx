@@ -1,5 +1,6 @@
 "use client";
 
+import { useProfile } from "@/hooks/use-profile";
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { useNextEpisode } from "@/hooks/use-next-episode";
 import { WatchButton } from "@/components/common/watch-button";
@@ -24,11 +25,12 @@ interface ContinueWatchingItemProps {
 }
 
 const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data: media, isLoading: loading } = useTraktMedia(item.imdbId, item.type);
 
     // For shows: fetch episode data for episode title (24h cache, minimal extra cost)
     const { data: episodes } = useQuery({
-        queryKey: ["trakt", "episodes", item.imdbId, item.season],
+        queryKey: ["trakt", profileId, "episodes", item.imdbId, item.season],
         queryFn: () => traktClient.getShowEpisodes(item.imdbId, item.season!),
         staleTime: 24 * 60 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
@@ -247,6 +249,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
 });
 
 export function ContinueWatching() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { progress, loading } = useContinueWatching();
     const queryClient = useQueryClient();
     const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
@@ -268,8 +271,8 @@ export function ContinueWatching() {
 
         // Remove from localStorage
         const storageKey = key.type === "show" && key.season !== undefined && key.episode !== undefined
-            ? `progress:${key.imdbId}:s${key.season}e${key.episode}`
-            : `progress:${key.imdbId}`;
+            ? `progress:${profileId}:${key.imdbId}:s${key.season}e${key.episode}`
+            : `progress:${profileId}:${key.imdbId}`;
         try {
             localStorage.removeItem(storageKey);
         } catch { }
@@ -280,9 +283,9 @@ export function ContinueWatching() {
         if (key.episode != null && !isNaN(key.episode)) params.set("episode", String(key.episode));
         params.set("mode", "hide");
         fetch(`/api/progress?${params}`, { method: "DELETE" })
-            .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching"] }))
+            .then(() => queryClient.invalidateQueries({ queryKey: ["continue-watching", profileId] }))
             .catch(() => { });
-    }, [queryClient]);
+    }, [queryClient, profileId]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const scrollingRef = useRef(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useProfile } from "@/hooks/use-profile";
 import Image from "next/image";
 import { type TraktSeason } from "@/lib/trakt";
 import { Check, Star } from "lucide-react";
@@ -26,6 +27,7 @@ export const SeasonCard = memo(function SeasonCard({
     className,
     mediaId,
 }: SeasonCardProps) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
 
     const seasonName = season.number === 0 ? "Specials" : `Season ${season.number}`;
@@ -39,7 +41,7 @@ export const SeasonCard = memo(function SeasonCard({
         if (!mediaId) return;
 
         queryClient.prefetchQuery({
-            queryKey: ["trakt", "season", "episodes", mediaId, season.number],
+            queryKey: ["trakt", profileId, "season", "episodes", mediaId, season.number],
             queryFn: () => traktClient.getShowEpisodes(mediaId, season.number),
         });
     };

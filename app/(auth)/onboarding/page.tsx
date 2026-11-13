@@ -11,7 +11,6 @@ import { LogOut, Check, ArrowRight, ExternalLink, SkipForward } from "lucide-rea
 import { useAuth } from "@/components/auth/auth-provider";
 import { useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { useSaveUserSettings } from "@/hooks/use-user-settings";
 import { useUserAccounts } from "@/hooks/use-user-accounts";
@@ -163,16 +162,7 @@ function StepConnect({ hasAccount, onNext }: { hasAccount: boolean; onNext: () =
 
 function StepTrakt({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
     const handleConnect = useCallback(() => {
-        const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
-        if (!clientId) {
-            toast.error("Trakt client ID not configured");
-            return;
-        }
-        const redirectUri = `${window.location.origin}/api/trakt/callback`;
-        const state = crypto.randomUUID();
-        document.cookie = `trakt_oauth_state=${state}; path=/; max-age=600; samesite=lax; secure`;
-        const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
-        window.location.href = url;
+        window.location.href = "/api/trakt/authorize";
     }, []);
 
     const isTraktAvailable = !!process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;

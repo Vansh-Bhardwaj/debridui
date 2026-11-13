@@ -1,3 +1,4 @@
+import { useProfile } from "./use-profile";
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { traktClient, TraktClient, maintainShowOnWatchlist } from "@/lib/trakt";
@@ -13,6 +14,7 @@ const WATCHED_FALLBACK_THRESHOLD = 95;
  * Requires the user to have a Trakt access token set via settings.
  */
 export function useTraktScrobble(progressKey: ProgressKey | null) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const lastActionRef = useRef<ScrobbleAction | null>(null);
     const fallbackMarkedRef = useRef<string | null>(null);
     const queryClient = useQueryClient();
@@ -30,6 +32,7 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
     const scrobble = useCallback(
         async (action: ScrobbleAction, progressPercent: number) => {
             if (!progressKey || !(settings?.trakt_access_token || traktClient.getAccessToken())) return;
+            const generation = traktClient.getAuthGeneration();
             // Avoid sending duplicate consecutive actions
             if (action === lastActionRef.current && action !== "stop") return;
             lastActionRef.current = action;
@@ -53,12 +56,14 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                 if (action === "stop" && progressPercent >= 80 && progressKey.type === "show") {
                     // Give Trakt a moment to register the history write before we check progress
                     setTimeout(async () => {
+                        if (generation !== traktClient.getAuthGeneration()) return;
                         await maintainShowOnWatchlist({ imdb: progressKey.imdbId }, progressKey.imdbId);
-                        queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
-                        queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+                        queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress"] });
+                        queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
                     }, 2000);
                 }
             } catch (e) {
+                if (generation !== traktClient.getAuthGeneration()) return;
                 if (
                     action === "stop" &&
                     progressPercent >= WATCHED_FALLBACK_THRESHOLD &&
@@ -77,13 +82,14 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                         // Counter Trakt's watchlist auto-removal unless fully watched.
                         if (progressKey.type === "show") {
                             setTimeout(async () => {
+                                if (generation !== traktClient.getAuthGeneration()) return;
                                 await maintainShowOnWatchlist({ imdb: progressKey.imdbId }, progressKey.imdbId);
-                                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
-                                queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+                                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress"] });
+                                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
                             }, 2000);
                         } else {
                             setTimeout(() => {
-                                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
+                                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress"] });
                             }, 2000);
                         }
                     } catch (historyError) {
@@ -93,7 +99,7 @@ export function useTraktScrobble(progressKey: ProgressKey | null) {
                 console.error("[trakt-scrobble]", action, e);
             }
         },
-        [progressIdentity, progressKey, queryClient, settings?.trakt_access_token]
+        [progressIdentity, progressKey, queryClient, settings?.trakt_access_token, profileId]
     );
 
     return { scrobble };

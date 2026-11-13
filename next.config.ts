@@ -90,12 +90,13 @@ const nextConfig: NextConfig = {
                 source: "/:path*",
                 headers: securityHeaders,
             },
-            {
+            // Dev chunk names are reused across edits, so only hashed production chunks are immutable.
+            ...(process.env.NODE_ENV === "production" ? [{
                 source: "/_next/static/:path*",
                 headers: [
                     { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
                 ],
-            },
+            }] : []),
             {
                 source: "/icon.svg",
                 headers: [

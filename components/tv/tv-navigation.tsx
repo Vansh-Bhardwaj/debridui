@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileSwitcher } from "@/components/profiles/profile-switcher";
 import { memo, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -89,7 +90,8 @@ export const TVNavigationBar = memo(function TVNavigationBar() {
             </div>
 
             {/* Clock + Exit */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4" data-tv-section="nav-profile">
+                <ProfileSwitcher />
                 {clock && (
                     <span className="tv-clock text-sm text-muted-foreground/60 font-light">
                         {clock}

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { MediaPlayer } from "../types";
 import { Resolution, SourceQuality } from "../addons/types";
 import type { PlaybackEngine } from "../utils/codec-support";
@@ -335,6 +335,37 @@ const getDefaultSettings = (): SettingsData => {
     };
 };
 
+// External players differ per device (Infuse on iPhone, VLC on desktop), so mediaPlayer stays local.
+const deviceSettingKeys = ["deviceSync", "tvMode", "downloadLinkMaxAge", "tmdbApiKey", "mediaPlayer"] as const;
+const syncedPreferenceKeys = ["smartOrder", "hideTrash", "streaming", "playback"] as const;
+let loadingProfile = false;
+
+const settingsStorage = createJSONStorage(() => ({
+    getItem: (name: string) => {
+        const profile = JSON.parse(localStorage.getItem(name) || "null");
+        const global = JSON.parse(localStorage.getItem("debridui-settings") || "null");
+        const devices = Object.fromEntries(deviceSettingKeys.flatMap((key) => global?.state?.settings?.[key] === undefined ? [] : [[key, global.state.settings[key]]]));
+        const playback = { ...profile?.state?.settings?.playback };
+        const subtitleAutoSync = global?.state?.settings?.playback?.subtitleAutoSync;
+        if (typeof subtitleAutoSync === "boolean") playback.subtitleAutoSync = subtitleAutoSync;
+        return JSON.stringify({ state: { settings: { ...profile?.state?.settings, ...devices, playback } }, version: 0 });
+    },
+    setItem: (name: string, value: string) => {
+        if (loadingProfile) return;
+        const parsed = JSON.parse(value);
+        const settings = parsed.state.settings;
+        const devices = { ...Object.fromEntries(deviceSettingKeys.map((key) => [key, settings[key]])), playback: { subtitleAutoSync: settings.playback.subtitleAutoSync } };
+        localStorage.setItem("debridui-settings", JSON.stringify({ state: { settings: devices }, version: 0 }));
+        if (name !== "debridui-settings") {
+            const personal = Object.fromEntries(Object.entries(settings).filter(([key]) => !deviceSettingKeys.includes(key as typeof deviceSettingKeys[number])));
+            const { subtitleAutoSync: _deviceSubtitleSync, ...playback } = settings.playback;
+            personal.playback = playback;
+            localStorage.setItem(name, JSON.stringify({ state: { settings: personal }, version: 0 }));
+        }
+    },
+    removeItem: (name: string) => localStorage.removeItem(name),
+}));
+
 export const useSettingsStore = create<SettingsStore>()(
     persist(
         (set, get) => ({
@@ -377,6 +408,8 @@ export const useSettingsStore = create<SettingsStore>()(
         }),
         {
             name: "debridui-settings",
+            storage: settingsStorage,
+            skipHydration: true,
             partialize: (state) => ({ settings: state.settings }),
             merge: (persisted, current) => {
                 const persistedSettings = (persisted as { settings: Partial<SettingsData> })?.settings;
@@ -417,3 +450,32 @@ export const useSettingsStore = create<SettingsStore>()(
         }
     )
 );
+
+export async function loadProfilePreferences(profileId: string, firstProfileId: string, preferences: Record<string, unknown>) {
+    const name = `debridui-settings:${profileId}`;
+    if (!localStorage.getItem("dui-preferences-migrated")) {
+        const legacy = localStorage.getItem("debridui-settings");
+        if (legacy && !localStorage.getItem(`debridui-settings:${firstProfileId}`)) localStorage.setItem(`debridui-settings:${firstProfileId}`, legacy);
+        localStorage.setItem("dui-preferences-migrated", firstProfileId);
+    }
+    loadingProfile = true;
+    try {
+        useSettingsStore.persist.setOptions({ name });
+        useSettingsStore.setState({ settings: getDefaultSettings() });
+        await useSettingsStore.persist.rehydrate();
+        const updates = Object.fromEntries(syncedPreferenceKeys.filter((key) => preferences[key] !== undefined).map((key) => {
+            const value = key === "playback" ? { ...preferences[key] as object, subtitleAutoSync: useSettingsStore.getState().get("playback").subtitleAutoSync } : preferences[key];
+            const current = useSettingsStore.getState().settings[key];
+            return [key, typeof current === "object" ? { ...current as object, ...value as object } : value];
+        }));
+        useSettingsStore.getState().setMultiple(updates);
+    } finally {
+        loadingProfile = false;
+    }
+}
+
+export function profilePreferencesSnapshot() {
+    const { settings } = useSettingsStore.getState();
+    const { subtitleAutoSync: _deviceSubtitleSync, ...playback } = settings.playback;
+    return Object.fromEntries(syncedPreferenceKeys.map((key) => [key, key === "playback" ? playback : settings[key]]));
+}

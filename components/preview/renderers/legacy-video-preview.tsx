@@ -1,5 +1,6 @@
 "use client";
 
+import { useProfile } from "@/hooks/use-profile";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Hls from "hls.js";
@@ -381,6 +382,7 @@ const POPUP_DIVIDER = "player-popup-divider h-px bg-white/[0.08] my-1";
 
 /** Native HTML5 video player. iOS: tap-to-play (no autoplay), loading timeout hint. Windows: unchanged. */
 export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitles, progressKey, startFromSeconds, onNext, onPrev, onPreload, onLoad, onError }: LegacyVideoPreviewProps) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const containerRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const hasPreloaded = useRef(false);
@@ -1031,7 +1033,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     // Original language from Trakt metadata (e.g. "en", "ja")
     const { data: originalLanguageCode } = useQuery({
-        queryKey: ["trakt", "original-language", progressKey?.imdbId, progressKey?.type],
+        queryKey: ["trakt", profileId, "original-language", progressKey?.imdbId, progressKey?.type],
         queryFn: async () => {
             if (!progressKey) return null;
             if (progressKey.type === "movie") {

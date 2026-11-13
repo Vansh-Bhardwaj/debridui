@@ -38,6 +38,9 @@ export const clearAuthCookies = () => {
  */
 export const clearAppCache = async () => {
     clearAuthCookies();
+    for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith("dui-profile-picked:") || key === "user-synced") sessionStorage.removeItem(key);
+    }
     await del("DEBRIDUI_CACHE");
     queryClient.clear();
 };

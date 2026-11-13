@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-static";
 
+import { useProfile } from "@/hooks/use-profile";
 import { useState, useCallback, memo, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/common/page-header";
@@ -307,11 +308,12 @@ function pickRecentUnique(entries: HistoryEntry[], limit = 10): HistoryEntry[] {
 }
 
 function updateHistoryCaches(
+    profileId: string,
     queryClient: ReturnType<typeof useQueryClient>,
     updater: (old: { history: HistoryEntry[]; total: number }) => { history: HistoryEntry[]; total: number }
 ) {
     queryClient.setQueriesData<{ history: HistoryEntry[]; total: number }>(
-        { queryKey: ["watch-history"] },
+        { queryKey: ["watch-history", profileId] },
         (old) => {
             if (!old) return old;
             return updater(old);
@@ -320,6 +322,7 @@ function updateHistoryCaches(
 }
 
 export default function HistoryPage() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     const [limit, setLimit] = useState(PAGE_SIZE);
     const [clearOpen, setClearOpen] = useState(false);
@@ -329,7 +332,7 @@ export default function HistoryPage() {
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
 
     const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
-        queryKey: ["watch-history", limit],
+        queryKey: ["watch-history", profileId, limit],
         queryFn: async () => {
             const res = await fetch(`/api/history?limit=${limit}&offset=0`);
             if (!res.ok) {
@@ -357,7 +360,7 @@ export default function HistoryPage() {
             const res = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
             setActionError(null);
-            updateHistoryCaches(queryClient, (old) => {
+            updateHistoryCaches(profileId, queryClient, (old) => {
                 const nextHistory = old.history.filter((e) => e.id !== id);
                 const removed = old.history.length - nextHistory.length;
                 return {
@@ -368,7 +371,7 @@ export default function HistoryPage() {
         } catch {
             setActionError("Failed to remove entry. Please try again.");
         }
-    }, [queryClient]);
+    }, [queryClient, profileId]);
 
     const handleClearAll = useCallback(async () => {
         setClearing(true);
@@ -377,7 +380,7 @@ export default function HistoryPage() {
             if (!res.ok) throw new Error("Failed");
             setActionError(null);
             queryClient.setQueriesData<{ history: HistoryEntry[]; total: number }>(
-                { queryKey: ["watch-history"] },
+                { queryKey: ["watch-history", profileId] },
                 (old) => old ? { history: [], total: 0 } : old
             );
             setClearOpen(false);
@@ -386,7 +389,7 @@ export default function HistoryPage() {
         } finally {
             setClearing(false);
         }
-    }, [queryClient]);
+    }, [queryClient, profileId]);
 
     const handleLoadMore = () => setLimit((prev) => prev + PAGE_SIZE);
 

@@ -1,3 +1,4 @@
+import { useProfile } from "./use-profile";
 import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient, TraktError, maintainShowOnWatchlist, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
 import { useUserSettings } from "./use-user-settings";
@@ -25,7 +26,8 @@ function createTraktHook<T extends any[], R>(
     options?: { keepPrevious?: boolean }
 ) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (...rawArgs: any[]): UseQueryResult<R> => {
+    return function useTraktQuery(...rawArgs: any[]): UseQueryResult<R> {
+        const { activeProfile: { id: profileId } } = useProfile();
         // Convention: trailing boolean arg = `enabled` flag (not passed to queryFn)
         const last = rawArgs[rawArgs.length - 1];
         const hasEnabled = rawArgs.length > 0 && typeof last === "boolean";
@@ -33,7 +35,7 @@ function createTraktHook<T extends any[], R>(
         const args = (hasEnabled ? rawArgs.slice(0, -1) : rawArgs) as unknown as T;
 
         return useQuery({
-            queryKey: ["trakt", ...keyParts, ...args],
+            queryKey: ["trakt", profileId, ...keyParts, ...args],
             queryFn: () => fn(...args),
             enabled,
             placeholderData: options?.keepPrevious ? keepPreviousData : undefined,
@@ -138,8 +140,9 @@ export const useTraktMostPlayedShows = useTraktMostWatchedShows;
 
 // Combined hooks
 export function useTraktTrendingMixed(limit = 20) {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "mixed", "trending", limit],
+        queryKey: ["trakt", profileId, "mixed", "trending", limit],
         queryFn: () => traktClient.getTrendingMixed(limit),
         staleTime: CACHE_DURATION.STANDARD,
         gcTime: CACHE_DURATION.STANDARD * 2,
@@ -147,11 +150,12 @@ export function useTraktTrendingMixed(limit = 20) {
 }
 
 export function useTraktRecommendations(enabled = true) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const seed = dailySeed();
     return useQuery({
         // Seed in the key → cache naturally invalidates at local midnight,
         // triggering a fresh fetch + new shuffle order.
-        queryKey: ["trakt", "recommendations", seed],
+        queryKey: ["trakt", profileId, "recommendations", seed],
         queryFn: async () => {
             // Fetch a larger pool so the displayed slice can actually rotate
             // day-to-day. Trakt's ranking is stable per user, so asking for 5
@@ -189,10 +193,11 @@ export function useTraktRecommendations(enabled = true) {
 }
 
 export function useTraktMedia(slug: string, type: "movie" | "show") {
+    const { activeProfile: { id: profileId } } = useProfile();
     const tmdbApiKey = useSettingsStore((s) => s.get("tmdbApiKey"));
 
     return useQuery({
-        queryKey: ["trakt", "media", slug, type, { tmdbFallback: !!tmdbApiKey }],
+        queryKey: ["trakt", profileId, "media", slug, type, { tmdbFallback: !!tmdbApiKey }],
         queryFn: async () => {
             // Handle TMDB IDs from browse page (format: "title-year-tmdb-{id}")
             const tmdbMatch = slug.match(/-tmdb-(\d+)$/);
@@ -272,8 +277,9 @@ export function useTraktMedia(slug: string, type: "movie" | "show") {
 export const useTraktShowEpisodes = useTraktSeasonEpisodes;
 
 export function useTraktPeople(id: string, type: "movies" | "shows" = "movies") {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "people", id, type],
+        queryKey: ["trakt", profileId, "people", id, type],
         queryFn: () => traktClient.getPeople(id, type),
         staleTime: CACHE_DURATION.LONG,
         gcTime: CACHE_DURATION.LONG,
@@ -300,8 +306,9 @@ export const useTraktPersonShows = createTraktHook(
 
 // Watchlist hooks (require auth — only enabled when access token is set)
 export function useTraktWatchlistMovies() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "watchlist", "movies"],
+        queryKey: ["trakt", profileId, "watchlist", "movies"],
         queryFn: () => traktClient.getWatchlist("movies", "added"),
         placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
@@ -312,8 +319,9 @@ export function useTraktWatchlistMovies() {
 }
 
 export function useTraktWatchlistShows() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "watchlist", "shows"],
+        queryKey: ["trakt", profileId, "watchlist", "shows"],
         queryFn: () => traktClient.getWatchlist("shows", "added"),
         placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
@@ -324,6 +332,7 @@ export function useTraktWatchlistShows() {
 }
 
 export function useRemoveFromWatchlist() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
@@ -334,12 +343,13 @@ export function useRemoveFromWatchlist() {
             return traktClient.removeFromWatchlist({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
         },
     });
 }
 
 export function useAddToWatchlist() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
@@ -350,15 +360,16 @@ export function useAddToWatchlist() {
             return traktClient.addToWatchlist({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
         },
     });
 }
 
 // Favorites hooks
 export function useTraktFavoritesMovies() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "favorites", "movies"],
+        queryKey: ["trakt", profileId, "favorites", "movies"],
         queryFn: () => traktClient.getFavorites("movies"),
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
@@ -368,8 +379,9 @@ export function useTraktFavoritesMovies() {
 }
 
 export function useTraktFavoritesShows() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "favorites", "shows"],
+        queryKey: ["trakt", profileId, "favorites", "shows"],
         queryFn: () => traktClient.getFavorites("shows"),
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
@@ -379,6 +391,7 @@ export function useTraktFavoritesShows() {
 }
 
 export function useAddToFavorites() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
@@ -389,12 +402,13 @@ export function useAddToFavorites() {
             return traktClient.addToFavorites({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "favorites"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "favorites"] });
         },
     });
 }
 
 export function useRemoveFromFavorites() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
@@ -405,15 +419,16 @@ export function useRemoveFromFavorites() {
             return traktClient.removeFromFavorites({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "favorites"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "favorites"] });
         },
     });
 }
 
 // Ratings hooks
 export function useTraktRatingsMovies() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "ratings", "movies"],
+        queryKey: ["trakt", profileId, "ratings", "movies"],
         queryFn: () => traktClient.getRatings("movies"),
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
@@ -423,8 +438,9 @@ export function useTraktRatingsMovies() {
 }
 
 export function useTraktRatingsShows() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "ratings", "shows"],
+        queryKey: ["trakt", profileId, "ratings", "shows"],
         queryFn: () => traktClient.getRatings("shows"),
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
@@ -434,6 +450,7 @@ export function useTraktRatingsShows() {
 }
 
 export function useAddRating() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number; rating: number }) => {
@@ -444,12 +461,13 @@ export function useAddRating() {
             return traktClient.addRatings({ [key]: [{ ids, rating: params.rating }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "ratings"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "ratings"] });
         },
     });
 }
 
 export function useRemoveRating() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
@@ -460,14 +478,16 @@ export function useRemoveRating() {
             return traktClient.removeRatings({ [key]: [{ ids }] });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["trakt", "ratings"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "ratings"] });
         },
     });
 }
 
 // History hooks
 export function useAddToHistory() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
+    const generation = traktClient.getAuthGeneration();
     return useMutation({
         mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
             const key = params.type === "movie" ? "movies" : "shows";
@@ -477,29 +497,32 @@ export function useAddToHistory() {
             return traktClient.addToHistory({ [key]: [{ ids }] });
         },
         onSuccess: async (_data, params) => {
+            if (generation !== traktClient.getAuthGeneration()) return;
             // For shows, counter Trakt's auto-removal from watchlist unless fully completed.
             if (params.type === "show" && (params.imdbId || params.traktId != null)) {
                 const lookupId = params.imdbId ?? String(params.traktId!);
                 await maintainShowOnWatchlist({ imdb: params.imdbId, trakt: params.traktId }, lookupId);
             }
-            queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress"] });
-            queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress"] });
+            queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
         },
     });
 }
 
 /** Mark individual episode(s) as watched */
 export function useMarkEpisodeWatched() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
+    const generation = traktClient.getAuthGeneration();
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.addEpisodesToHistory({ trakt: params.showTraktId }, params.season, params.episodes),
         onMutate: async (params) => {
             // Optimistic update: mark episodes as watched immediately
-            await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
-            const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
+            await queryClient.cancelQueries({ queryKey: ["trakt", profileId, "show", "progress", params.showId] });
+            const prev = queryClient.getQueryData(["trakt", profileId, "show", "progress", params.showId]);
             queryClient.setQueryData(
-                ["trakt", "show", "progress", params.showId],
+                ["trakt", profileId, "show", "progress", params.showId],
                 (old: Record<string, unknown> | undefined) => {
                     if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
                     const seasons = (
@@ -519,10 +542,11 @@ export function useMarkEpisodeWatched() {
             return { prev };
         },
         onError: (_err, params, ctx) => {
-            if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+            if (ctx?.prev) queryClient.setQueryData(["trakt", profileId, "show", "progress", params.showId], ctx.prev);
             toast.error("Failed to mark as watched", { description: "Check your Trakt connection in Settings" });
         },
         onSuccess: async (_data, params) => {
+            if (generation !== traktClient.getAuthGeneration()) return;
             toast.success(
                 params.episodes.length === 1
                     ? `S${params.season}E${params.episodes[0]} marked as watched`
@@ -537,8 +561,8 @@ export function useMarkEpisodeWatched() {
             // Delay invalidation slightly — Trakt needs a moment to process
             // The optimistic update already shows the correct state instantly
             setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
-                queryClient.invalidateQueries({ queryKey: ["trakt", "watchlist"] });
+                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress", params.showId] });
+                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
             }, 2000);
         },
         onSettled: () => {
@@ -549,15 +573,16 @@ export function useMarkEpisodeWatched() {
 
 /** Unmark individual episode(s) as watched */
 export function useUnmarkEpisodeWatched() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (params: { showTraktId: number; showId: string; season: number; episodes: number[] }) =>
             traktClient.removeEpisodesFromHistory({ trakt: params.showTraktId }, params.season, params.episodes),
         onMutate: async (params) => {
-            await queryClient.cancelQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
-            const prev = queryClient.getQueryData(["trakt", "show", "progress", params.showId]);
+            await queryClient.cancelQueries({ queryKey: ["trakt", profileId, "show", "progress", params.showId] });
+            const prev = queryClient.getQueryData(["trakt", profileId, "show", "progress", params.showId]);
             queryClient.setQueryData(
-                ["trakt", "show", "progress", params.showId],
+                ["trakt", profileId, "show", "progress", params.showId],
                 (old: Record<string, unknown> | undefined) => {
                     if (!old || !Array.isArray((old as { seasons?: unknown[] }).seasons)) return old;
                     const seasons = (
@@ -577,7 +602,7 @@ export function useUnmarkEpisodeWatched() {
             return { prev };
         },
         onError: (_err, params, ctx) => {
-            if (ctx?.prev) queryClient.setQueryData(["trakt", "show", "progress", params.showId], ctx.prev);
+            if (ctx?.prev) queryClient.setQueryData(["trakt", profileId, "show", "progress", params.showId], ctx.prev);
             toast.error("Failed to unmark watched", { description: "Check your Trakt connection in Settings" });
         },
         onSuccess: (_data, params) => {
@@ -587,7 +612,7 @@ export function useUnmarkEpisodeWatched() {
                     : `${params.episodes.length} episodes unmarked`
             );
             setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ["trakt", "show", "progress", params.showId] });
+                queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "show", "progress", params.showId] });
             }, 2000);
         },
         onSettled: () => {
@@ -611,8 +636,9 @@ export function useCheckin() {
 
 // Related content hooks
 export function useTraktRelated(id: string, type: "movie" | "show") {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery<TraktMedia[]>({
-        queryKey: ["trakt", "related", type, id],
+        queryKey: ["trakt", profileId, "related", type, id],
         queryFn: () => (type === "movie" ? traktClient.getRelatedMovies(id) : traktClient.getRelatedShows(id)),
         staleTime: CACHE_DURATION.LONG,
         gcTime: CACHE_DURATION.LONG,
@@ -622,10 +648,11 @@ export function useTraktRelated(id: string, type: "movie" | "show") {
 
 // Watched progress hooks (require auth)
 export function useTraktShowProgress(showId: string) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data: settings } = useUserSettings(true);
     const hasAuth = !!settings?.trakt_access_token;
     return useQuery({
-        queryKey: ["trakt", "show", "progress", showId],
+        queryKey: ["trakt", profileId, "show", "progress", showId],
         queryFn: () => traktClient.getShowWatchedProgress(showId),
         staleTime: CACHE_DURATION.INSTANT, // Refetch on every page visit — watched status must feel instant
         gcTime: CACHE_DURATION.STANDARD, // Keep in cache for reuse but always revalidate
@@ -636,8 +663,9 @@ export function useTraktShowProgress(showId: string) {
 
 // Calendar hooks (require auth)
 export function useTraktCalendarShows(days = 14) {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "calendar", "shows", days],
+        queryKey: ["trakt", profileId, "calendar", "shows", days],
         queryFn: () => traktClient.getCalendarShows(undefined, days),
         placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
@@ -647,8 +675,9 @@ export function useTraktCalendarShows(days = 14) {
 }
 
 export function useTraktCalendarMovies(days = 30) {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "calendar", "movies", days],
+        queryKey: ["trakt", profileId, "calendar", "movies", days],
         queryFn: () => traktClient.getCalendarMovies(undefined, days),
         placeholderData: keepPreviousData,
         staleTime: CACHE_DURATION.SHORT,
@@ -659,8 +688,9 @@ export function useTraktCalendarMovies(days = 30) {
 
 /** Recently aired episodes from shows the user watches (past N days) */
 export function useTraktRecentEpisodes(days = 7) {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "calendar", "recent-episodes", days],
+        queryKey: ["trakt", profileId, "calendar", "recent-episodes", days],
         queryFn: () => {
             const startDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
             return traktClient.getCalendarShows(startDate, days);
@@ -674,8 +704,9 @@ export function useTraktRecentEpisodes(days = 7) {
 
 /** Lookup a movie by TMDB ID — returns the Trakt slug for linking */
 export function useTraktSlugFromTmdb(tmdbId: number | undefined) {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
-        queryKey: ["trakt", "lookup", "tmdb", tmdbId],
+        queryKey: ["trakt", profileId, "lookup", "tmdb", tmdbId],
         queryFn: async () => {
             const results = await traktClient.lookupByExternalId("tmdb", tmdbId!);
             const movie = results[0]?.movie;

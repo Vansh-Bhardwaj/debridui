@@ -1,5 +1,6 @@
 "use client";
 
+import { useProfile } from "./use-profile";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { getFindTorrentsCacheKey } from "@/lib/utils/cache-keys";
@@ -18,6 +19,7 @@ interface UseSearchLogicOptions {
 }
 
 export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { client, currentUser, currentAccount } = useAuthGuaranteed();
     const trimmedQuery = query.trim();
     const minQueryLength = 3;
@@ -25,7 +27,7 @@ export function useSearchLogic({ query, enabled = true }: UseSearchLogicOptions)
 
     // Trakt search for movies and TV shows, supplemented by TVMaze for better TV coverage
     const { data: traktResults, isLoading: isTraktSearching } = useQuery({
-        queryKey: ["trakt", "search", currentAccount.id, trimmedQuery],
+        queryKey: ["trakt", profileId, "search", currentAccount.id, trimmedQuery],
         queryFn: async (): Promise<TraktSearchResult[]> => {
             const traktData = await traktClient.search(trimmedQuery, ["movie", "show"]);
 

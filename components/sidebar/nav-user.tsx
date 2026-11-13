@@ -1,5 +1,7 @@
 "use client";
 
+import { useProfile } from "@/hooks/use-profile";
+import { toast } from "sonner";
 import { useState } from "react";
 import { ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "lucide-react";
 
@@ -21,6 +23,7 @@ import { useTVMode } from "@/hooks/use-tv-mode";
 import Link from "next/link";
 
 export function NavUser() {
+    const { profiles, activeProfile, switchProfile } = useProfile();
     const { isMobile, setOpenMobile } = useSidebar();
     const { session, logout, isLoggingOut } = useAuth();
     const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -28,9 +31,9 @@ export function NavUser() {
     const { toggle: toggleTV } = useTVMode();
 
     const user = {
-        name: session?.user?.name || "User",
+        name: activeProfile.name,
         email: session?.user?.email || "",
-        avatar: session?.user?.image || "",
+        avatar: "",
     };
 
     const userInitials =
@@ -58,7 +61,7 @@ export function NavUser() {
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
                             <Avatar className="h-8 w-8 rounded-sm border border-border/50">
                                 <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+                                <AvatarFallback style={{ backgroundColor: activeProfile.color ?? "#596869" }} className="text-xs text-white">{userInitials}</AvatarFallback>
                             </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-light">{user.name}</span>
@@ -77,7 +80,7 @@ export function NavUser() {
                                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                                     <Avatar className="h-8 w-8 rounded-sm border border-border/50">
                                         <AvatarImage src={user.avatar} alt={user.name} />
-                                        <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+                                        <AvatarFallback style={{ backgroundColor: activeProfile.color ?? "#596869" }} className="text-xs text-white">{userInitials}</AvatarFallback>
                                     </Avatar>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
                                         <span className="truncate font-light">{user.name}</span>
@@ -85,6 +88,15 @@ export function NavUser() {
                                     </div>
                                 </div>
                             </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Profiles</DropdownMenuLabel>
+                            {profiles.map((profile) => <DropdownMenuItem key={profile.id} className="min-h-phone-touch" onSelect={() => {
+                                handleNavigation();
+                                void switchProfile(profile.id).catch(() => toast.error("Could not switch profile"));
+                            }}>
+                                <span className={profile.id === activeProfile.id ? "text-primary" : ""}>{profile.name}</span>
+                            </DropdownMenuItem>)}
+                            <DropdownMenuItem asChild><Link href="/profiles?manage=1" onClick={handleNavigation} className="min-h-phone-touch">Manage profiles</Link></DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuGroup>
                                 <DropdownMenuItem asChild>

@@ -129,7 +129,10 @@ export default function RootLayout({
                 </DeviceProvider>
                 <Analytics />
                 <Script id="sw-register" strategy="lazyOnload">
-                    {`if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js")}`}
+                    {/* Dev: Turbopack reuses chunk names, so a caching worker would serve stale code. */}
+                    {process.env.NODE_ENV === "production"
+                        ? `if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js")}`
+                        : `navigator.serviceWorker?.getRegistrations().then(function(r){r.forEach(function(x){x.unregister()})})`}
                 </Script>
             </body>
         </html>

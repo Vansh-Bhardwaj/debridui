@@ -1,6 +1,7 @@
 "use client";
 export const dynamic = "force-static";
 
+import { useProfile } from "@/hooks/use-profile";
 import { memo, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft, Heart, Film, Tv, Sparkles, RotateCcw, Gem } from "lucide-react";
@@ -36,13 +37,14 @@ interface HistoryEntry {
 }
 
 function useRecommendationsByType(type: "movies" | "shows", limit: number) {
+    const { activeProfile: { id: profileId } } = useProfile();
     const seed = dailySeed();
     // Fetch a stable-size larger pool; shuffle + slice to what the caller
     // wanted. Trakt's ranking is deterministic per user, so rotating on the
     // client avoids users seeing identical top-N titles for months.
     const poolSize = Math.max(50, limit * 2);
     return useQuery({
-        queryKey: ["trakt", "recommendations", type, poolSize, seed],
+        queryKey: ["trakt", profileId, "recommendations", type, poolSize, seed],
         queryFn: async () => {
             const pool = await traktClient.getRecommendations(type, poolSize);
             return shuffleWithSeed(pool, `${seed}-${type}`).slice(0, limit);
@@ -55,8 +57,9 @@ function useRecommendationsByType(type: "movies" | "shows", limit: number) {
 }
 
 function useHistoryPage() {
+    const { activeProfile: { id: profileId } } = useProfile();
     return useQuery<{ history: HistoryEntry[]; total: number }>({
-        queryKey: ["watch-history", 100],
+        queryKey: ["watch-history", profileId, 100],
         queryFn: async () => {
             const res = await fetch(`/api/history?limit=100&offset=0`);
             if (!res.ok) throw new Error("Failed to fetch history");

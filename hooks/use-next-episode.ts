@@ -1,5 +1,6 @@
 "use client";
 
+import { useProfile } from "./use-profile";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { traktClient } from "@/lib/trakt";
@@ -10,8 +11,9 @@ import type { TvSearchParams } from "@/lib/addons/types";
  * transitions, null when the show has nothing further aired.
  */
 export function useNextEpisode(imdbId: string | undefined, type: "movie" | "show" | undefined, season?: number, episode?: number): TvSearchParams | null {
+    const { activeProfile: { id: profileId } } = useProfile();
     const { data: seasons } = useQuery({
-        queryKey: ["trakt", "show", "seasons", imdbId],
+        queryKey: ["trakt", profileId, "show", "seasons", imdbId],
         queryFn: () => traktClient.getShowSeasons(imdbId!),
         staleTime: 24 * 60 * 60 * 1000,
         enabled: !!imdbId && type === "show" && !!season && !!episode,

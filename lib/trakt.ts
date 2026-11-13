@@ -440,6 +440,7 @@ export class TraktClient {
     private tokenExpiresAt?: number;
     private refreshHandler?: () => Promise<string | null>;
     private refreshPromise?: Promise<string | null>;
+    private authGeneration = 0;
 
     constructor(config: TraktClientConfig) {
         this.baseUrl = config.baseUrl || "https://api.trakt.tv";
@@ -453,14 +454,24 @@ export class TraktClient {
      */
     public setAccessToken(token: string, expiresAt?: number): void {
         this.accessToken = token;
-        if (expiresAt) this.tokenExpiresAt = expiresAt;
+        this.tokenExpiresAt = expiresAt;
     }
 
-    /**
-     * Get the current access token
-     */
+    /** Clear all authentication state before changing profiles. */
+    public reset(): void {
+        this.authGeneration++;
+        this.accessToken = undefined;
+        this.tokenExpiresAt = undefined;
+        this.refreshHandler = undefined;
+        this.refreshPromise = undefined;
+    }
+
     public getAccessToken(): string | undefined {
         return this.accessToken;
+    }
+
+    public getAuthGeneration(): number {
+        return this.authGeneration;
     }
 
     /**
@@ -480,8 +491,9 @@ export class TraktClient {
         // Refresh if within 5 minutes of expiry
         if (Date.now() / 1000 < this.tokenExpiresAt - 300) return;
 
+        const generation = this.authGeneration;
         const newToken = await this.doRefresh();
-        if (newToken) this.accessToken = newToken;
+        if (newToken && generation === this.authGeneration) this.setAccessToken(newToken);
     }
 
     /**
@@ -491,8 +503,9 @@ export class TraktClient {
         if (!this.refreshHandler) return null;
         if (this.refreshPromise) return this.refreshPromise;
 
-        this.refreshPromise = this.refreshHandler().finally(() => {
-            this.refreshPromise = undefined;
+        const generation = this.authGeneration;
+        this.refreshPromise = this.refreshHandler().then((token) => generation === this.authGeneration ? token : null).finally(() => {
+            if (generation === this.authGeneration) this.refreshPromise = undefined;
         });
         return this.refreshPromise;
     }
@@ -526,8 +539,10 @@ export class TraktClient {
         requiresAuth = false,
         extended?: string
     ): Promise<T> {
+        const generation = this.authGeneration;
         // Proactively refresh token if near expiry
         if (requiresAuth) await this.ensureFreshToken();
+        if (requiresAuth && generation !== this.authGeneration) throw new TraktError("Profile changed");
 
         let url = `${this.baseUrl}/${endpoint.replace(/^\//, "")}`;
 
@@ -548,10 +563,10 @@ export class TraktClient {
             });
 
             // Auto-refresh on 401 and retry once
-            if (response.status === 401 && requiresAuth && this.refreshHandler) {
+            if (response.status === 401 && requiresAuth && generation === this.authGeneration && this.refreshHandler) {
                 const newToken = await this.doRefresh();
-                if (newToken) {
-                    this.accessToken = newToken;
+                if (newToken && generation === this.authGeneration) {
+                    this.setAccessToken(newToken);
                     response = await fetch(url, {
                         ...options,
                         headers: {
@@ -570,12 +585,15 @@ export class TraktClient {
                 );
             }
 
+            if (requiresAuth && generation !== this.authGeneration) throw new TraktError("Profile changed");
+
             // Handle empty responses (204 No Content)
             if (response.status === 204) {
                 return {} as T;
             }
 
             const data = await response.json();
+            if (requiresAuth && generation !== this.authGeneration) throw new TraktError("Profile changed");
             return data as T;
         } catch (error) {
             if (error instanceof TraktError) {

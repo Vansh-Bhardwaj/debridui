@@ -1,6 +1,8 @@
 "use client";
 export const dynamic = "force-static";
 
+import { ProfileSwitcher } from "@/components/profiles/profile-switcher";
+import { useProfile } from "@/hooks/use-profile";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -39,6 +41,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 function TraktOAuthFeedback() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const searchParams = useSearchParams();
     const router = useRouter();
     useEffect(() => {
@@ -46,7 +49,7 @@ function TraktOAuthFeedback() {
         if (!traktParam) return;
         if (traktParam === "connected") {
             toast.success("Trakt connected successfully");
-            queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+            queryClient.invalidateQueries({ queryKey: ["user-settings", profileId] });
         } else if (traktParam === "error") {
             const reason = searchParams.get("reason");
             const messages: Record<string, string> = {
@@ -59,7 +62,7 @@ function TraktOAuthFeedback() {
         }
         // Clean up query params from URL
         router.replace("/settings", { scroll: false });
-    }, [searchParams, router]);
+    }, [searchParams, router, profileId]);
     return null;
 }
 import Image from "next/image";
@@ -104,6 +107,7 @@ const SOURCE_QUALITY_OPTIONS: { value: SourceQuality | "any"; label: string }[] 
 ];
 
 export default function SettingsPage() {
+    const { activeProfile: { id: profileId } } = useProfile();
     const TMDB_SAVE_DEBOUNCE_MS = 600;
     const { theme, setTheme } = useTheme();
     const { currentAccount } = useAuthGuaranteed();
@@ -134,14 +138,7 @@ export default function SettingsPage() {
     // Show toast when returning from Trakt OAuth flow is handled by TraktOAuthFeedback
 
     const handleTraktConnect = useCallback(() => {
-        const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
-        if (!clientId) { toast.error("Trakt client ID not configured"); return; }
-        const redirectUri = `${window.location.origin}/api/trakt/callback`;
-        // Generate OAuth state for CSRF protection
-        const state = crypto.randomUUID();
-        document.cookie = `trakt_oauth_state=${state}; path=/; max-age=600; samesite=lax; secure`;
-        const url = `https://trakt.tv/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
-        window.location.href = url;
+        window.location.href = "/api/trakt/authorize";
     }, []);
 
     useEffect(() => {
@@ -240,10 +237,10 @@ export default function SettingsPage() {
             const res = await fetch("/api/history", { method: "DELETE" });
             if (!res.ok) throw new Error("Failed");
             queryClient.setQueriesData<{ history: unknown[]; total: number }>(
-                { queryKey: ["watch-history"] },
+                { queryKey: ["watch-history", profileId] },
                 (old) => old ? { history: [], total: 0 } : old
             );
-            queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+            queryClient.invalidateQueries({ queryKey: ["continue-watching", profileId] });
             toast.success("Watch history cleared");
             setClearHistoryOpen(false);
         } catch {
@@ -251,7 +248,7 @@ export default function SettingsPage() {
         } finally {
             setClearingHistory(false);
         }
-    }, []);
+    }, [profileId]);
 
     const handleClearSearchHistory = useCallback(() => {
         try {
@@ -262,8 +259,9 @@ export default function SettingsPage() {
         }
     }, []);
 
-    const SECTION_IDS = ["integrations", "playback", "streaming", "appearance", "cache", "privacy", "about"] as const;
+    const SECTION_IDS = ["profiles", "integrations", "playback", "streaming", "appearance", "cache", "privacy", "about"] as const;
     const SECTION_LABELS: Record<(typeof SECTION_IDS)[number], string> = {
+        profiles: "Profiles",
         integrations: "Integrations",
         playback: "Playback",
         streaming: "Streaming",
@@ -296,7 +294,15 @@ export default function SettingsPage() {
                 ))}
             </nav>
 
-            {/* ─── Integrations (highest priority) ─── */}
+            <section id="profiles" className="space-y-4 scroll-mt-16" data-tv-section="settings-profiles">
+                <SectionDivider label="Profiles" />
+                <div className="flex flex-wrap items-center justify-between gap-4 border border-border/50 bg-muted/30 p-4">
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground">Current profile</p>
+                    <ProfileSwitcher />
+                </div>
+                <a href="/profiles?manage=1" data-tv-focusable className="inline-flex min-h-phone-touch items-center text-sm text-primary">Manage profiles</a>
+            </section>
+
             <section id="integrations" className="space-y-4 scroll-mt-16" data-tv-section>
                 <SectionDivider label="Integrations" />
 

@@ -14,6 +14,7 @@ import { clearAppCache } from "@/lib/utils";
 import { toast } from "sonner";
 import { syncUser } from "@/lib/actions/auth";
 import { setCacheChecker, setProviderTranscodeAvailable, setStreamLinkLookup } from "@/lib/streaming/stream-info";
+import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { AccountType } from "@/lib/schemas";
 
 interface AuthContextType {
@@ -155,7 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         // No accounts + not on onboarding → onboarding
-        if (!hasAccounts && !isOnboarding) {
+        if (!hasAccounts && !isOnboarding && pathname !== "/profiles") {
             router.push("/onboarding");
         }
     }, [session, sessionError, isSessionPending, isAccountsLoading, isAccountsError, userAccounts.length, pathname, router]);
@@ -292,5 +293,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         );
     }
 
-    return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
+    return <AuthContext.Provider value={contextValue}><ProfileProvider><ProfileEntry>{children}</ProfileEntry></ProfileProvider></AuthContext.Provider>;
+}
+
+function ProfileEntry({ children }: { children: React.ReactNode }) {
+    const { profiles } = useProfile();
+    const { session } = useAuth();
+    const pathname = usePathname();
+    const router = useRouter();
+    const needsPick = profiles.length > 1 && !sessionStorage.getItem(`dui-profile-picked:${session?.user.id}`) && pathname !== "/profiles";
+    useEffect(() => {
+        if (needsPick) router.replace("/profiles");
+    }, [needsPick, router]);
+    if (needsPick) return <SplashScreen stage="Who's watching?" />;
+    return children;
 }
