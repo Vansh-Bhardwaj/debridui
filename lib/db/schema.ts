@@ -5,8 +5,8 @@ export * from "./auth-schema";
 import { user } from "./auth-schema";
 
 // WARNING: the unique indexes on user_progress, watch_history and
-// hidden_continue_watching are NULLS NOT DISTINCT in the real database
-// (drizzle/0004, 0006, 0008) so movie rows (season/episode NULL) upsert.
+// hidden_continue_watching and watch_events are NULLS NOT DISTINCT in the real database
+// (drizzle/0004, 0006, 0008, 0009) so movie rows (season/episode NULL) upsert.
 // Drizzle can't express that on indexes, so never `drizzle-kit push` this
 // schema — it would recreate them as NULLS DISTINCT and duplicate rows.
 // Apply hand-written SQL migrations instead.
@@ -47,12 +47,28 @@ export const addons = pgTable(
     (table) => [index("addons_userId_idx").on(table.userId)]
 );
 
-// User settings table - stores user preferences
+// Account settings table - shared TMDB key
 export const userSettings = pgTable("user_settings", {
     userId: uuid("user_id")
         .primaryKey()
         .references(() => user.id, { onDelete: "cascade" }),
     settings: jsonb("settings").notNull(),
+});
+
+export const profiles = pgTable("profiles", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    avatar: text("avatar"),
+    color: text("color"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [index("profiles_user_id_idx").on(table.userId)]);
+
+export const profileSettings = pgTable("profile_settings", {
+    profileId: uuid("profile_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+    settings: jsonb("settings").notNull().default({}),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // User progress table - stores watch progress for continue watching feature
@@ -64,6 +80,7 @@ export const userProgress = pgTable(
         userId: uuid("user_id")
             .notNull()
             .references(() => user.id, { onDelete: "cascade" }),
+        profileId: uuid("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
         imdbId: text("imdb_id").notNull(),
         type: text("type", { enum: ["movie", "show"] }).notNull(),
         season: integer("season"),
@@ -73,7 +90,7 @@ export const userProgress = pgTable(
         updatedAt: timestamp("updated_at").notNull().defaultNow(),
     },
     (table) => [
-        uniqueIndex("unique_user_progress").on(table.userId, table.imdbId, table.season, table.episode),
+        uniqueIndex("unique_user_progress").on(table.userId, table.profileId, table.imdbId, table.season, table.episode),
         index("user_progress_userId_idx").on(table.userId),
         index("user_progress_updated_at_idx").on(table.updatedAt),
     ]
@@ -88,6 +105,7 @@ export const watchHistory = pgTable(
         userId: uuid("user_id")
             .notNull()
             .references(() => user.id, { onDelete: "cascade" }),
+        profileId: uuid("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
         imdbId: text("imdb_id").notNull(),
         type: text("type", { enum: ["movie", "show"] }).notNull(),
         season: integer("season"),
@@ -99,7 +117,7 @@ export const watchHistory = pgTable(
         watchedAt: timestamp("watched_at").notNull().defaultNow(),
     },
     (table) => [
-        uniqueIndex("unique_user_watch_history").on(table.userId, table.imdbId, table.type, table.season, table.episode),
+        uniqueIndex("unique_user_watch_history").on(table.userId, table.profileId, table.imdbId, table.type, table.season, table.episode),
         index("watch_history_userId_idx").on(table.userId),
         index("watch_history_watchedAt_idx").on(table.watchedAt),
         index("watch_history_session_id_idx").on(table.sessionId),
@@ -114,6 +132,7 @@ export const hiddenContinueWatching = pgTable(
         userId: uuid("user_id")
             .notNull()
             .references(() => user.id, { onDelete: "cascade" }),
+        profileId: uuid("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
         imdbId: text("imdb_id").notNull(),
         type: text("type", { enum: ["movie", "show"] }).notNull(),
         season: integer("season"),
@@ -121,7 +140,7 @@ export const hiddenContinueWatching = pgTable(
         hiddenAt: timestamp("hidden_at").notNull().defaultNow(),
     },
     (table) => [
-        uniqueIndex("unique_hidden_continue").on(table.userId, table.imdbId, table.type, table.season, table.episode),
+        uniqueIndex("unique_hidden_continue").on(table.userId, table.profileId, table.imdbId, table.type, table.season, table.episode),
         index("hidden_continue_user_id_idx").on(table.userId),
     ]
 );
@@ -134,6 +153,7 @@ export const watchEvents = pgTable(
         userId: uuid("user_id")
             .notNull()
             .references(() => user.id, { onDelete: "cascade" }),
+        profileId: uuid("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
         imdbId: text("imdb_id").notNull(),
         type: text("type", { enum: ["movie", "show"] }).notNull(),
         season: integer("season"),
@@ -149,14 +169,30 @@ export const watchEvents = pgTable(
         createdAt: timestamp("created_at").notNull().defaultNow(),
     },
     (table) => [
-        uniqueIndex("watch_events_idempotency_idx").on(table.idempotencyKey),
+        uniqueIndex("watch_events_idempotency_idx").on(table.userId, table.profileId, table.idempotencyKey),
         index("watch_events_user_id_idx").on(table.userId),
         index("watch_events_created_at_idx").on(table.createdAt),
     ]
 );
 
 // Relations
+export const profilesRelations = relations(profiles, ({ one, many }) => ({
+    user: one(user, { fields: [profiles.userId], references: [user.id] }),
+    settings: one(profileSettings),
+    userProgress: many(userProgress),
+    watchHistory: many(watchHistory),
+    hiddenContinueWatching: many(hiddenContinueWatching),
+    watchEvents: many(watchEvents),
+}));
+export const profileSettingsRelations = relations(profileSettings, ({ one }) => ({
+    profile: one(profiles, { fields: [profileSettings.profileId], references: [profiles.id] }),
+}));
+export const watchHistoryRelations = relations(watchHistory, ({ one }) => ({
+    user: one(user, { fields: [watchHistory.userId], references: [user.id] }),
+    profile: one(profiles, { fields: [watchHistory.profileId], references: [profiles.id] }),
+}));
 export const userRelations = relations(user, ({ many, one }) => ({
+    profiles: many(profiles),
     userAccounts: many(userAccounts),
     addons: many(addons),
     userSettings: one(userSettings),
@@ -188,6 +224,7 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
 }));
 
 export const userProgressRelations = relations(userProgress, ({ one }) => ({
+    profile: one(profiles, { fields: [userProgress.profileId], references: [profiles.id] }),
     user: one(user, {
         fields: [userProgress.userId],
         references: [user.id],
@@ -195,6 +232,7 @@ export const userProgressRelations = relations(userProgress, ({ one }) => ({
 }));
 
 export const hiddenContinueWatchingRelations = relations(hiddenContinueWatching, ({ one }) => ({
+    profile: one(profiles, { fields: [hiddenContinueWatching.profileId], references: [profiles.id] }),
     user: one(user, {
         fields: [hiddenContinueWatching.userId],
         references: [user.id],
@@ -202,6 +240,7 @@ export const hiddenContinueWatchingRelations = relations(hiddenContinueWatching,
 }));
 
 export const watchEventsRelations = relations(watchEvents, ({ one }) => ({
+    profile: one(profiles, { fields: [watchEvents.profileId], references: [profiles.id] }),
     user: one(user, {
         fields: [watchEvents.userId],
         references: [user.id],
@@ -223,3 +262,5 @@ export type HiddenContinueWatching = typeof hiddenContinueWatching.$inferSelect;
 export type NewHiddenContinueWatching = typeof hiddenContinueWatching.$inferInsert;
 export type WatchEvent = typeof watchEvents.$inferSelect;
 export type NewWatchEvent = typeof watchEvents.$inferInsert;
+export type Profile = typeof profiles.$inferSelect;
+export type ProfileSetting = typeof profileSettings.$inferSelect;

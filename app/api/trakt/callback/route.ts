@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActor, ownsProfile, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
-import { userSettings } from "@/lib/db/schema";
+import { profileSettings } from "@/lib/db/schema";
+import { verifyProfile } from "@/lib/auth/profile-cookie";
 import { sql } from "drizzle-orm";
 import { TraktClient } from "@/lib/trakt";
-import { getAppUrl, getEnv } from "@/lib/env";
+import { getAppUrl, getEnv, getRequiredEnv } from "@/lib/env";
 import { fetchViaProxy } from "@/lib/proxy-fetch";
 
 /**
  * GET /api/trakt/callback?code=XXX
  * Handles the OAuth redirect from Trakt. Exchanges the code for tokens,
- * stores them in user settings, and redirects to /settings.
+ * stores them in the originating profile settings, and redirects to /settings.
  */
 export async function GET(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.redirect(new URL("/login", getAppUrl()));
     }
 
@@ -32,7 +36,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL("/settings?trakt=error&reason=state_mismatch", getAppUrl()));
     }
 
-    const clientId = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
+    const parts = state.split(".");
+    const profileId = parts.length === 3
+        ? await verifyProfile(parts.slice(0, 2).join("."), actor.userId, getRequiredEnv("NEON_AUTH_COOKIE_SECRET"))
+        : null;
+    if (!profileId || !await ownsProfile(actor.userId, profileId)) {
+        return NextResponse.redirect(new URL("/settings?trakt=error&reason=profile", getAppUrl()));
+    }
+
+    const clientId = getEnv("NEXT_PUBLIC_TRAKT_CLIENT_ID");
     const clientSecret = getEnv("TRAKT_CLIENT_SECRET");
 
     if (!clientId || !clientSecret) {
@@ -57,12 +69,13 @@ export async function GET(request: NextRequest) {
         const jsonValue = JSON.stringify(updates);
 
         await db
-            .insert(userSettings)
-            .values({ userId: session.user.id, settings: updates })
+            .insert(profileSettings)
+            .values({ profileId, settings: updates })
             .onConflictDoUpdate({
-                target: userSettings.userId,
+                target: profileSettings.profileId,
                 set: {
-                    settings: sql`COALESCE(${userSettings.settings}, '{}'::jsonb) || ${jsonValue}::jsonb`,
+                    updatedAt: new Date(),
+                    settings: sql`COALESCE(${profileSettings.settings}, '{}'::jsonb) || ${jsonValue}::jsonb`,
                 },
             });
 

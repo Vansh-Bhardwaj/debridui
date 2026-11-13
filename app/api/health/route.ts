@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, getDbConnectionInfo } from "@/lib/db";
 import { getAppUrl, getEnv } from "@/lib/env";
-import { auth } from "@/lib/auth";
+import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import type { AuthCheck, BuildCheck, DbCheck, DbConnectionCheck, EnvCheck, HealthResponse, CheckStatus } from "@/lib/health";
 
 export const dynamic = "force-dynamic";
@@ -173,8 +173,11 @@ const buildConnectionCheck = (): DbConnectionCheck => {
 
 export async function GET() {
     // Return minimal response for unauthenticated callers
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json(
             { status: "ok", time: new Date().toISOString() },
             { headers: { "Cache-Control": "no-store, max-age=0" } }

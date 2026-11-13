@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { addons } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -14,13 +14,16 @@ import { v7 as uuidv7 } from "uuid";
  * Get all user addons from database
  */
 export async function getUserAddons() {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
-    const userAddons = await db.select().from(addons).where(eq(addons.userId, session.user.id)).orderBy(addons.order);
+    const userAddons = await db.select().from(addons).where(eq(addons.userId, actor.userId)).orderBy(addons.order);
 
     return userAddons;
 }
@@ -29,9 +32,12 @@ export async function getUserAddons() {
  * Add a new addon — single query using subquery for order calculation
  */
 export async function addAddon(data: CreateAddon) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -43,11 +49,11 @@ export async function addAddon(data: CreateAddon) {
         .insert(addons)
         .values({
             id: newId,
-            userId: session.user.id,
+            userId: actor.userId,
             name: validated.name,
             url: validated.url,
             enabled: validated.enabled,
-            order: sql`(SELECT COALESCE(MAX(${addons.order}), -1) + 1 FROM ${addons} WHERE ${addons.userId} = ${session.user.id})`,
+            order: sql`(SELECT COALESCE(MAX(${addons.order}), -1) + 1 FROM ${addons} WHERE ${addons.userId} = ${actor.userId})`,
         })
         .returning();
 
@@ -65,14 +71,17 @@ export async function addAddon(data: CreateAddon) {
  * Remove an addon
  */
 export async function removeAddon(addonId: string) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
     const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
-    await db.delete(addons).where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
+    await db.delete(addons).where(and(eq(addons.id, validatedId), eq(addons.userId, actor.userId)));
 
     return { success: true };
 }
@@ -81,9 +90,12 @@ export async function removeAddon(addonId: string) {
  * Toggle addon enabled status
  */
 export async function toggleAddon(addonId: string, enabled: boolean) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -93,7 +105,7 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
     await db
         .update(addons)
         .set({ enabled: validatedEnabled })
-        .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
+        .where(and(eq(addons.id, validatedId), eq(addons.userId, actor.userId)));
 
     return { success: true };
 }
@@ -102,9 +114,12 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
  * Toggle addon catalog visibility on the dashboard
  */
 export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -114,7 +129,7 @@ export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean
     await db
         .update(addons)
         .set({ showCatalogs: validatedShow })
-        .where(and(eq(addons.id, validatedId), eq(addons.userId, session.user.id)));
+        .where(and(eq(addons.id, validatedId), eq(addons.userId, actor.userId)));
 
     return { success: true };
 }
@@ -126,9 +141,12 @@ export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean
  * through their pooler).
  */
 export async function updateAddonOrders(updates: { id: string; order: number }[]) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -143,21 +161,21 @@ export async function updateAddonOrders(updates: { id: string; order: number }[]
         await tx
             .update(addons)
             .set({ order: -2147483647 })
-            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, session.user.id)));
+            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, actor.userId)));
 
         // Assign final orders to remaining rows (the freed slot is now available)
         for (let i = 1; i < validated.length; i++) {
             await tx
                 .update(addons)
                 .set({ order: validated[i].order })
-                .where(and(eq(addons.id, validated[i].id), eq(addons.userId, session.user.id)));
+                .where(and(eq(addons.id, validated[i].id), eq(addons.userId, actor.userId)));
         }
 
         // Assign first row its final order
         await tx
             .update(addons)
             .set({ order: validated[0].order })
-            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, session.user.id)));
+            .where(and(eq(addons.id, validated[0].id), eq(addons.userId, actor.userId)));
     });
 
     return { success: true };

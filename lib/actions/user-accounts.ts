@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { userAccounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -15,14 +15,17 @@ import { v7 as uuidv7 } from "uuid";
  * Note: Returns apiKey because client-side debrid API calls require it
  */
 export async function getUserAccounts() {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
     // `async-defer-await` - Single query, await immediately
-    const accounts = await db.select().from(userAccounts).where(eq(userAccounts.userId, session.user.id));
+    const accounts = await db.select().from(userAccounts).where(eq(userAccounts.userId, actor.userId));
 
     return accounts;
 }
@@ -31,9 +34,12 @@ export async function getUserAccounts() {
  * Add a new user account
  */
 export async function addUserAccount(data: CreateAccount) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -43,7 +49,7 @@ export async function addUserAccount(data: CreateAccount) {
     } catch {
         throw new Error("Invalid account data: type and API key are required");
     }
-    const userId = session.user.id;
+    const userId = actor.userId;
 
     try {
         // Check if account already exists (SELECT works reliably via Hyperdrive cache)
@@ -111,9 +117,12 @@ export async function addUserAccount(data: CreateAccount) {
  * Remove a user account (only if owned by current user)
  */
 export async function removeUserAccount(accountId: string) {
-    const { data: session } = await auth.getSession();
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
 
-    if (!session) {
+    if (!actor) {
         redirect("/login");
     }
 
@@ -122,7 +131,7 @@ export async function removeUserAccount(accountId: string) {
     // Single DELETE with ownership check — avoids redundant SELECT (saves 1 DB query)
     const deleted = await db
         .delete(userAccounts)
-        .where(and(eq(userAccounts.id, validatedId), eq(userAccounts.userId, session.user.id)))
+        .where(and(eq(userAccounts.id, validatedId), eq(userAccounts.userId, actor.userId)))
         .returning({ id: userAccounts.id });
 
     if (deleted.length === 0) {

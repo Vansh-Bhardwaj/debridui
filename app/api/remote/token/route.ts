@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { getEnv } from "@/lib/env";
 
 /**
@@ -9,8 +9,11 @@ import { getEnv } from "@/lib/env";
  * Valid for 24 hours. Uses SYNC_TOKEN_SECRET (shared with sync worker).
  */
 export async function GET() {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -20,7 +23,7 @@ export async function GET() {
     }
 
     try {
-        const userId = session.user.id;
+        const userId = actor.userId;
         const timestamp = Date.now().toString();
         const payloadB64 = btoa(`${userId}|${timestamp}`);
 

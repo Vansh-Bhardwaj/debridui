@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActor, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { hiddenContinueWatching, userProgress } from "@/lib/db/schema";
 import { eq, and, desc, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 
-// ── Rate limiter (per-user, in-memory) ────────────────────────────────────
+// ── Rate limiter (per-profile, in-memory) ────────────────────────────────────
 // Protects Hyperdrive free tier (100K queries/day) from misbehaving clients.
 // Normal usage is heartbeat writes + pause/end flushes; allows burst capacity.
 const writeTimestamps = new Map<string, number[]>();
@@ -29,6 +29,7 @@ function isRateLimited(userId: string): boolean {
 
 function buildProgressConditions(
     userId: string,
+    profileId: string,
     imdbId: string,
     type: "movie" | "show" | null,
     season: number,
@@ -36,6 +37,7 @@ function buildProgressConditions(
 ) {
     const conditions = [
         eq(userProgress.userId, userId),
+        eq(userProgress.profileId, profileId),
         eq(userProgress.imdbId, imdbId),
     ];
 
@@ -54,6 +56,7 @@ function buildProgressConditions(
 
 function buildHiddenConditions(
     userId: string,
+    profileId: string,
     imdbId: string,
     type: "movie" | "show" | null,
     season: number,
@@ -61,6 +64,7 @@ function buildHiddenConditions(
 ) {
     const conditions = [
         eq(hiddenContinueWatching.userId, userId),
+        eq(hiddenContinueWatching.profileId, profileId),
         eq(hiddenContinueWatching.imdbId, imdbId),
     ];
 
@@ -86,12 +90,13 @@ function buildHiddenConditions(
  * Continue Watching from falling back to an old half-watched episode (e.g. S3E1)
  * once the latest one is done. Movies / non-episodes: just this item.
  */
-function completedProgressConditions(userId: string, imdbId: string, type: "movie" | "show" | null, season: number, episode: number): SQL[] {
+function completedProgressConditions(userId: string, profileId: string, imdbId: string, type: "movie" | "show" | null, season: number, episode: number): SQL[] {
     if (type !== "show" || Number.isNaN(season) || Number.isNaN(episode)) {
-        return buildProgressConditions(userId, imdbId, type, season, episode);
+        return buildProgressConditions(userId, profileId, imdbId, type, season, episode);
     }
     return [
         eq(userProgress.userId, userId),
+        eq(userProgress.profileId, profileId),
         eq(userProgress.imdbId, imdbId),
         eq(userProgress.type, "show"),
         or(lt(userProgress.season, season), and(eq(userProgress.season, season), lte(userProgress.episode, episode)))!,
@@ -101,8 +106,11 @@ function completedProgressConditions(userId: string, imdbId: string, type: "movi
 // GET /api/progress              → all user progress (continue watching list)
 // GET /api/progress?imdbId=...  → single item (cross-device resume lookup)
 export async function GET(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -119,7 +127,7 @@ export async function GET(request: NextRequest) {
             const episode = episodeRaw ? parseInt(episodeRaw) : NaN;
 
             const conditions = [
-                eq(userProgress.userId, session.user.id),
+                and(eq(userProgress.userId, actor.userId), eq(userProgress.profileId, actor.profileId)),
                 eq(userProgress.imdbId, imdbId),
             ];
             if (type === "movie" || type === "show") {
@@ -146,13 +154,13 @@ export async function GET(request: NextRequest) {
             db
                 .select()
                 .from(userProgress)
-                .where(eq(userProgress.userId, session.user.id))
+                .where(and(eq(userProgress.userId, actor.userId), eq(userProgress.profileId, actor.profileId)))
                 .orderBy(desc(userProgress.updatedAt))
                 .limit(limit),
             db
                 .select({ id: hiddenContinueWatching.id, imdbId: hiddenContinueWatching.imdbId, type: hiddenContinueWatching.type, season: hiddenContinueWatching.season, episode: hiddenContinueWatching.episode })
                 .from(hiddenContinueWatching)
-                .where(eq(hiddenContinueWatching.userId, session.user.id)),
+                .where(and(eq(hiddenContinueWatching.userId, actor.userId), eq(hiddenContinueWatching.profileId, actor.profileId))),
         ]);
 
         const hiddenKeys = new Set(hidden.map((item) => `${item.imdbId}:${item.type}:${item.season ?? "_"}:${item.episode ?? "_"}`));
@@ -170,13 +178,16 @@ export async function GET(request: NextRequest) {
 
 // POST /api/progress - Upsert progress (optimized for coarse updates)
 export async function POST(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Server-side rate limit: bounded burst per user
-    if (isRateLimited(session.user.id)) {
+    // Server-side rate limit: bounded burst per profile
+    if (isRateLimited(`${actor.userId}:${actor.profileId}`)) {
         return NextResponse.json(
             { error: "Too many requests", retryAfterMs: 2000 },
             { status: 429, headers: { "Retry-After": "2" } }
@@ -221,14 +232,16 @@ export async function POST(request: NextRequest) {
         // Completion clears cursor and un-hides any hidden shelf entry for this key.
         if (progressPercent >= 95) {
             const conditions = completedProgressConditions(
-                session.user.id,
+                actor.userId,
+                actor.profileId,
                 imdbId,
                 normalizedType,
                 safeSeason ?? NaN,
                 safeEpisode ?? NaN
             );
             const hiddenConditions = buildHiddenConditions(
-                session.user.id,
+                actor.userId,
+                actor.profileId,
                 imdbId,
                 normalizedType,
                 safeSeason ?? NaN,
@@ -248,7 +261,8 @@ export async function POST(request: NextRequest) {
         // happen once per session, so it rides on the pause/stop/end events.
         if (normalizedEventType !== "play_progress") {
             await db.delete(hiddenContinueWatching).where(and(...buildHiddenConditions(
-                session.user.id,
+                actor.userId,
+                actor.profileId,
                 imdbId,
                 normalizedType,
                 safeSeason ?? NaN,
@@ -260,7 +274,8 @@ export async function POST(request: NextRequest) {
         await db
             .insert(userProgress)
             .values({
-                userId: session.user.id,
+                userId: actor.userId,
+                profileId: actor.profileId,
                 imdbId,
                 type: normalizedType,
                 season: safeSeason,
@@ -270,7 +285,7 @@ export async function POST(request: NextRequest) {
                 updatedAt: new Date(),
             })
             .onConflictDoUpdate({
-                target: [userProgress.userId, userProgress.imdbId, userProgress.season, userProgress.episode],
+                target: [userProgress.userId, userProgress.profileId, userProgress.imdbId, userProgress.season, userProgress.episode],
                 set: {
                     progressSeconds: safeProgressSeconds,
                     durationSeconds: safeDurationSeconds,
@@ -287,8 +302,11 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/progress - Clear progress for a specific item
 export async function DELETE(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -313,8 +331,8 @@ export async function DELETE(request: NextRequest) {
         const nextSeason = nextSeasonRaw ? parseInt(nextSeasonRaw) : NaN;
         const nextEp = nextEpisodeRaw ? parseInt(nextEpisodeRaw) : NaN;
 
-        const progressConditions = buildProgressConditions(session.user.id, imdbId, type, season, episode);
-        const hiddenConditions = buildHiddenConditions(session.user.id, imdbId, type, season, episode);
+        const progressConditions = buildProgressConditions(actor.userId, actor.profileId, imdbId, type, season, episode);
+        const hiddenConditions = buildHiddenConditions(actor.userId, actor.profileId, imdbId, type, season, episode);
 
         if (mode === "hide") {
             const progressRows = await db
@@ -330,7 +348,8 @@ export async function DELETE(request: NextRequest) {
             await db
                 .insert(hiddenContinueWatching)
                 .values({
-                    userId: session.user.id,
+                    userId: actor.userId,
+                    profileId: actor.profileId,
                     imdbId,
                     type: resolvedType,
                     season: Number.isNaN(season) ? null : season,
@@ -338,7 +357,7 @@ export async function DELETE(request: NextRequest) {
                     hiddenAt: new Date(),
                 })
                 .onConflictDoUpdate({
-                    target: [hiddenContinueWatching.userId, hiddenContinueWatching.imdbId, hiddenContinueWatching.type, hiddenContinueWatching.season, hiddenContinueWatching.episode],
+                    target: [hiddenContinueWatching.userId, hiddenContinueWatching.profileId, hiddenContinueWatching.imdbId, hiddenContinueWatching.type, hiddenContinueWatching.season, hiddenContinueWatching.episode],
                     set: { hiddenAt: new Date() },
                 });
 
@@ -349,7 +368,7 @@ export async function DELETE(request: NextRequest) {
         const shouldSeedNext = type === "show" && !Number.isNaN(nextSeason) && !Number.isNaN(nextEp);
         const ops: Promise<unknown>[] = [
             db.delete(userProgress).where(and(...(shouldSeedNext
-                ? completedProgressConditions(session.user.id, imdbId, type, season, episode)
+                ? completedProgressConditions(actor.userId, actor.profileId, imdbId, type, season, episode)
                 : progressConditions))),
             db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
         ];
@@ -358,7 +377,8 @@ export async function DELETE(request: NextRequest) {
         if (shouldSeedNext) {
             ops.push(
                 db.insert(userProgress).values({
-                    userId: session.user.id,
+                    userId: actor.userId,
+                    profileId: actor.profileId,
                     imdbId,
                     type: "show",
                     season: nextSeason,
@@ -367,7 +387,7 @@ export async function DELETE(request: NextRequest) {
                     durationSeconds: 1, // placeholder — overwritten on actual playback
                     updatedAt: new Date(),
                 }).onConflictDoUpdate({
-                    target: [userProgress.userId, userProgress.imdbId, userProgress.season, userProgress.episode],
+                    target: [userProgress.userId, userProgress.profileId, userProgress.imdbId, userProgress.season, userProgress.episode],
                     set: {
                         progressSeconds: 0,
                         durationSeconds: 1,

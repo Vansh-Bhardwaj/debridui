@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { isBlockedUrl } from "@/lib/utils/url-safety";
 import { getAppUrl, getEnv } from "@/lib/env";
 
@@ -37,8 +37,11 @@ async function signPayload(payload: string, secret: string): Promise<string> {
  * Returns a short-lived signed proxy URL that VLC can fetch without cookies.
  */
 export async function GET(req: Request) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getAccount().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

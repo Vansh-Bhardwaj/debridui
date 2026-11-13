@@ -49,3 +49,15 @@ export const serverSettingsSchema = z.object({
     trakt_refresh_token: z.string().max(512).optional(),
     trakt_expires_at: z.number().optional(),
 });
+
+export const profileIdSchema = z.string().uuid("Invalid profile ID");
+export const createProfileSchema = z.object({
+    name: z.string().trim().min(1, "Profile name is required").max(50),
+    avatar: z.string().trim().max(2048).nullable().optional(),
+    color: z.string().regex(/^#[0-9a-f]{6}$/i, "Use a hex color").nullable().optional(),
+});
+export const updateProfileSchema = createProfileSchema.partial();
+export const profilePreferencesSchema = z.record(z.string().max(100), z.unknown()).refine(
+    (value) => JSON.stringify(value).length <= 16_384 && !Object.keys(value).some((key) => key === "tmdb_api_key" || key.startsWith("trakt_")),
+    "Preferences must exclude account keys and Trakt tokens and fit within 16KB",
+);

@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActor, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { watchHistory } from "@/lib/db/schema";
 import { sql, eq, desc, and, count } from "drizzle-orm";
 
 // GET /api/history?limit=20&offset=0 — paginated watch history, newest first
 export async function GET(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -20,14 +23,14 @@ export async function GET(request: NextRequest) {
             db
                 .select()
                 .from(watchHistory)
-                .where(eq(watchHistory.userId, session.user.id))
+                .where(and(eq(watchHistory.userId, actor.userId), eq(watchHistory.profileId, actor.profileId)))
                 .orderBy(desc(watchHistory.watchedAt))
                 .limit(limit)
                 .offset(offset),
             db
                 .select({ total: count() })
                 .from(watchHistory)
-                .where(eq(watchHistory.userId, session.user.id)),
+                .where(and(eq(watchHistory.userId, actor.userId), eq(watchHistory.profileId, actor.profileId))),
         ]);
 
         return NextResponse.json({ history, total }, {
@@ -41,11 +44,14 @@ export async function GET(request: NextRequest) {
 
 // POST /api/history — single-round-trip upsert.
 // Called for pause/stop/complete milestones. Unique key is
-// (user, imdb, type, season, episode); GREATEST() ensures
+// (user, profile, imdb, type, season, episode); GREATEST() ensures
 // progress/duration only ever grow.
 export async function POST(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -89,7 +95,8 @@ export async function POST(request: NextRequest) {
         await db
             .insert(watchHistory)
             .values({
-                userId: session.user.id,
+                userId: actor.userId,
+                profileId: actor.profileId,
                 imdbId,
                 type,
                 season: Number.isInteger(season) ? season : null,
@@ -101,7 +108,7 @@ export async function POST(request: NextRequest) {
                 watchedAt: new Date(),
             })
             .onConflictDoUpdate({
-                target: [watchHistory.userId, watchHistory.imdbId, watchHistory.type, watchHistory.season, watchHistory.episode],
+                target: [watchHistory.userId, watchHistory.profileId, watchHistory.imdbId, watchHistory.type, watchHistory.season, watchHistory.episode],
                 set: {
                     progressSeconds: sql`GREATEST(${watchHistory.progressSeconds}, EXCLUDED.progress_seconds)`,
                     durationSeconds: sql`GREATEST(${watchHistory.durationSeconds}, EXCLUDED.duration_seconds)`,
@@ -120,8 +127,11 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/history — delete a single entry (?id=uuid) or all entries (no params)
 export async function DELETE(request: NextRequest) {
-    const { data: session } = await auth.getSession();
-    if (!session?.user?.id) {
+    const actor = await getActor().catch((error) => {
+        if (error instanceof UnauthorizedError) return null;
+        throw error;
+    });
+    if (!actor) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -130,10 +140,10 @@ export async function DELETE(request: NextRequest) {
     try {
         if (id) {
             await db.delete(watchHistory).where(
-                and(eq(watchHistory.id, id), eq(watchHistory.userId, session.user.id))
+                and(eq(watchHistory.id, id), eq(watchHistory.userId, actor.userId), eq(watchHistory.profileId, actor.profileId))
             );
         } else {
-            await db.delete(watchHistory).where(eq(watchHistory.userId, session.user.id));
+            await db.delete(watchHistory).where(and(eq(watchHistory.userId, actor.userId), eq(watchHistory.profileId, actor.profileId)));
         }
         return NextResponse.json({ success: true });
     } catch (error) {
