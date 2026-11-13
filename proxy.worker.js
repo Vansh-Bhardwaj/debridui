@@ -646,23 +646,43 @@ async function handleVtt(request, env, context) {
     }
     const cache = caches.default;
     const cacheKey = new Request(`https://vtt.cache/${encodeURIComponent(target)}`);
-    const hit = await cache.match(cacheKey);
-    if (hit) return hit;
+    const headers = {
+        "content-type": "text/vtt; charset=utf-8",
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=86400",
+    };
     try {
-        const upstream = await fetch(target, { headers: { "user-agent": UA }, redirect: "follow", signal: AbortSignal.timeout(15000) });
-        if (!upstream.ok) return new Response("Subtitle fetch failed", { status: 502 });
-        const response = new Response(toWebVtt(await decodeSubtitleBytes(upstream)), {
-            headers: {
-                "content-type": "text/vtt; charset=utf-8",
-                "access-control-allow-origin": "*",
-                "cache-control": "public, max-age=86400",
-            },
-        });
-        context.waitUntil(cache.put(cacheKey, response.clone()));
-        return response;
+        let vtt;
+        const hit = await cache.match(cacheKey);
+        if (hit) {
+            vtt = await hit.text();
+        } else {
+            const upstream = await fetch(target, { headers: { "user-agent": UA }, redirect: "follow", signal: AbortSignal.timeout(15000) });
+            if (!upstream.ok) return new Response("Subtitle fetch failed", { status: 502 });
+            vtt = toWebVtt(await decodeSubtitleBytes(upstream));
+            context.waitUntil(cache.put(cacheKey, new Response(vtt, { headers })));
+        }
+        return new Response(retimeVtt(vtt, Number(url.searchParams.get("o") ?? 0), Number(url.searchParams.get("s") ?? 1)), { headers });
     } catch {
         return new Response("Subtitle fetch failed", { status: 502 });
     }
+}
+
+/**
+ * Subtitle sync (auto or user-set): displayed = original × scale + offset. Applied
+ * here because Apple's player has no subtitle delay of its own. Only cue timing
+ * lines change; the cached original stays untouched.
+ */
+function retimeVtt(vtt, offsetMs, scale) {
+    const o = Number.isFinite(offsetMs) ? Math.max(-600000, Math.min(600000, offsetMs)) : 0;
+    const s = Number.isFinite(scale) && scale > 0.9 && scale < 1.1 ? scale : 1;
+    if (o === 0 && s === 1) return vtt;
+    const shift = (h, m, sec, ms) => {
+        const t = Math.max(0, Math.round(((Number(h) * 3600 + Number(m) * 60 + Number(sec)) * 1000 + Number(ms)) * s + o));
+        const pad = (n, w = 2) => String(Math.floor(n)).padStart(w, "0");
+        return `${pad(t / 3600000)}:${pad((t / 60000) % 60)}:${pad((t / 1000) % 60)}.${pad(t % 1000, 3)}`;
+    };
+    return vtt.replace(/^.*-->.*$/gm, (line) => line.replace(/(\d+):(\d{2}):(\d{2})\.(\d{3})/g, (_, h, m, sec, ms) => shift(h, m, sec, ms)));
 }
 
 // eslint-disable-next-line import/no-anonymous-default-export

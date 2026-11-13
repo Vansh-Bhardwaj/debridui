@@ -7,6 +7,7 @@
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { getSignedProxyUrl } from "@/lib/signed-proxy";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
+import { isIdentity, type SubtitleTiming } from "@/lib/subtitles/auto-sync";
 
 const MAX_TRACKS = 10;
 /** Several in the user's language (releases differ in timing), one per other language. */
@@ -44,11 +45,22 @@ export function nativeSubtitleNames(subtitles: AddonSubtitle[]): string[] {
 const toBase64Url = (text: string) =>
     btoa(String.fromCharCode(...new TextEncoder().encode(text))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-export async function buildNativeHlsUrl(hlsUrl: string, subtitles: AddonSubtitle[], preferredLang: string): Promise<string> {
+/** Signed WebVTT URL for a subtitle, retimed by the proxy when a sync timing is set. */
+export async function signedVttUrl(subtitleUrl: string, timing?: SubtitleTiming): Promise<string> {
+    const url = await getSignedProxyUrl("vtt", subtitleUrl);
+    return isIdentity(timing) ? url : `${url}&o=${timing!.offsetMs}&s=${timing!.scale.toFixed(6)}`;
+}
+
+export async function buildNativeHlsUrl(
+    hlsUrl: string,
+    subtitles: AddonSubtitle[],
+    preferredLang: string,
+    timings: Record<string, SubtitleTiming> = {}
+): Promise<string> {
     if (subtitles.length === 0) return hlsUrl;
     const [master, ...vtts] = await Promise.all([
         getSignedProxyUrl("hls", hlsUrl),
-        ...subtitles.map((s) => getSignedProxyUrl("vtt", s.url)),
+        ...subtitles.map((s) => signedVttUrl(s.url, timings[s.url])),
     ]);
     const names = nativeSubtitleNames(subtitles);
     const tracks = subtitles.map((s, i) => ({

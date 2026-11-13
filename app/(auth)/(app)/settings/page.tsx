@@ -488,6 +488,28 @@ export default function SettingsPage() {
                         />
                     </div>
 
+                    {/* Subtitle auto-sync */}
+                    <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
+                        <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <Captions className="size-4 text-muted-foreground shrink-0" />
+                                <Label htmlFor="subtitle-auto-sync" className="text-sm">
+                                    Auto-Sync Subtitles
+                                </Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Listen to a few short clips of the audio on this device and fix subtitle delay and frame-rate drift. Works in Apple&apos;s player too
+                            </p>
+                        </div>
+                        <Switch
+                            id="subtitle-auto-sync"
+                            className="shrink-0"
+                            data-tv-focusable="list"
+                            checked={playback.subtitleAutoSync}
+                            onCheckedChange={(checked) => updatePlayback({ subtitleAutoSync: checked })}
+                        />
+                    </div>
+
                     {/* Auto-Skip Intro (IntroDB) */}
                     <div className="flex items-center justify-between gap-3 rounded-sm border border-border/50 p-3">
                         <div className="space-y-0.5 min-w-0">

@@ -140,6 +140,8 @@ export interface PlaybackSettings {
     subtitleLanguage: string;
     /** Auto-skip intros/recaps/outros using IntroDB community timestamps */
     autoSkipIntro: boolean;
+    /** Fit subtitle timing to the dialogue in the audio (offset + frame rate), on this device. */
+    subtitleAutoSync: boolean;
     /** Subtitle background style: 'solid' | 'semi' | 'outline' | 'none' */
     subtitleBackground: 'solid' | 'semi' | 'outline' | 'none';
     /** Subtitle text color */
@@ -288,6 +290,7 @@ const settingsConfig: SettingsConfig = {
             nextEpisodePromptSeconds: 30,
             subtitleLanguage: "english",
             autoSkipIntro: false,
+            subtitleAutoSync: true,
             subtitleBackground: 'semi' as const,
             subtitleColor: '#ffffff',
             subtitleFont: 'default' as const,

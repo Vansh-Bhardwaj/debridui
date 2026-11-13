@@ -20,6 +20,7 @@ import {
     Settings2,
     SkipBack,
     SkipForward,
+    Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,25 @@ import { detectContainer, getDeviceProfile, isMp4Family } from "@/lib/playback/d
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
-import { buildNativeHlsUrl, isPlaylistReachable, pickNativeSubtitles, waitForHlsReady } from "@/lib/playback/native-hls";
+import {
+    buildNativeHlsUrl,
+    isPlaylistReachable,
+    nativeSubtitleNames,
+    pickNativeSubtitles,
+    signedVttUrl,
+    waitForHlsReady,
+} from "@/lib/playback/native-hls";
+import {
+    fitToSpeech,
+    formatTiming,
+    isIdentity,
+    parseCues,
+    timingFromHeardLine,
+    applyTiming,
+    type Cue,
+    type SpeechWindow,
+    type SubtitleTiming,
+} from "@/lib/subtitles/auto-sync";
 
 /** Library lookup incl. retries while a just-added torrent appears (see preview-dialog). */
 const LINKS_WAIT_MS = 90_000;
@@ -63,6 +82,41 @@ const COMPLETE_MIN_WATCHED = 0.3;
  */
 let continueIntoNext = false;
 
+type StoredTiming = SubtitleTiming & { source: "auto" | "manual" };
+const timingKey = (fileName: string, subUrl: string) => `subsync:${fileName}|${subUrl}`;
+function loadTiming(fileName: string, subUrl: string): StoredTiming | null {
+    try {
+        return JSON.parse(localStorage.getItem(timingKey(fileName, subUrl)) ?? "null");
+    } catch {
+        return null;
+    }
+}
+function saveTiming(fileName: string, subUrl: string, timing: StoredTiming) {
+    try {
+        localStorage.setItem(timingKey(fileName, subUrl), JSON.stringify(timing));
+    } catch { /* storage full / disabled */ }
+}
+
+async function loadCues(subUrl: string): Promise<Cue[]> {
+    const res = await fetch(await signedVttUrl(subUrl), { signal: AbortSignal.timeout(20_000) });
+    return res.ok ? parseCues(await res.text()) : [];
+}
+
+/**
+ * Speech timeline for auto-sync, from a separate 480p session of the same file and
+ * audio track: a few short clips instead of 4K segments keeps the download small.
+ */
+async function analysisWindows(info: StreamInfo, duration: number, signal: AbortSignal): Promise<SpeechWindow[]> {
+    try {
+        const low = (info.height ?? Infinity) <= 480 ? info : await info.switchVariant({ resolutionIndex: 3, audioIndex: info.audioIndex });
+        if (!low || !(await waitForHlsReady(low.hlsUrl, signal, CONVERT_WAIT_MS))) return [];
+        const { readSpeechWindows } = await import("@/lib/subtitles/speech-activity");
+        return await readSpeechWindows(low.hlsUrl, duration, signal);
+    } catch {
+        return [];
+    }
+}
+
 type WebKitVideo = HTMLVideoElement & {
     webkitShowPlaybackTargetPicker?: () => void;
     webkitSupportsPresentationMode?: (mode: string) => boolean;
@@ -81,7 +135,7 @@ function mediaDuration(video: HTMLVideoElement): number {
     return video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
 }
 
-type Sheet = "quality" | "audio" | "subtitles" | "speed" | null;
+type Sheet = "quality" | "audio" | "subtitles" | "sync" | "speed" | null;
 
 function formatTime(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -164,18 +218,44 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // swapping in a rebuilt playlist at the same position — otherwise they'd never show.
     const nativeSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
     const subsSettled = nativeSubs.length > 0 || subsGraceOver;
-    const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[]; failed?: boolean } | null>(null);
+
+    // Subtitle timing (auto-sync or set by hand), remembered per file + subtitle. The
+    // proxy retimes the WebVTT, so it applies in Apple's player too.
+    const [timingOverrides, setTimingOverrides] = useState<Record<string, StoredTiming>>({});
+    const timings = useMemo(() => {
+        const all: Record<string, StoredTiming> = {};
+        for (const sub of nativeSubs) {
+            const t = timingOverrides[sub.url] ?? loadTiming(file.name, sub.url);
+            if (t) all[sub.url] = t;
+        }
+        return all;
+    }, [nativeSubs, timingOverrides, file.name]);
+    const setTiming = useCallback(
+        (subUrl: string, timing: StoredTiming) => {
+            saveTiming(file.name, subUrl, timing);
+            setTimingOverrides((o) => ({ ...o, [subUrl]: timing }));
+        },
+        [file.name]
+    );
+    const timingSig = (subs: AddonSubtitle[]) =>
+        subs.map((sub) => (isIdentity(timings[sub.url]) ? "" : `${timings[sub.url].offsetMs}/${timings[sub.url].scale}`)).join("|");
+
+    const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[]; failed?: boolean; sig?: string } | null>(null);
     const masterForStream = master && master.hls === hlsUrl ? master : null;
     /** Resume playback after the element reloads (subtitle or variant swap). */
     const resumeAfterSwapRef = useRef(false);
-    const needsSubs = !masterForStream || (!masterForStream.failed && masterForStream.subs.length === 0 && nativeSubs.length > 0);
+    const currentSig = timingSig(nativeSubs);
+    const needsSubs =
+        !masterForStream ||
+        (!masterForStream.failed && masterForStream.subs.length === 0 && nativeSubs.length > 0) ||
+        (masterForStream.subs.length > 0 && masterForStream.sig !== currentSig);
     // Only once the provider's stream exists: the wrapper fetches that playlist, so
     // checking it during a slow conversion would fail and silently drop subtitles.
     useEffect(() => {
         if (!hlsUrl || !videoReady || !subsSettled || !needsSubs) return;
         let cancelled = false;
         const subs = nativeSubs;
-        buildNativeHlsUrl(hlsUrl, subs, subtitleLanguage)
+        buildNativeHlsUrl(hlsUrl, subs, subtitleLanguage, timings)
             .then(async (url) => (url === hlsUrl || (await isPlaylistReachable(url)) ? url : null))
             .catch(() => null)
             .then((url) => {
@@ -188,12 +268,12 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 if (url === hlsUrl && masterForStream) return; // nothing new to add
                 const video = videoRef.current;
                 resumeAfterSwapRef.current = !!video && !video.paused;
-                setMaster({ hls: hlsUrl, url, subs: url === hlsUrl ? [] : subs });
+                setMaster({ hls: hlsUrl, url, subs: url === hlsUrl ? [] : subs, sig: currentSig });
             });
         return () => {
             cancelled = true;
         };
-    }, [hlsUrl, videoReady, subsSettled, needsSubs, masterForStream, nativeSubs, subtitleLanguage]);
+    }, [hlsUrl, videoReady, subsSettled, needsSubs, masterForStream, nativeSubs, subtitleLanguage, timings, currentSig]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     // Converted stream when the provider has one; the original only for MP4-family (or unknown) files.
@@ -487,6 +567,76 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         setActiveTrack(index);
     }, []);
 
+    // ── Subtitle sync: automatic (audio) and by hand ("the line I just heard") ──
+    const subtitleAutoSync = useSettingsStore((s) => s.settings.playback.subtitleAutoSync);
+    const syncSubs = masterForStream?.subs;
+    const syncNames = useMemo(() => nativeSubtitleNames(syncSubs ?? []), [syncSubs]);
+    const activeLabel = textTracks.find((t) => t.index === activeTrack)?.label.trim();
+    const activeSub = activeLabel ? syncSubs?.[syncNames.indexOf(activeLabel)] : undefined;
+    const activeTiming: SubtitleTiming = (activeSub && timings[activeSub.url]) || { offsetMs: 0, scale: 1 };
+
+    const lifetimeRef = useRef<AbortController | null>(null);
+    useEffect(() => {
+        const controller = new AbortController();
+        lifetimeRef.current = controller;
+        return () => controller.abort();
+    }, []);
+    const speechRef = useRef<Promise<SpeechWindow[]> | null>(null);
+    const autoCheckedRef = useRef(new Set<string>());
+    useEffect(() => {
+        const signal = lifetimeRef.current?.signal;
+        // After playback starts, so the analysis never competes with startup.
+        if (!signal || !subtitleAutoSync || !playing || !info || !duration || !syncSubs?.length) return;
+        const pending = syncSubs.filter((sub) => !timings[sub.url] && !autoCheckedRef.current.has(sub.url)).slice(0, 4);
+        if (pending.length === 0) return;
+        pending.forEach((sub) => autoCheckedRef.current.add(sub.url));
+        speechRef.current ??= analysisWindows(info, duration, signal);
+        void (async () => {
+            const windows = await speechRef.current!;
+            if (windows.length === 0) return;
+            const fits: [string, SubtitleTiming][] = [];
+            for (const sub of pending) {
+                const cues = await loadCues(sub.url).catch(() => []);
+                await new Promise((resolve) => setTimeout(resolve, 0)); // keep the UI responsive between fits
+                const fit = fitToSpeech(cues, windows);
+                if (fit) fits.push([sub.url, fit]);
+            }
+            if (signal.aborted) return;
+            // One state update, so one stream reload for all fitted subtitles.
+            fits.forEach(([url, fit]) => setTiming(url, { offsetMs: fit.offsetMs, scale: fit.scale, source: "auto" }));
+            const changed = fits.find(([, fit]) => !isIdentity(fit));
+            if (changed) toast.success(`Subtitles synced to the audio (${formatTiming(changed[1])})`);
+        })();
+    }, [subtitleAutoSync, playing, info, duration, syncSubs, timings, setTiming]);
+
+    const [heardCues, setHeardCues] = useState<{ url: string; cues: Cue[] } | null>(null);
+    useEffect(() => {
+        if (sheet !== "sync" || !activeSub || heardCues?.url === activeSub.url) return;
+        let cancelled = false;
+        void loadCues(activeSub.url)
+            .catch(() => [])
+            .then((cues) => {
+                if (!cancelled) setHeardCues({ url: activeSub.url, cues });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [sheet, activeSub, heardCues?.url]);
+    const [draftOffsetMs, setDraftOffsetMs] = useState<number | null>(null);
+    const applyTimingToActive = (timing: SubtitleTiming) => {
+        if (!activeSub) return;
+        setTiming(activeSub.url, { ...timing, source: "manual" });
+        setDraftOffsetMs(null);
+        setSheet(null);
+        toast.success(`Subtitle timing: ${formatTiming(timing)}`);
+    };
+    const recentLines = (heardCues?.url === activeSub?.url ? (heardCues?.cues ?? []) : [])
+        .filter((cue) => {
+            const shown = applyTiming(cue.start, activeTiming);
+            return shown <= time + 2 && shown >= time - 25;
+        })
+        .slice(-8);
+
     // ── Controls ──────────────────────────────────────────────────────────
     const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pokeControls = useCallback(() => {
@@ -574,14 +724,14 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 return;
             }
             const subs = master?.subs ?? [];
-            const url = await buildNativeHlsUrl(next.hlsUrl, subs, subtitleLanguage).catch(() => next.hlsUrl);
+            const url = await buildNativeHlsUrl(next.hlsUrl, subs, subtitleLanguage, timings).catch(() => next.hlsUrl);
             resumeAfterSwapRef.current = !videoRef.current?.paused;
             setVideoCheck({ url: next.hlsUrl, ok: true });
-            setMaster({ hls: next.hlsUrl, url, subs: url === next.hlsUrl ? [] : subs });
+            setMaster({ hls: next.hlsUrl, url, subs: url === next.hlsUrl ? [] : subs, sig: master?.sig });
             setVariant(next);
             setSwitching(false);
         },
-        [info, master, subtitleLanguage]
+        [info, master, subtitleLanguage, timings]
     );
 
     const tryNextSource = () => {
@@ -602,6 +752,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             show: (info?.audios.length ?? 0) > 1,
         },
         { id: "subtitles", icon: Captions, label: "Subtitles", value: textTracks.find((t) => t.index === activeTrack)?.label ?? "Off", show: textTracks.length > 0 },
+        { id: "sync", icon: Timer, label: "Sync", value: formatTiming(activeTiming), show: !!activeSub },
         { id: "speed", icon: Gauge, label: "Speed", value: speed === 1 ? "Normal" : `${speed}×`, show: true },
     ];
 
@@ -989,6 +1140,54 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         onClick={(e) => e.stopPropagation()}>
                         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />
                         <p className="px-5 pb-2 text-xs tracking-widest uppercase text-white/50">{chips.find((c) => c.id === sheet)?.label}</p>
+                        {sheet === "sync" && activeSub && (
+                            <div className="space-y-3 px-5 pb-2">
+                                <p className="text-sm text-white/70">
+                                    {formatTiming(activeTiming)}
+                                    {timings[activeSub.url]?.source === "auto" && !isIdentity(activeTiming) ? " · matched to the audio" : ""}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {[-500, 500].map((step) => (
+                                        <Button
+                                            key={step}
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setDraftOffsetMs((d) => (d ?? activeTiming.offsetMs) + step)}>
+                                            {step < 0 ? "Earlier 0.5s" : "Later 0.5s"}
+                                        </Button>
+                                    ))}
+                                    {draftOffsetMs !== null && draftOffsetMs !== activeTiming.offsetMs ? (
+                                        <Button size="sm" onClick={() => applyTimingToActive({ ...activeTiming, offsetMs: draftOffsetMs })}>
+                                            Apply {formatTiming({ ...activeTiming, offsetMs: draftOffsetMs })}
+                                        </Button>
+                                    ) : (
+                                        !isIdentity(activeTiming) && (
+                                            <Button size="sm" variant="ghost" onClick={() => applyTimingToActive({ offsetMs: 0, scale: 1 })}>
+                                                Reset
+                                            </Button>
+                                        )
+                                    )}
+                                </div>
+                                <p className="pt-1 text-xs tracking-widest uppercase text-white/50">Tap the line you just heard</p>
+                                {heardCues?.url !== activeSub.url ? (
+                                    <Loader2 className="size-4 animate-spin text-white/60" />
+                                ) : recentLines.length === 0 ? (
+                                    <p className="text-sm text-white/50">Play a little dialogue, then come back here.</p>
+                                ) : (
+                                    recentLines.map((cue) => (
+                                        <button
+                                            key={`${cue.start}-${cue.text}`}
+                                            type="button"
+                                            onClick={() =>
+                                                applyTimingToActive(timingFromHeardLine(cue, videoRef.current?.currentTime ?? time, activeTiming))
+                                            }
+                                            className="block w-full rounded-md bg-white/[0.06] px-3 py-2 text-left text-sm active:bg-white/15">
+                                            {cue.text}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        )}
                         {sheetOptions.map((option) => (
                             <button
                                 key={option.key}
