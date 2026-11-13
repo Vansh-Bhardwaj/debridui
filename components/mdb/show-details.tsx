@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, memo, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
-import { CalendarDays, Tv, Eye, EyeOff, Loader2, Globe, Radio, ArrowUp, ArrowDown } from "lucide-react";
+import { CalendarDays, Tv, Eye, EyeOff, Loader as Loader2, Globe, Radio, ArrowUp, ArrowDown } from "reicon-react";
 import { traktClient } from "@/lib/trakt";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

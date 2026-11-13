@@ -2,7 +2,7 @@
 
 import { type TraktCastMember, type TraktCrewMember } from "@/lib/trakt";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User } from "lucide-react";
+import { User } from "reicon-react";
 import Image from "next/image";
 import { useTraktPeople } from "@/hooks/use-trakt";
 import { memo } from "react";

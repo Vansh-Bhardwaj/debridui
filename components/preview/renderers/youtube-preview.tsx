@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DebridFileNode } from "@/lib/types";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader as Loader2, AlertCircle } from "reicon-react";
 
 interface YouTubePreviewProps {
     file: DebridFileNode;

@@ -1,6 +1,6 @@
 "use client";
 
-import { type LucideIcon } from "lucide-react";
+import { type IconComponent } from "reicon-react";
 
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import Link from "next/link";
@@ -17,7 +17,7 @@ export function NavMain({
     items: {
         title: string;
         url: string;
-        icon?: LucideIcon;
+        icon?: IconComponent;
         isActive?: boolean;
         action?: string;
         badge?: React.ReactNode;
@@ -65,13 +65,13 @@ export function NavMain({
                                 }>
                                 {item.action ? (
                                     <>
-                                        {item.icon && <item.icon />}
+                                        {item.icon && <item.icon weight={isActive ? "Filled" : "Outline"} />}
                                         <span>{item.title}</span>
                                         {item.badge}
                                     </>
                                 ) : (
                                     <Link href={item.url} onClick={() => setOpenMobile(false)}>
-                                        {item.icon && <item.icon />}
+                                        {item.icon && <item.icon weight={isActive ? "Filled" : "Outline"} />}
                                         <span>{item.title}</span>
                                         {item.badge}
                                     </Link>

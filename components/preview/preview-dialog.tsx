@@ -9,7 +9,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Download, X, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, X, Loader as Loader2 } from "reicon-react";
 import { PreviewContent } from "./preview-content";
 import { formatSize, downloadLinks, getFileType } from "@/lib/utils";
 import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";

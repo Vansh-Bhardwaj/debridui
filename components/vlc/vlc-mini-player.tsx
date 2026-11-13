@@ -10,17 +10,17 @@ import type { Addon } from "@/lib/addons/types";
 import {
     Play,
     Pause,
-    SkipBack,
-    SkipForward,
-    Volume2,
+    SkipPrev as SkipBack,
+    SkipNext as SkipForward,
+    VolumeHigh as Volume2,
     VolumeX,
-    Maximize2,
+    Fullscreen as Maximize2,
     X,
     ChevronUp,
     ChevronDown,
-    AudioLines,
+    Soundwave as AudioLines,
     Subtitles,
-} from "lucide-react";
+} from "reicon-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -245,9 +245,9 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                         aria-label={isPlaying ? "Pause" : "Play"}
                                     >
                                         {isPlaying ? (
-                                            <Pause className="size-5 fill-current" />
+                                            <Pause weight="Filled" className="size-5" />
                                         ) : (
-                                            <Play className="size-5 fill-current ml-0.5" />
+                                            <Play weight="Filled" className="size-5 ml-0.5" />
                                         )}
                                     </Button>
                                     <Button
@@ -348,7 +348,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                                 title="Previous Episode"
                                                 aria-label="Previous Episode"
                                             >
-                                                <SkipBack className="size-3.5 fill-current" />
+                                                <SkipBack weight="Filled" className="size-3.5" />
                                             </Button>
                                             <Button
                                                 variant="ghost"
@@ -358,7 +358,7 @@ const VLCMiniPlayerInner = memo(function VLCMiniPlayerInner() {
                                                 title="Next Episode"
                                                 aria-label="Next Episode"
                                             >
-                                                <SkipForward className="size-3.5 fill-current" />
+                                                <SkipForward weight="Filled" className="size-3.5" />
                                             </Button>
                                         </>
                                     )}

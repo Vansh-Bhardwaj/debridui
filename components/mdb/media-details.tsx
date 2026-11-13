@@ -6,7 +6,7 @@ import { MovieDetails } from "./movie-details";
 import { ShowDetails } from "./show-details";
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
-import { Play } from "lucide-react";
+import { Play } from "reicon-react";
 import { WatchButton } from "@/components/common/watch-button";
 
 interface MediaDetailsProps {
@@ -88,7 +88,7 @@ export const MediaDetails = memo(function MediaDetails({ media, mediaId, type, i
                         <div className="flex flex-col items-center gap-2">
                             <WatchButton imdbId={mediaId} mediaType={type} title={mediaId}>
                                 <Button size="lg" className="gap-2">
-                                    <Play className="size-4 fill-current" />
+                                    <Play weight="Filled" className="size-4" />
                                     Find Streams
                                 </Button>
                             </WatchButton>

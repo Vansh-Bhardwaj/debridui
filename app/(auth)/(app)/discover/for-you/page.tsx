@@ -4,7 +4,7 @@ export const dynamic = "force-static";
 import { useProfile } from "@/hooks/use-profile";
 import { memo, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Heart, Film, Tv, Sparkles, RotateCcw, Gem } from "lucide-react";
+import { ArrowLeft, Heart, Film, Tv, Sparkles, Undo as RotateCcw, GemSparkle as Gem } from "reicon-react";
 import { MediaCard } from "@/components/mdb/media-card";
 import { EmptyState, LoadingState } from "@/components/common/async-state";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";

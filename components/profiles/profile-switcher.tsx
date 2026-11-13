@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check } from "reicon-react";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";

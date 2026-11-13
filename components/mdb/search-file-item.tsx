@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { HardDrive } from "lucide-react";
+import { HardDrive } from "reicon-react";
 import { formatSize } from "@/lib/utils";
 import { type DebridFile } from "@/lib/types";
 import { FileItemContextMenu } from "../explorer/file-item-context-menu";

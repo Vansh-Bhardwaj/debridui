@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { memo } from "react";
-import { Film, Tv, Star } from "lucide-react";
+import { Film, Tv, Star } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { type TraktSearchResult } from "@/lib/trakt";
 import { getPosterUrl } from "@/lib/utils/media";
@@ -67,7 +67,7 @@ export const SearchMediaItem = memo(function SearchMediaItem({
                         <>
                             {media.year && <span className="text-border mx-1.5">·</span>}
                             <span className="flex items-center gap-1">
-                                <Star className="size-2.5 fill-primary text-primary" />
+                                <Star weight="Filled" className="size-2.5 text-primary" />
                                 {media.rating.toFixed(1)}
                             </span>
                         </>

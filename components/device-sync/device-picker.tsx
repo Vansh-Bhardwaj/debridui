@@ -5,18 +5,18 @@ import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { DeviceInfo, RemoteAction } from "@/lib/device-sync/protocol";
 import {
     Monitor,
-    Smartphone,
+    Mobile as Smartphone,
     Tablet,
     Tv,
-    Volume2,
+    VolumeHigh as Volume2,
     Pause,
     Play,
-    SkipForward,
-    SkipBack,
-    Cast,
+    SkipNext as SkipForward,
+    SkipPrev as SkipBack,
+    Screencast as Cast,
     Link2,
     Check,
-} from "lucide-react";
+} from "reicon-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,

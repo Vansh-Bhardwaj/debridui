@@ -5,7 +5,7 @@ import { WebDownload } from "@/lib/types";
 import { useWebDownloads } from "./web-downloads-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Copy, Trash2, X, Loader2, Download } from "lucide-react";
+import { Copy, Trash2, X, Loader as Loader2, Download } from "reicon-react";
 import { toast } from "sonner";
 
 interface DownloadsBulkActionsProps {

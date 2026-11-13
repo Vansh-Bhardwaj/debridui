@@ -27,7 +27,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Bookmark, Heart, Star, Eye, Radio, Loader2 } from "lucide-react";
+import { Bookmark, Heart, Star, Eye, Radio, Loader as Loader2 } from "reicon-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -193,7 +193,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                     className="w-full gap-2"
                     disabled={watchlistLoading}
                     onClick={handleWatchlistToggle}>
-                    {watchlistLoading ? <Loader2 className="size-4 animate-spin" /> : <Bookmark className={cn("size-4", isInWatchlist && "fill-current")} />}
+                    {watchlistLoading ? <Loader2 className="size-4 animate-spin" /> : <Bookmark weight={isInWatchlist ? "Filled" : "Outline"} className="size-4" />}
                     {isInWatchlist ? "In Watchlist" : "Watchlist"}
                 </Button>
                 <Button
@@ -202,7 +202,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                     className="w-full gap-2"
                     disabled={favLoading}
                     onClick={handleFavoriteToggle}>
-                    {favLoading ? <Loader2 className="size-4 animate-spin" /> : <Heart className={cn("size-4", isInFavorites && "fill-current")} />}
+                    {favLoading ? <Loader2 className="size-4 animate-spin" /> : <Heart weight={isInFavorites ? "Filled" : "Outline"} className="size-4" />}
                     {isInFavorites ? "Favorited" : "Favorite"}
                 </Button>
             </div>
@@ -223,7 +223,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                         {watchlistLoading ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
-                            <Bookmark className={cn("size-4", isInWatchlist && "fill-current text-primary")} />
+                            <Bookmark weight={isInWatchlist ? "Filled" : "Outline"} className={cn("size-4", isInWatchlist && "text-primary")} />
                         )}
                     </Button>
                 </TooltipTrigger>
@@ -242,7 +242,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                         {favLoading ? (
                             <Loader2 className="size-4 animate-spin" />
                         ) : (
-                            <Heart className={cn("size-4", isInFavorites && "fill-current text-destructive")} />
+                            <Heart weight={isInFavorites ? "Filled" : "Outline"} className={cn("size-4", isInFavorites && "text-destructive")} />
                         )}
                     </Button>
                 </TooltipTrigger>
@@ -258,7 +258,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                                 {ratingLoading ? (
                                     <Loader2 className="size-4 animate-spin" />
                                 ) : (
-                                    <Star className={cn("size-4", currentRating > 0 && "fill-primary text-primary")} />
+                                    <Star weight={currentRating > 0 ? "Filled" : "Outline"} className={cn("size-4", currentRating > 0 && "text-primary")} />
                                 )}
                                 {currentRating > 0 && (
                                     <span className="absolute -bottom-0.5 text-[9px] font-bold text-primary">{currentRating}</span>

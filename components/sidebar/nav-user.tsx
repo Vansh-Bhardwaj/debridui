@@ -3,7 +3,7 @@
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Check, ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "lucide-react";
+import { Check, ChevronExpandY as ChevronsUpDown, Logout as LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "reicon-react";
 
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import {

@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useRef, useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query";
 import Hls from "hls.js";
 import { DebridFileNode, MediaPlayer } from "@/lib/types";
-import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, Settings, Plus, Minus, ExternalLink, AlertCircle, SkipBack, SkipForward, RefreshCw, Cast, PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "lucide-react";
+import { Play, Pause, VolumeHigh as Volume2, VolumeX, Fullscreen as Maximize2, ExitFullscreen as Minimize2, Settings, Plus, Minus, ArrowUpRightSquare as ExternalLink, AlertCircle, SkipPrev as SkipBack, SkipNext as SkipForward, Refresh as RefreshCw, Screencast as Cast, Pip as PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "reicon-react";
 import { toast } from "sonner";
 import { useBingeTransition } from "@/components/player/use-binge-transition";
 import { TransitionOverlay } from "@/components/player/binge-overlays";
@@ -3190,9 +3190,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 data-visible={centerAction !== null ? "true" : "false"}
                             >
                                 {centerAction === "play" ? (
-                                    <Play className="h-8 w-8 fill-current ml-0.5" />
+                                    <Play weight="Filled" className="h-8 w-8 ml-0.5" />
                                 ) : (
-                                    <Pause className="h-8 w-8 fill-current" />
+                                    <Pause weight="Filled" className="h-8 w-8" />
                                 )}
                             </div>
                         </div>
@@ -3210,7 +3210,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 className="player-center-big-play"
                                 aria-label="Play"
                             >
-                                <Play className="relative z-[1] h-9 w-9 fill-current ml-1 drop-shadow-md" />
+                                <Play weight="Filled" className="relative z-[1] h-9 w-9 ml-1 drop-shadow-md" />
                             </button>
                         </div>
                     )}
@@ -3230,7 +3230,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                                 className="player-mobile-chrome-btn player-mobile-chrome-btn--main pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full text-white"
                             >
-                                {isPlaying ? <Pause className="size-6" /> : <Play className="size-6 fill-current ml-0.5" />}
+                                {isPlaying ? <Pause className="size-6" /> : <Play weight="Filled" className="size-6 ml-0.5" />}
                             </button>
                             <button
                                 type="button"
@@ -3587,9 +3587,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         data-tv-focusable
                                     >
                                         {isPlaying ? (
-                                            <Pause className="h-5 w-5 fill-current" />
+                                            <Pause weight="Filled" className="h-5 w-5" />
                                         ) : (
-                                            <Play className="h-5 w-5 fill-current ml-0.5" />
+                                            <Play weight="Filled" className="h-5 w-5 ml-0.5" />
                                         )}
                                     </button>
 
@@ -3600,7 +3600,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         title="Previous episode"
                                         data-tv-focusable
                                     >
-                                        <SkipBack className="h-4 w-4 fill-current" />
+                                        <SkipBack weight="Filled" className="h-4 w-4" />
                                     </button>
                                     <button
                                         className={PLAYER_BTN_SM}
@@ -3613,7 +3613,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                         title="Next episode"
                                         data-tv-focusable
                                     >
-                                        <SkipForward className="h-4 w-4 fill-current" />
+                                        <SkipForward weight="Filled" className="h-4 w-4" />
                                     </button>
 
                                     {/* Volume */}
@@ -4522,7 +4522,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             onClick={(e) => { e.stopPropagation(); handleIosTapToPlay(); }}
                             className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-white z-50">
                             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/15">
-                                <Play className="h-10 w-10 fill-current ml-1" />
+                                <Play weight="Filled" className="h-10 w-10 ml-1" />
                             </div>
                             <span className="text-sm font-medium">Tap to play</span>
                             {hasCodecIssue && !isUsingTranscodedStream && (

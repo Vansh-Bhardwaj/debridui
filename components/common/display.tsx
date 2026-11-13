@@ -1,16 +1,16 @@
 import { AccountType, DebridFileStatus, WebDownloadStatus } from "@/lib/types";
 import {
-    DownloadIcon,
-    PauseIcon,
-    InfoIcon,
-    StoreIcon,
-    UploadIcon,
-    CircleCheckIcon,
-    ClockIcon,
-    OctagonAlertIcon,
-    CircleXIcon,
-    Zap,
-} from "lucide-react";
+    Download as DownloadIcon,
+    Pause as PauseIcon,
+    InfoCircle as InfoIcon,
+    Store as StoreIcon,
+    Upload as UploadIcon,
+    CheckCircle as CircleCheckIcon,
+    Clock as ClockIcon,
+    Alert as OctagonAlertIcon,
+    CloseCircle as CircleXIcon,
+    BoltLightning as Zap,
+} from "reicon-react";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 

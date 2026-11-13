@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
-import { Cast } from "lucide-react";
+import { Screencast as Cast } from "reicon-react";
 
 /**
  * Small top banner shown when this device is being controlled by another device.

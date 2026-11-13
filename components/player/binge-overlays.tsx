@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { SkipForward, X } from "lucide-react";
+import { SkipNext as SkipForward, X } from "reicon-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    Transition Overlay

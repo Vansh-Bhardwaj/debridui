@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-    ArrowRightIcon,
-    ArrowUpRightIcon,
-    ChevronDownIcon,
+    ArrowRight as ArrowRightIcon,
+    ArrowUpRight as ArrowUpRightIcon,
+    ChevronDown as ChevronDownIcon,
     Play,
-    MonitorPlay,
+    VideoPlay as MonitorPlay,
     Subtitles,
     Gamepad2,
     Filter,
@@ -13,18 +13,18 @@ import {
     Users,
     Search,
     Globe,
-    Zap,
+    BoltLightning as Zap,
     Activity,
-    Timer,
+    Stopwatch as Timer,
     Database,
-    Clapperboard,
+    ClapperboardPlay as Clapperboard,
     Tv,
-    Youtube,
+    VideoPlay as Youtube,
     Star,
     BookOpen,
-    Smartphone,
-    type LucideIcon,
-} from "lucide-react";
+    Mobile as Smartphone,
+    type IconComponent,
+} from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { Gallery } from "@/components/common/gallery";
 import { DISCORD_URL, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_ICONS } from "@/lib/constants";
@@ -85,7 +85,7 @@ const techStack = [
     { name: "PostgreSQL", icon: "postgresql" },
 ];
 
-const features: { category: string; icon: LucideIcon; items: { icon: LucideIcon; label: string }[] }[] = [
+const features: { category: string; icon: IconComponent; items: { icon: IconComponent; label: string }[] }[] = [
     {
         category: "Streaming",
         icon: Play,

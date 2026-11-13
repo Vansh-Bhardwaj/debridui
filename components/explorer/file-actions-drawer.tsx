@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Trash2, RotateCcw, X, Copy, Download, ListMusic, Loader2 } from "lucide-react";
+import { Trash2, Undo as RotateCcw, X, Copy, Download, MusicPlaylist as ListMusic, Loader as Loader2 } from "reicon-react";
 import { DebridFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";

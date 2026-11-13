@@ -12,7 +12,7 @@ import { SectionDivider } from "@/components/common/section-divider";
 import { clearAppCache } from "@/lib/utils";
 import { parseUserAgent } from "@/lib/utils/media-player";
 import { toast } from "sonner";
-import { UserCog, AlertTriangle, Monitor, Smartphone, Tablet, Clock, MapPin } from "lucide-react";
+import { UserEdit as UserCog, AlertTriangle, Monitor, Mobile as Smartphone, Tablet, Clock, Location as MapPin } from "reicon-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {

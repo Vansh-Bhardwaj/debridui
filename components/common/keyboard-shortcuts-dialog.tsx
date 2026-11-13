@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, createContext, useContext, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Keyboard } from "lucide-react";
+import { Keyboard } from "reicon-react";
 
 interface Shortcut {
     keys: string[];

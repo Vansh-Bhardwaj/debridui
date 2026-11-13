@@ -7,7 +7,7 @@ import { NavMain } from "@/components/sidebar/nav-main";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { AccountSwitcher } from "./account-switcher";
-import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, Bookmark, History, Compass } from "lucide-react";
+import { FolderOpen, Search as SearchIcon, Home as HomeIcon, Settings as SettingsIcon, Users as UsersIcon, Puzzle, Link2, Bookmark, History, Compass } from "reicon-react";
 import { useSearch } from "@/components/mdb/search-provider";
 import { useTraktRecentEpisodes } from "@/hooks/use-trakt";
 

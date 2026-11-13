@@ -2,7 +2,7 @@
 export const dynamic = "force-static";
 
 import { useState, useCallback, useRef, useEffect, memo } from "react";
-import { Compass, Film, Tv, Loader2 } from "lucide-react";
+import { Compass, Film, Tv, Loader as Loader2 } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { MediaCard } from "@/components/mdb/media-card";
 import { Skeleton } from "@/components/ui/skeleton";

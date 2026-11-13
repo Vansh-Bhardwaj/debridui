@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/common/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 import { Button } from "@/components/ui/button";
-import { Share2 } from "lucide-react";
+import { Share as Share2 } from "reicon-react";
 
 /**
  * Web Share Target handler.

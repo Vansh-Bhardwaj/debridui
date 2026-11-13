@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { MediaStats } from "./media-stats";
 import { memo } from "react";
 import { getPosterUrl, getBackdropUrl } from "@/lib/utils/media";
-import { ArrowUpRightIcon, Play, Star } from "lucide-react";
+import { ArrowUpRight as ArrowUpRightIcon, Play, Star } from "reicon-react";
 import { YoutubeTrailerIcon } from "@/components/icons/youtube-trailer-icon";
 import { WatchButton } from "@/components/common/watch-button";
 import { usePreviewStore } from "@/lib/stores/preview";
@@ -78,7 +78,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             {type === "movie" && media.ids?.imdb && (
                                 <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
                                     <Button size="lg" className="w-full gap-2" data-tv-focusable>
-                                        <Play className="size-4 fill-current" />
+                                        <Play weight="Filled" className="size-4" />
                                         Watch Now
                                     </Button>
                                 </WatchButton>
@@ -121,7 +121,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                                 <>
                                     <span className="text-border">·</span>
                                     <span className="flex items-center gap-1.5">
-                                        <Star className="size-4 fill-primary text-primary" />
+                                        <Star weight="Filled" className="size-4 text-primary" />
                                         <span className="text-foreground font-medium">{media.rating.toFixed(1)}</span>
                                         <span className="text-muted-foreground/60">/10</span>
                                     </span>
@@ -245,7 +245,7 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             {type === "movie" && media.ids?.imdb && (
                                 <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
                                     <Button className="gap-2">
-                                        <Play className="size-4 fill-current" />
+                                        <Play weight="Filled" className="size-4" />
                                         Watch Now
                                     </Button>
                                 </WatchButton>

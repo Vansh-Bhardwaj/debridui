@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, memo } from "react";
 import { DebridNode, DebridFileNode, DebridLinkInfo } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Copy, Download, CirclePlay, Loader2 } from "lucide-react";
+import { ChevronRight, Copy, Download, PlayCircle as CirclePlay, Loader as Loader2 } from "reicon-react";
 import { cn, getFileType } from "@/lib/utils";
 import { formatSize, openInPlayer, downloadLinks, copyLinksToClipboard } from "@/lib/utils";
 import { collectNodeIds } from "@/lib/utils/file";

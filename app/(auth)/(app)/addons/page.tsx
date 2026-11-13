@@ -10,7 +10,7 @@ import { type CreateAddon } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Loader2, Puzzle, Info, RefreshCw, ClipboardPaste, X, ExternalLink, LayoutGrid } from "lucide-react";
+import { Plus, Loader as Loader2, Puzzle, InfoCircle as Info, Refresh as RefreshCw, ClipboardImport as ClipboardPaste, X, ArrowUpRightSquare as ExternalLink, Grid as LayoutGrid } from "reicon-react";
 import { PageHeader } from "@/components/common/page-header";
 import { AddonCard, AddonCardSkeleton } from "@/components/addons/addon-card";
 import { CachedBadge } from "@/components/common/display";

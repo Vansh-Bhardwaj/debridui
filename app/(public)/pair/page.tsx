@@ -8,30 +8,30 @@ import { detectDevice } from "@/lib/device-sync/protocol";
 import type { ServerMessage, TransferPayload, TrackInfo, QueueItem, SourceSummary } from "@/lib/device-sync/protocol";
 import {
     Monitor,
-    Smartphone,
+    Mobile as Smartphone,
     Tablet,
     Tv,
     Pause,
     Play,
-    SkipForward,
-    SkipBack,
+    SkipNext as SkipForward,
+    SkipPrev as SkipBack,
     X,
-    Volume2,
+    VolumeHigh as Volume2,
     VolumeX,
     Check,
-    AudioLines,
+    Soundwave as AudioLines,
     Subtitles,
-    Maximize2,
-    ListMusic,
+    Fullscreen as Maximize2,
+    MusicPlaylist as ListMusic,
     Trash2,
     Search,
-    Loader2,
+    Loader as Loader2,
     ChevronDown,
     ChevronUp,
     Layers,
     Film,
     ArrowLeft,
-} from "lucide-react";
+} from "reicon-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -372,7 +372,7 @@ function PairPageContent() {
                                                 }}
                                                 title="Play now"
                                             >
-                                                <Play className="size-3 fill-current" />
+                                                <Play weight="Filled" className="size-3" />
                                             </Button>
                                         )}
                                         <Button
@@ -537,7 +537,7 @@ function RemoteController({
                         title="Previous"
                         aria-label="Previous"
                     >
-                        <SkipBack className="size-5 fill-current" />
+                        <SkipBack weight="Filled" className="size-5" />
                     </Button>
                     <Button
                         variant="outline"
@@ -548,9 +548,9 @@ function RemoteController({
                         aria-label={isPlaying ? "Pause" : "Play"}
                     >
                         {isPlaying ? (
-                            <Pause className="size-6 fill-current" />
+                            <Pause weight="Filled" className="size-6" />
                         ) : (
-                            <Play className="size-6 fill-current ml-0.5" />
+                            <Play weight="Filled" className="size-6 ml-0.5" />
                         )}
                     </Button>
                     <Button
@@ -561,7 +561,7 @@ function RemoteController({
                         title="Next"
                         aria-label="Next"
                     >
-                        <SkipForward className="size-5 fill-current" />
+                        <SkipForward weight="Filled" className="size-5" />
                     </Button>
                     <Button
                         variant="ghost"
@@ -1027,7 +1027,7 @@ function MediaSearchSection({
                                         {/* Play overlay for movies */}
                                         {isMovie && (
                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                <Play className="size-8 text-white fill-white" />
+                                                <Play weight="Filled" className="size-8 text-white" />
                                             </div>
                                         )}
                                     </button>

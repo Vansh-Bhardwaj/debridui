@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Search } from "lucide-react";
+import { Search } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { useSearch } from "@/components/mdb/search-provider";
 import { cn } from "@/lib/utils";

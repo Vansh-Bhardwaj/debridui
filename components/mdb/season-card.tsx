@@ -3,7 +3,7 @@
 import { useProfile } from "@/hooks/use-profile";
 import Image from "next/image";
 import { type TraktSeason } from "@/lib/trakt";
-import { Check, Star } from "lucide-react";
+import { Check, Star } from "reicon-react";
 import { cn, formatYear } from "@/lib/utils";
 import { memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,7 +90,7 @@ export const SeasonCard = memo(function SeasonCard({
                 {season.rating && (
                     <div className="absolute top-2.5 right-2.5">
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
-                            <Star className="size-3 fill-primary text-primary" />
+                            <Star weight="Filled" className="size-3 text-primary" />
                             {season.rating.toFixed(1)}
                         </span>
                     </div>

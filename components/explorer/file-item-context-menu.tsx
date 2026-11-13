@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Fragment, useState } from "react";
-import { Copy, Download, RotateCw, Trash2, List, Loader2 } from "lucide-react";
+import { Copy, Download, ArrowRotate as RotateCw, Trash2, List, Loader as Loader2 } from "reicon-react";
 import {
     ContextMenu,
     ContextMenuContent,

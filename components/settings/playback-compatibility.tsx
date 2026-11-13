@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Check, Cpu, X } from "lucide-react";
+import { Check, Cpu, X } from "reicon-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getCodecSupport, type CodecSupport, type PlaybackEngine } from "@/lib/utils/codec-support";

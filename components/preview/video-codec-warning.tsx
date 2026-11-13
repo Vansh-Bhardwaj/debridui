@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
-import { Info, X } from "lucide-react";
+import { InfoCircle as Info, X } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { MediaPlayer } from "@/lib/types";
 import { cn } from "@/lib/utils";

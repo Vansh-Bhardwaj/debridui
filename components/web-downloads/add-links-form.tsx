@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Link2, Save, ClipboardPaste, X } from "lucide-react";
+import { Loader as Loader2, Link2, Save, ClipboardImport as ClipboardPaste, X } from "reicon-react";
 import { getTextFromClipboard } from "@/lib/utils";
 import { useOGMetadata } from "@/hooks/use-og-metadata";
 

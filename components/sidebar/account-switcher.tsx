@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDown, Plus, Check } from "lucide-react";
+import { ChevronExpandY as ChevronsUpDown, Plus, Check } from "reicon-react";
 import Link from "next/link";
 import { useDevice } from "@/components/device/device-provider";
 

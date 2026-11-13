@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel";
 import { WatchButton } from "@/components/common/watch-button";
 import Link from "next/link";
-import { ArrowRightIcon, Star, Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight as ArrowRightIcon, Star, Play, ChevronLeft, ChevronRight } from "reicon-react";
 import { cn } from "@/lib/utils";
 import Autoplay from "embla-carousel-autoplay";
 import { useTraktRecommendations } from "@/hooks/use-trakt";
@@ -122,7 +122,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                                         <>
                                             <span className="text-border">·</span>
                                             <span className="flex items-center gap-1.5">
-                                                <Star className="size-4 fill-primary text-primary" />
+                                                <Star weight="Filled" className="size-4 text-primary" />
                                                 <span className="font-medium text-foreground">
                                                     {media.rating.toFixed(1)}
                                                 </span>
@@ -164,14 +164,14 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                                 {type === "movie" ? (
                                     <WatchButton imdbId={media.ids?.imdb || ""} mediaType={type} title={media.title}>
                                         <Button size="lg" className="h-11 px-6 gap-2.5" data-tv-focusable>
-                                            <Play className="size-4 fill-current" />
+                                            <Play weight="Filled" className="size-4" />
                                             Watch Now
                                         </Button>
                                     </WatchButton>
                                 ) : (
                                     <Link href={`${linkHref}#seasons`}>
                                         <Button size="lg" className="h-11 px-6 gap-2.5" data-tv-focusable>
-                                            <Play className="size-4 fill-current" />
+                                            <Play weight="Filled" className="size-4" />
                                             Browse Episodes
                                         </Button>
                                     </Link>
@@ -259,7 +259,7 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                                 <>
                                     <span className="text-border">·</span>
                                     <span className="flex items-center gap-1">
-                                        <Star className="size-3.5 fill-primary text-primary" />
+                                        <Star weight="Filled" className="size-3.5 text-primary" />
                                         <span className="font-medium text-foreground">{media.rating.toFixed(1)}</span>
                                     </span>
                                 </>
@@ -284,14 +284,14 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                             {type === "movie" ? (
                                 <WatchButton imdbId={media.ids?.imdb || ""} mediaType={type} title={media.title}>
                                     <Button className="flex-1 h-10 gap-2">
-                                        <Play className="size-4 fill-current" />
+                                        <Play weight="Filled" className="size-4" />
                                         Watch Now
                                     </Button>
                                 </WatchButton>
                             ) : (
                                 <Link href={`${linkHref}#seasons`} className="flex-1">
                                     <Button className="w-full h-10 gap-2">
-                                        <Play className="size-4 fill-current" />
+                                        <Play weight="Filled" className="size-4" />
                                         Browse Episodes
                                     </Button>
                                 </Link>

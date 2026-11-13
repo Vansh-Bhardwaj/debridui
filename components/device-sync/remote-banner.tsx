@@ -5,24 +5,24 @@ import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { DeviceInfo, RemoteAction, SourceSummary } from "@/lib/device-sync/protocol";
 import {
     Monitor,
-    Smartphone,
+    Mobile as Smartphone,
     Tablet,
     Tv,
     Pause,
     Play,
-    SkipBack,
-    SkipForward,
-    Volume2,
+    SkipPrev as SkipBack,
+    SkipNext as SkipForward,
+    VolumeHigh as Volume2,
     VolumeX,
     X,
     ChevronUp,
     ChevronDown,
-    AudioLines,
+    Soundwave as AudioLines,
     Subtitles,
-    Maximize2,
-    Loader2,
+    Fullscreen as Maximize2,
+    Loader as Loader2,
     Layers,
-} from "lucide-react";
+} from "reicon-react";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -296,7 +296,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 title="Previous"
                                 aria-label="Previous"
                             >
-                                <SkipBack className="size-3.5 sm:size-4 fill-current" />
+                                <SkipBack weight="Filled" className="size-3.5 sm:size-4" />
                             </Button>
                             <Button
                                 variant="outline"
@@ -307,9 +307,9 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 aria-label={isPlaying ? "Pause" : "Play"}
                             >
                                 {isPlaying ? (
-                                    <Pause className="size-4 sm:size-5 fill-current" />
+                                    <Pause weight="Filled" className="size-4 sm:size-5" />
                                 ) : (
-                                    <Play className="size-4 sm:size-5 fill-current ml-0.5" />
+                                    <Play weight="Filled" className="size-4 sm:size-5 ml-0.5" />
                                 )}
                             </Button>
                             <Button
@@ -320,7 +320,7 @@ export const RemoteControlBanner = memo(function RemoteControlBanner() {
                                 title="Next"
                                 aria-label="Next"
                             >
-                                <SkipForward className="size-3.5 sm:size-4 fill-current" />
+                                <SkipForward weight="Filled" className="size-3.5 sm:size-4" />
                             </Button>
                             <Button
                                 variant="ghost"

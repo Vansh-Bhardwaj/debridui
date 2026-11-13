@@ -10,7 +10,7 @@ import { ControlledIndicator } from "@/components/device-sync/controlled-indicat
 import { useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { RouteTransition } from "@/components/common/route-transition";
 import { AmbientHeaderSpark } from "@/components/motion/ambient-header-spark";
-import { Keyboard, Tv } from "lucide-react";
+import { Keyboard, Tv } from "reicon-react";
 import { useTVMode } from "@/hooks/use-tv-mode";
 
 // Header keyboard shortcuts button

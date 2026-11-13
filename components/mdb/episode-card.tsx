@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { type TraktEpisode } from "@/lib/trakt";
-import { Check, ChevronDown, Eye, EyeOff, Loader2, Play, Star } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Loader as Loader2, Play, Star } from "reicon-react";
 import { cn, formatLocalizedDate } from "@/lib/utils";
 import { memo, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -43,14 +43,14 @@ const ThumbnailContent = memo(function ThumbnailContent({
             </span>
             {rating && (
                 <span className="absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 hidden sm:inline-flex items-center gap-1 text-xs font-medium text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
-                    <Star className="size-3 fill-primary text-primary" />
+                    <Star weight="Filled" className="size-3 text-primary" />
                     {rating.toFixed(1)}
                 </span>
             )}
             {interactive && (
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity duration-300">
                     <span className="flex items-center gap-1.5 text-xs tracking-wider uppercase text-white bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-sm">
-                        <Play className="size-3 fill-current" />
+                        <Play weight="Filled" className="size-3" />
                         Watch
                     </span>
                 </div>

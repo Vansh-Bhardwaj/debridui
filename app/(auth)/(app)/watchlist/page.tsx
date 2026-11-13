@@ -16,7 +16,7 @@ import {
     useTraktFavoritesShows,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
-import { Bookmark, CalendarDays, Film, Tv, LinkIcon, ChevronDown, Bell, Monitor, Clapperboard, Clock, Heart } from "lucide-react";
+import { Bookmark, CalendarDays, Film, Tv, Link as LinkIcon, ChevronDown, Bell, Monitor, ClapperboardPlay as Clapperboard, Clock, Heart } from "reicon-react";
 import { type TraktCalendarItem, type TraktWatchlistItem, type TraktFavoriteItem, type TraktMedia } from "@/lib/trakt";
 import Link from "next/link";
 import Image from "next/image";

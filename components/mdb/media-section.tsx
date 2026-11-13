@@ -3,7 +3,7 @@
 import { MediaCard } from "@/components/mdb/media-card";
 import { type TraktMediaItem } from "@/lib/trakt";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRightIcon, AlertCircle, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ArrowRight as ArrowRightIcon, AlertCircle, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon } from "reicon-react";
 import Link from "next/link";
 import { memo, useMemo, useState } from "react";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";

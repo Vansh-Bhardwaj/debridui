@@ -165,7 +165,7 @@ describe("source: no dynamic Date() in static pages", () => {
 describe("config: optimizePackageImports includes heavy packages", () => {
     test("next.config.ts has critical packages in optimizePackageImports", () => {
         const src = readSource("next.config.ts");
-        const requiredPackages = ["lucide-react", "zod", "date-fns"];
+        const requiredPackages = ["reicon-react", "zod", "date-fns"];
         for (const pkg of requiredPackages) {
             expect(src).toContain(`"${pkg}"`);
         }

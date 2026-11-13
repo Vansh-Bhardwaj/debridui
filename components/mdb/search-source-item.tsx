@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { HardDrive, Users, Zap } from "lucide-react";
+import { HardDrive, Users, BoltLightning as Zap } from "reicon-react";
 import { formatSize } from "@/lib/utils";
 import { type TorBoxSearchResult } from "@/lib/clients/torbox";
 import { AddSourceButton } from "./sources";

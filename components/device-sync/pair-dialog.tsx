@@ -11,7 +11,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, Link2, Share2 } from "lucide-react";
+import { Check, Copy, Link2, Share as Share2 } from "reicon-react";
 import { toast } from "sonner";
 import QRCode from "react-qr-code";
 import { fetchWithTimeout, handleUnauthorizedResponse } from "@/lib/utils/error-handling";

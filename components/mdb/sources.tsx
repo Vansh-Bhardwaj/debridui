@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { Resolution, type AddonSource, type TvSearchParams } from "@/lib/addons/types";
 import { useAddonSources, useAddonSubtitles } from "@/hooks/use-addons";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, HardDriveDownloadIcon, Trash2Icon, DownloadIcon, AlertTriangle, PlayIcon, RefreshCw } from "lucide-react";
+import { Plus, Loader as Loader2, HardDrive as HardDriveDownloadIcon, Trash2 as Trash2Icon, Download as DownloadIcon, AlertTriangle, Play as PlayIcon, Refresh as RefreshCw } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { toast } from "sonner";
@@ -256,7 +256,7 @@ export const SourceRow = memo(function SourceRow({
                                 size="sm"
                                 data-tv-focusable
                                 onClick={handlePlay}>
-                                <PlayIcon className="size-4 fill-current" />
+                                <PlayIcon weight="Filled" className="size-4" />
                                 Play
                             </Button>
                         )}

@@ -12,7 +12,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useFileMutationActions } from "@/hooks/use-file-actions";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2 } from "reicon-react";
 import { cn } from "@/lib/utils";
 
 interface FileListRowProps {

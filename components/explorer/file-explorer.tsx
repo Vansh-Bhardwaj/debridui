@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, memo, useEffect } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen } from "reicon-react";
 import { SortControls } from "./sort-controls";
 import { FileList, FileListBody, FileListEmpty, FileListLoading } from "./file-list";
 import { FileListHeader } from "./file-list-header";

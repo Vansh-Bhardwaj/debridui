@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, FolderOpen, Home, Search } from "lucide-react";
+import { Bookmark, FolderOpen, Home, Search } from "reicon-react";
 import { Breadcrumbs } from "@/components/common/breadcrumbs";
 import { SearchButton } from "@/components/common/search-button";
 import { RouteTransition } from "@/components/common/route-transition";
@@ -28,7 +28,7 @@ export function TouchShell({ children, tablet = false }: { children: React.React
                     <span className="sr-only">Browse · Library &amp; Setup</span>
                     {[...browseNav, ...manageNav].map(({ title, url, icon: Icon }) => (
                         <Link key={url} href={url} aria-label={title} title={title} aria-current={active(url) ? "page" : undefined} className={cn("flex min-h-phone-touch min-w-phone-touch shrink-0 items-center justify-center hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring", active(url) ? "text-primary bg-muted/30" : "text-muted-foreground")}>
-                            <Icon className="size-5" />
+                            <Icon weight={active(url) ? "Filled" : "Outline"} className="size-5" />
                         </Link>
                     ))}
                     <div className="mt-auto"><YouMenu iconOnly /></div>
@@ -47,7 +47,7 @@ export function TouchShell({ children, tablet = false }: { children: React.React
             <nav aria-label="Main navigation" className={cn("fixed inset-x-0 bottom-0 z-40 flex border-t border-border/50 bg-background pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]", tablet && "landscape:hidden")}>
                 {tabs.map(({ title, url, icon: Icon }) => (
                     <Link key={url} href={url} aria-current={active(url) ? "page" : undefined} className={cn("flex h-16 min-h-phone-touch min-w-phone-touch flex-1 flex-col items-center justify-center gap-1 text-xs hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring", active(url) ? "text-primary bg-muted/30" : "text-muted-foreground")}>
-                        <Icon className="size-5" /><span>{title}</span>
+                        <Icon weight={active(url) ? "Filled" : "Outline"} className="size-5" /><span>{title}</span>
                     </Link>
                 ))}
                 <YouMenu />

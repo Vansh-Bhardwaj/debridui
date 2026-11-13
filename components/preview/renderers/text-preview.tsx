@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DebridFileNode, AccountType } from "@/lib/types";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader as Loader2, AlertCircle } from "reicon-react";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { getProxyUrl } from "@/lib/utils";
 import { List, type RowComponentProps } from "react-window";

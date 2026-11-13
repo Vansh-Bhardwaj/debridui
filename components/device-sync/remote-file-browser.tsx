@@ -11,7 +11,7 @@
 import { useState, useCallback } from "react";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import type { BrowseFileItem } from "@/lib/device-sync/protocol";
-import { Search, File, Loader2, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, File, Loader as Loader2, FolderOpen, ChevronLeft, ChevronRight } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";

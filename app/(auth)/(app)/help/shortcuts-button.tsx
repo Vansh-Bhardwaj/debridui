@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
-import { Keyboard } from "lucide-react";
+import { Keyboard } from "reicon-react";
 import { useDevice } from "@/components/device/device-provider";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

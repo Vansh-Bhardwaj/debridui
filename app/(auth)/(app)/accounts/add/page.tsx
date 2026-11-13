@@ -3,7 +3,7 @@ export const dynamic = "force-static";
 
 import { AddAccountForm } from "@/components/accounts/add-account-form";
 import { PageHeader } from "@/components/common/page-header";
-import { UserPlus } from "lucide-react";
+import { UserAdd as UserPlus } from "reicon-react";
 
 export default function AddAccountPage() {
     return (

@@ -1,4 +1,4 @@
-import { AlertCircle, ExternalLink } from "lucide-react";
+import { AlertCircle, ArrowUpRightSquare as ExternalLink } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { DISCORD_URL } from "@/lib/constants";
 

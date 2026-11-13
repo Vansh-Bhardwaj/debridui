@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle } from "reicon-react";
 
 interface Props {
     children: ReactNode;

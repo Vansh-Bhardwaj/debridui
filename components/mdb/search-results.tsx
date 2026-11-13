@@ -1,7 +1,7 @@
 "use client";
 
 import { CommandGroup } from "@/components/ui/command";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader as Loader2 } from "reicon-react";
 import { type DebridFile } from "@/lib/types";
 import { type TorBoxSearchResult } from "@/lib/clients/torbox";
 import { type TraktSearchResult } from "@/lib/trakt";

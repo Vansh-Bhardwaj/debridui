@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRight as ArrowRightIcon } from "reicon-react";
 import { Button } from "@/components/ui/button";
 
 export function LandingStickyNav() {

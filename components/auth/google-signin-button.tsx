@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader as Loader2 } from "reicon-react";
 
 interface GoogleSignInButtonProps {
     callbackURL?: string;

@@ -4,7 +4,7 @@ export const dynamic = "force-static";
 import { use } from "react";
 import { memo, useMemo } from "react";
 import Link from "next/link";
-import { ArrowLeft, Film, Tv } from "lucide-react";
+import { ArrowLeft, Film, Tv } from "reicon-react";
 import { parseCatalogSlug, useAddonCatalogDef, useAddonCatalog } from "@/hooks/use-addons";
 import { MediaCard } from "@/components/mdb/media-card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";

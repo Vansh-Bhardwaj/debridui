@@ -1,4 +1,4 @@
-import { Loader2, Inbox, CircleAlert } from "lucide-react";
+import { Loader as Loader2, Inbox, AlertCircle as CircleAlert } from "reicon-react";
 import { cn } from "@/lib/utils";
 
 interface StateBaseProps {

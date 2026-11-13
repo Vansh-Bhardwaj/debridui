@@ -3,7 +3,7 @@ export const dynamic = "force-static";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { Plus, RefreshCw, KeyRound } from "lucide-react";
+import { Plus, Refresh as RefreshCw, Key as KeyRound } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { AccountCard } from "@/components/accounts/account-card";
 import { PageHeader } from "@/components/common/page-header";

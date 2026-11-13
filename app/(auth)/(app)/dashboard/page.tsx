@@ -28,7 +28,7 @@ import {
     catalogSlug,
     type AddonCatalogDef,
 } from "@/hooks/use-addons";
-import { SearchIcon, Sparkles, Film, TrendingUp, Calendar, Ticket, Puzzle, Heart, Radio } from "lucide-react";
+import { Search as SearchIcon, Sparkles, Film, TrendUp as TrendingUp, Calendar, Ticket, Puzzle, Heart, Radio } from "reicon-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";

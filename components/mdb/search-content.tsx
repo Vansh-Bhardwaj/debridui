@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "@bprogress/next/app";
 import { CommandInput, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import { Search, X, Clock, Bookmark, BookmarkCheck } from "lucide-react";
+import { Search, X, Clock, Bookmark, BookmarkCheck } from "reicon-react";
 import { useSearchLogic } from "@/hooks/use-search-logic";
 import { SearchResults } from "./search-results";
 import { type DebridFile } from "@/lib/types";

@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle } from "reicon-react";
 
 const resetPasswordSchema = z
     .object({

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings } from "lucide-react";
+import { Settings } from "reicon-react";
 import { useDevice } from "@/components/device/device-provider";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useUserSettings } from "@/hooks/use-user-settings";

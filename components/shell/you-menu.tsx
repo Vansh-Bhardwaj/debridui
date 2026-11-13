@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, HelpCircle, History, Link2, Puzzle, Settings, User, Users } from "lucide-react";
+import { Activity, HelpCircle, History, Link2, Puzzle, Settings, User, Users } from "reicon-react";
 import { ProfileSwitcher } from "@/components/profiles/profile-switcher";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

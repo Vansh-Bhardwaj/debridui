@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { DebridFileNode } from "@/lib/types";
-import { Loader2, AlertCircle, ZoomIn, ZoomOut, Minimize2 } from "lucide-react";
+import { Loader as Loader2, AlertCircle, SearchZoomIn as ZoomIn, SearchZoomOut as ZoomOut, ExitFullscreen as Minimize2 } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 

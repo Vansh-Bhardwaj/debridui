@@ -2,7 +2,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown } from "reicon-react";
 import { SORT_OPTIONS } from "@/lib/utils/file";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback } from "react";

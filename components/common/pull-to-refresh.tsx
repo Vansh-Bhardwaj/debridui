@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, ArrowDown } from "lucide-react";
+import { Loader as Loader2, ArrowDown } from "reicon-react";
 import { cn } from "@/lib/utils";
 
 interface PullToRefreshProps {

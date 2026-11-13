@@ -16,7 +16,7 @@ import { MdbFooter } from "@/components/mdb/mdb-footer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, ChevronDown, ChevronUp, Calendar, MapPin, Skull, Star, Film, Tv } from "lucide-react";
+import { User, ChevronDown, ChevronUp, Calendar, Location as MapPin, Bones as Skull, Star, Film, Tv } from "reicon-react";
 import { getPosterUrl } from "@/lib/utils/media";
 import { formatLocalizedDate, calculateAge } from "@/lib/utils";
 import { EmptyState, ErrorState } from "@/components/common/async-state";
@@ -398,7 +398,7 @@ const CreditCard = memo(function CreditCard({
                                 <>
                                     <span className="text-white/30">·</span>
                                     <span className="flex items-center gap-1">
-                                        <Star className="size-3.5 fill-[#F5C518] text-[#F5C518]" />
+                                        <Star weight="Filled" className="size-3.5 text-[#F5C518]" />
                                         {media.rating.toFixed(1)}
                                     </span>
                                 </>

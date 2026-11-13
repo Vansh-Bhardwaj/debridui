@@ -1,6 +1,6 @@
 import { AccountType } from "@/lib/types";
 import { ACCOUNT_TYPE_ICONS } from "@/lib/constants";
-import { User } from "lucide-react";
+import { User } from "reicon-react";
 import Image from "next/image";
 
 interface ServiceIconProps {

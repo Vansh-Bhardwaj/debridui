@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen } from "reicon-react";
 
 interface FileListProps {
     children: React.ReactNode;

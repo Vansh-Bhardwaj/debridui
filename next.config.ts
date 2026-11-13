@@ -48,7 +48,6 @@ const nextConfig: NextConfig = {
     },
     experimental: {
         optimizePackageImports: [
-            "lucide-react",
             "reicon-react",
             "@radix-ui/react-icons",
             "date-fns",

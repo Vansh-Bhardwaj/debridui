@@ -7,7 +7,7 @@ import {
     PaginationLink,
     PaginationEllipsis,
 } from "@/components/ui/pagination";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, AnglesLeft as ChevronsLeft, AnglesRight as ChevronsRight } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

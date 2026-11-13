@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
-import { Puzzle, Trash2, Share2, ArrowUp, ArrowDown, LayoutGrid } from "lucide-react";
+import { Puzzle, Trash2, Share as Share2, ArrowUp, ArrowDown, Grid as LayoutGrid } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { addonSupportsCatalogs } from "@/lib/addons/types";

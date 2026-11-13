@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Check, ArrowRight, ExternalLink, SkipForward } from "lucide-react";
+import { Logout as LogOut, Check, ArrowRight, ArrowUpRightSquare as ExternalLink, SkipNext as SkipForward } from "reicon-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";

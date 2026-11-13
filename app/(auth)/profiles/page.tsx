@@ -2,7 +2,7 @@
 
 import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pen as Pencil } from "reicon-react";
 import { toast } from "sonner";
 import { useProfile, type Profile } from "@/hooks/use-profile";
 import { useDevice } from "@/components/device/device-provider";

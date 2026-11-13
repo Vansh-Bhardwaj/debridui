@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { queryClient } from "@/lib/query-client";
 import { toast } from "sonner";
-import { Link, FileUp, Loader2, ClipboardPaste, X } from "lucide-react";
+import { Link, FileUp, Loader as Loader2, ClipboardImport as ClipboardPaste, X } from "reicon-react";
 import { Dropzone } from "../ui/dropzone";
 import { getTextFromClipboard } from "@/lib/utils";
 import { OperationResult } from "@/lib/types";

@@ -3,25 +3,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AlertCircle,
-    AudioLines,
-    Captions,
+    Soundwave as AudioLines,
+    Subtitles as Captions,
     Check,
     ChevronRight,
-    ExternalLink,
-    Gauge,
+    ArrowUpRightSquare as ExternalLink,
+    Speedometer as Gauge,
     Layers,
-    Loader2,
-    Airplay,
+    Loader as Loader2,
+    Screenmirroring as Airplay,
     Maximize,
     Pause,
-    PictureInPicture2,
+    Pip as PictureInPicture2,
     Play,
-    RefreshCw,
+    Refresh as RefreshCw,
     Settings2,
-    SkipBack,
-    SkipForward,
-    Timer,
-} from "lucide-react";
+    SkipPrev as SkipBack,
+    SkipNext as SkipForward,
+    Stopwatch as Timer,
+} from "reicon-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -940,7 +940,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     disabled={!onPrev}
                                     onClick={onPrev}
                                     className={cn("pointer-events-auto rounded-full p-2 disabled:opacity-0", !showOverlay && "pointer-events-none")}>
-                                    <SkipBack className="size-6 fill-current" />
+                                    <SkipBack weight="Filled" className="size-6" />
                                 </button>
                                 <button
                                     type="button"
@@ -953,9 +953,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     {buffering || switching ? (
                                         <Loader2 className="size-8 animate-spin" />
                                     ) : playing ? (
-                                        <Pause className="size-8 fill-current" />
+                                        <Pause weight="Filled" className="size-8" />
                                     ) : (
-                                        <Play className="ml-1 size-8 fill-current" />
+                                        <Play weight="Filled" className="ml-1 size-8" />
                                     )}
                                 </button>
                                 <button
@@ -964,7 +964,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     disabled={!onNext}
                                     onClick={playNext}
                                     className={cn("pointer-events-auto rounded-full p-2 disabled:opacity-0", !showOverlay && "pointer-events-none")}>
-                                    <SkipForward className="size-6 fill-current" />
+                                    <SkipForward weight="Filled" className="size-6" />
                                 </button>
                             </div>
 

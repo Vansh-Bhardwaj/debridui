@@ -13,7 +13,7 @@ import type { QueueItem } from "@/lib/device-sync/protocol";
 import { usePreviewStore } from "@/lib/stores/preview";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { FileType } from "@/lib/types";
-import { ListMusic, X, Play, Trash2 } from "lucide-react";
+import { MusicPlaylist as ListMusic, X, Play, Trash2 } from "reicon-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -136,7 +136,7 @@ export function PlaybackQueue({ className, compact }: PlaybackQueueProps) {
                                 onClick={() => handlePlay(item)}
                                 title="Play now"
                             >
-                                <Play className="size-3 fill-current" />
+                                <Play weight="Filled" className="size-3" />
                             </Button>
                             <Button
                                 variant="ghost"

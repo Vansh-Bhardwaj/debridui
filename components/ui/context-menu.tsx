@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
-import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
+import { Check as CheckIcon, ChevronRight as ChevronRightIcon, Record as CircleIcon } from "reicon-react";
 
 import { cn } from "@/lib/utils";
 
@@ -144,7 +144,7 @@ function ContextMenuRadioItem({
             {...props}>
             <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
                 <ContextMenuPrimitive.ItemIndicator>
-                    <CircleIcon className="size-2 fill-current" />
+                    <CircleIcon weight="Filled" className="size-2" />
                 </ContextMenuPrimitive.ItemIndicator>
             </span>
             {children}

@@ -4,15 +4,15 @@ import { ProfileSwitcher } from "@/components/profiles/profile-switcher";
 import { memo, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-    HomeIcon,
-    SearchIcon,
+    Home as HomeIcon,
+    Search as SearchIcon,
     FolderOpen,
     Bookmark,
     History,
     Compass,
-    MoreHorizontal,
+    MoreH as MoreHorizontal,
     Monitor,
-} from "lucide-react";
+} from "reicon-react";
 import { cn } from "@/lib/utils";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import { useDevice } from "@/components/device/device-provider";
@@ -84,7 +84,7 @@ export const TVNavigationBar = memo(function TVNavigationBar() {
                                     : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                             )}
                         >
-                            <Icon className="size-4" />
+                            <Icon weight={isActive ? "Filled" : "Outline"} className="size-4" />
                             <span>{item.title}</span>
                         </button>
                     );
@@ -92,7 +92,7 @@ export const TVNavigationBar = memo(function TVNavigationBar() {
                 <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
                     <DialogTrigger asChild>
                         <button data-tv-focusable className="tv-nav-item flex items-center gap-2 px-3 py-2 text-tv-base" data-active={moreItems.some((item) => pathname.startsWith(item.url)) || undefined}>
-                            <MoreHorizontal className="size-5" /> More
+                            <MoreHorizontal weight={moreItems.some((item) => pathname.startsWith(item.url)) ? "Filled" : "Outline"} className="size-5" /> More
                         </button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-2xl">

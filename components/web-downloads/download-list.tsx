@@ -6,7 +6,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { DownloadItem, DownloadItemSkeleton } from "./download-item";
 import { DownloadsBulkActions } from "./downloads-bulk-actions";
 import { ListPagination } from "@/components/common/pagination";
-import { Link2Off } from "lucide-react";
+import { LinkOff as Link2Off } from "reicon-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export function DownloadList() {

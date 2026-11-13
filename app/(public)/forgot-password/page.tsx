@@ -12,7 +12,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Mail } from "lucide-react";
+import { ArrowLeft, Envelope as Mail } from "reicon-react";
 
 const forgotPasswordSchema = z.object({
     email: z.string().email("Invalid email address"),

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
-import { History, Trash2, X, Play, Film, Tv, Clock, Clapperboard, Calendar, ChevronDown } from "lucide-react";
+import { History, Trash2, X, Play, Film, Tv, Clock, ClapperboardPlay as Clapperboard, Calendar, ChevronDown } from "reicon-react";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -278,7 +278,7 @@ const RecentCard = memo(function RecentCard({ entry }: { entry: HistoryEntry }) 
                         <div className="h-full bg-primary rounded-full" style={{ width: `${progressPercent}%` }} />
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-white/80">
-                        <Play className="size-2.5 fill-white/90 text-white/90" />
+                        <Play weight="Filled" className="size-2.5 text-white/90" />
                         <span>{episodeLabel ?? formatDuration(entry.progressSeconds)}</span>
                     </div>
                 </div>

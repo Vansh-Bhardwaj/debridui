@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import * as React from "react";
-import { ArrowRightLeft, Trash2 } from "lucide-react";
+import { ArrowSwapHorizontal as ArrowRightLeft, Trash2 } from "reicon-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

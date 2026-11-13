@@ -4,7 +4,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
 import { useNextEpisode } from "@/hooks/use-next-episode";
 import { WatchButton } from "@/components/common/watch-button";
-import { X, SkipForward, Play } from "lucide-react";
+import { X, SkipNext as SkipForward, Play } from "reicon-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,7 +224,7 @@ const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove
                 className="absolute bottom-3 right-2 z-10 h-9 w-9 rounded-full bg-primary/95 flex items-center justify-center shadow-lg transition-[opacity,transform,background-color] duration-200 ease-premium sm:opacity-0 sm:group-hover:opacity-100 hover:scale-110 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
                 aria-label={`Resume ${title}`}
             >
-                <Play className="size-4 fill-current text-primary-foreground ml-0.5" />
+                <Play weight="Filled" className="size-4 text-primary-foreground ml-0.5" />
             </button>
 
             {/* Next episode button */}

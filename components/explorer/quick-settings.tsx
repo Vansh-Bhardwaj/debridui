@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { Settings } from "reicon-react";
 import {
     Dialog,
     DialogClose,

@@ -4,7 +4,7 @@ export const dynamic = "force-static";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/common/page-header";
-import { HelpCircle, ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight, Keyboard } from "lucide-react";
+import { HelpCircle, ArrowUpRightSquare as ExternalLink, MessageCircle, Bug, Lightbulb, BookOpen, ArrowUpRight, Keyboard } from "reicon-react";
 import { DISCORD_URL } from "@/lib/constants";
 import { ShortcutsHelpButton } from "./shortcuts-button";
 

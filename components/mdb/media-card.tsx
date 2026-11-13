@@ -6,7 +6,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { getPosterUrl } from "@/lib/utils/media";
-import { Star, CircleCheck } from "lucide-react";
+import { Star, CheckCircle as CircleCheck } from "reicon-react";
 import { fetchPosterFromAPIs } from "@/lib/utils/poster-fallback";
 
 /** Construct RPDB poster URL (free public key). Returns null if no IMDB ID. */
@@ -135,7 +135,7 @@ export const MediaCard = memo(function MediaCard({ media, type, rank, watched, c
                                 <>
                                     <span className="text-white/30">·</span>
                                     <span className="flex items-center gap-1">
-                                        <Star className="size-3 fill-primary text-primary -mt-0.5" />
+                                        <Star weight="Filled" className="size-3 text-primary -mt-0.5" />
                                         {media.rating.toFixed(1)}
                                     </span>
                                 </>

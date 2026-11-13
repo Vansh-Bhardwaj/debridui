@@ -5,14 +5,14 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
     Activity,
     AlertTriangle,
-    CheckCircle2,
+    CheckCircle as CheckCircle2,
     ChevronDown,
     Link2,
     Monitor,
-    RefreshCw,
-    Smartphone,
-    XCircle,
-} from "lucide-react";
+    Refresh as RefreshCw,
+    Mobile as Smartphone,
+    CloseCircle as XCircle,
+} from "reicon-react";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Badge } from "@/components/ui/badge";

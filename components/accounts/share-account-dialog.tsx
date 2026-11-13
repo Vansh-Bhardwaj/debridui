@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Copy, AlertTriangle } from "lucide-react";
+import { Copy, AlertTriangle } from "reicon-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {

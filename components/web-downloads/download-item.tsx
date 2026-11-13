@@ -10,7 +10,7 @@ import { WebDownloadStatusBadge } from "@/components/common/display";
 import { canPreviewFile } from "@/lib/preview/registry";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { usePreviewStore } from "@/lib/stores/preview";
-import { Copy, Trash2, Loader2, Download, PlayCircle, View } from "lucide-react";
+import { Copy, Trash2, Loader as Loader2, Download, PlayCircle, Eye as View } from "reicon-react";
 import { toast } from "sonner";
 
 interface DownloadItemProps {

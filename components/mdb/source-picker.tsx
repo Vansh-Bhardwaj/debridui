@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { type AddonSource, Resolution } from "@/lib/addons/types";
-import { Zap, HardDrive, Check, ArrowDownUp, Filter } from "lucide-react";
+import { BoltLightning as Zap, HardDrive, Check, SortDownUp as ArrowDownUp, Filter } from "reicon-react";
 import { cn } from "@/lib/utils";
 import { detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
 import { getSourceFailure, isCamRelease } from "@/lib/streaming/source-health";

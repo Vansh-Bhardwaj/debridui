@@ -22,15 +22,15 @@ import {
     ArrowLeft,
     Search,
     Puzzle,
-    ExternalLink,
+    ArrowUpRightSquare as ExternalLink,
     Check,
-    Loader2,
-    Zap,
+    Loader as Loader2,
+    BoltLightning as Zap,
     BookOpen,
-    Captions,
+    Subtitles as Captions,
     Settings2,
     X,
-} from "lucide-react";
+} from "reicon-react";
 import { cn } from "@/lib/utils";
 
 type CategoryFilter = AddonCatalogCategory | "all";

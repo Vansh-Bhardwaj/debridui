@@ -3,7 +3,7 @@
 import { DebridFileNode, FileType } from "@/lib/types";
 import { getFileType } from "@/lib/utils";
 import { getPreviewRenderer } from "@/lib/preview/registry";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle } from "reicon-react";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { type ProgressKey } from "@/hooks/use-progress";
 

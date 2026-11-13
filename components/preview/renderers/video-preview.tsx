@@ -2,7 +2,7 @@
 
 import { Component, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
+import { Loader as Loader2 } from "reicon-react";
 
 
 // Lazy load the legacy player to reduce bundle size

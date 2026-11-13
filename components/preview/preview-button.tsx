@@ -3,7 +3,7 @@
 import { memo, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { View } from "lucide-react";
+import { Eye as View } from "reicon-react";
 import { DebridFileNode } from "@/lib/types";
 import { usePreviewStore } from "@/lib/stores/preview";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
