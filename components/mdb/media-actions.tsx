@@ -36,10 +36,11 @@ interface MediaActionsProps {
     type: "movie" | "show";
     /** Render as a row of icon buttons (for inline use) */
     variant?: "icons" | "full";
+    hideWatchlist?: boolean;
 }
 
 /** Trakt action buttons: Watchlist, Favorite, Rate, Watched, Check-in */
-export const MediaActions = memo(function MediaActions({ media, type, variant = "icons" }: MediaActionsProps) {
+export const MediaActions = memo(function MediaActions({ media, type, variant = "icons", hideWatchlist = false }: MediaActionsProps) {
     const hasAuth = !!traktClient.getAccessToken();
     const ids = media.ids;
     const imdbId = ids?.imdb;
@@ -212,7 +213,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
     return (
         <div className="flex items-center gap-1">
             {/* Watchlist */}
-            <Tooltip>
+            {!hideWatchlist && <Tooltip>
                 <TooltipTrigger asChild>
                     <Button
                         variant="ghost"
@@ -228,7 +229,7 @@ export const MediaActions = memo(function MediaActions({ media, type, variant = 
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent>{isInWatchlist ? "Remove from Watchlist" : "Add to Watchlist"}</TooltipContent>
-            </Tooltip>
+            </Tooltip>}
 
             {/* Favorite */}
             <Tooltip>

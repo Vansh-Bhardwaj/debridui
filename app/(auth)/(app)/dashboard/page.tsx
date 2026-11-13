@@ -35,6 +35,9 @@ import { MediaSection } from "@/components/mdb/media-section";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { useIsTVMode } from "@/hooks/use-tv-mode";
 
+const ProfileHomeRows = nextDynamic(() => import("@/components/mdb/home-rows").then((m) => m.ProfileHomeRows), { ssr: false });
+const ProfileGenreRows = nextDynamic(() => import("@/components/mdb/home-rows").then((m) => m.ProfileGenreRows), { ssr: false });
+
 const ContinueWatching = nextDynamic(
     () => import("@/components/mdb/continue-watching").then((m) => ({ default: m.ContinueWatching })),
     { ssr: false }
@@ -426,15 +429,18 @@ const DashboardPage = memo(function DashboardPage() {
                     </div>
                 )}
 
-                {/* For You — eager (not intersection-deferred); omitted unless Trakt + real recommendations */}
-                <ForYouSection visible />
+                {/* Profile history rows, deferred until near the viewport. */}
+                <ProfileHomeRows />
 
                 {/* Addon Catalogs — lazy-loaded per-row */}
                 <SectionErrorBoundary section="Addon Catalogs">
                     <AddonCatalogs />
                 </SectionErrorBoundary>
 
-                {/* Airing Today — TVMaze schedule, no auth needed */}
+                <ProfileGenreRows />
+                <LazyTraktSection label="For You" icon={ICON_HEART} delay={0}>
+                    {(visible) => <ForYouSection visible={visible} />}
+                </LazyTraktSection>
                 <LazyTraktSection label="Airing Today" icon={ICON_RADIO} delay={0}>
                     {(visible) => <AiringTodaySection visible={visible} />}
                 </LazyTraktSection>

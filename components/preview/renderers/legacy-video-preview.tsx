@@ -1,5 +1,7 @@
 "use client";
 
+import { playbackEngine, usePlaybackOverride } from "@/lib/playback/preferences";
+
 import { useProfile } from "@/hooks/use-profile";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -590,9 +592,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // With provider metadata (TorBox createstream) we know the real codecs, so
     // playable files keep full original quality and only unplayable ones are
     // transcoded — by the provider, costing neither Cloudflare nor the device.
-    const configuredEngine = useSettingsStore((s) => s.settings.streaming.playbackEngine) ?? "auto";
+    const streamingSettings = useSettingsStore((s) => s.settings.streaming);
+    const modeOverride = usePlaybackOverride((s) => s.mode);
+    const configuredEngine = playbackEngine(streamingSettings, modeOverride);
     const [engineOverride, setEngineOverride] = useState<PlaybackEngine | null>(null);
     const engine = engineOverride ?? configuredEngine;
+    const engineRef = useRef(engine);
+    engineRef.current = engine;
     /** Active provider variant after an audio/quality switch (new HLS session). */
     const [variant, setVariant] = useState<StreamInfo | null>(null);
     const baseStreamInfo = getStreamInfo(streamingLinks?.apple);
@@ -615,23 +621,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
     const streamingSelection = useMemo(() => {
         const links = hlsUrl ? { ...streamingLinks, apple: hlsUrl } : streamingLinks;
-        if (engine === "auto" && originalIssue && hlsUrl) {
-            return { url: hlsUrl, isTranscoded: true, format: "HLS", reason: originalIssue };
-        }
-        const decision = decideStream({ downloadUrl, streamingLinks: links, fileName: file.name, info: streamInfo, engine });
-        // Without metadata, hls.js browsers still prefer provider HLS so multi-audio survives.
-        if (!streamInfo && engine === "auto" && hlsUrl && !isSafari() && Hls.isSupported() && decision.url !== hlsUrl) {
-            return { url: hlsUrl, isTranscoded: true, format: "HLS", reason: "Compatible stream" };
-        }
+        const decision = decideStream({ downloadUrl, streamingLinks: links, fileName: selectedSourceFromStore?.fileName ?? file.name, info: streamInfo, engine });
         return decision;
-    }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine, originalIssue]);
+    }, [downloadUrl, streamingLinks, hlsUrl, file.name, streamInfo, engine, selectedSourceFromStore?.fileName]);
 
     // Don't start a file this device can't play while the provider's converted
     // stream may still be on its way: the failure fires fallbacks and warnings, and
     // on iOS it burns the tap. Hold the source until the lookup resolves
     // (undefined = pending, {} = none), capped so a hung lookup can't block playback.
     const [hlsWaitExpired, setHlsWaitExpired] = useState(false);
-    const awaitingHls = (ios || !!originalIssue) && streamingLinks === undefined && engine !== "original" && !hlsWaitExpired;
+    const awaitingHls = (engine === "transcode" || ios || !!originalIssue) && streamingLinks === undefined && engine !== "native" && !hlsWaitExpired;
     useEffect(() => {
         setHlsWaitExpired(false);
         const t = setTimeout(() => setHlsWaitExpired(true), 30_000);
@@ -660,10 +659,12 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const [deviceSession, setDeviceSession] = useState<DeviceTranscodeSession | null>(null);
     const deviceSessionRef = useRef<DeviceTranscodeSession | null>(null);
     const deviceStartingRef = useRef(false);
+    const deviceRequestRef = useRef(0);
     /** Provider HLS failed for this file — don't bounce back to it. */
     const hlsFailedRef = useRef(false);
 
     const stopDeviceSession = useCallback(() => {
+        deviceRequestRef.current++;
         deviceSessionRef.current?.destroy();
         deviceSessionRef.current = null;
         setDeviceSession(null);
@@ -698,7 +699,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 return;
             }
             setVariant(next);
-            setEngineOverride("compatible");
+            setEngineOverride("transcode");
             showOsd(label);
         },
         [streamInfo, showOsd]
@@ -710,12 +711,17 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         if (!video || deviceSessionRef.current || deviceStartingRef.current) return !!deviceSessionRef.current;
         if (!isDeviceTranscodeSupported()) return false;
         deviceStartingRef.current = true;
+        const request = ++deviceRequestRef.current;
         showOsd("Converting audio on this device…");
         try {
             const session = await createDeviceTranscodeSession(video, downloadUrl, {
                 startAt: video.currentTime > 1 ? video.currentTime : 0,
                 preferredLanguage: useSettingsStore.getState().settings.streaming.preferredLanguage,
             });
+            if (request !== deviceRequestRef.current || engineRef.current === "native" || engineRef.current === "transcode") {
+                session.destroy();
+                return false;
+            }
             deviceSessionRef.current = session;
             setDeviceSession(session);
             return true;
@@ -740,13 +746,15 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const hlsAvailableRef = useRef(false);
     hlsAvailableRef.current = !!hlsUrl && !hlsFailedRef.current;
     useEffect(() => {
-        if (engine === "device" && !deviceSession) {
+        let cancelled = false;
+        if (engine === "device" && !deviceSession && !awaitingHls) {
             void startDeviceConversion().then((ok) => {
-                if (!ok) setEngineOverride(hlsAvailableRef.current ? "compatible" : "original");
+                if (!ok && !cancelled) setEngineOverride(hlsAvailableRef.current ? "transcode" : "native");
             });
         }
-        if (engine !== "device" && engine !== "auto" && deviceSession) stopDeviceSession();
-    }, [engine, deviceSession, startDeviceConversion, stopDeviceSession]);
+        if (engine !== "device" && engine !== "fallback" && deviceSession) stopDeviceSession();
+        return () => { cancelled = true; };
+    }, [engine, deviceSession, awaitingHls, startDeviceConversion, stopDeviceSession]);
 
     const openInExternalPlayer = useCallback(
         (player: MediaPlayer) => {
@@ -1104,7 +1112,6 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // Sticky source: once a file has really played, errors are treated as
     // network hiccups and recovered on the same file (reload at position) rather
     // than silently swapping to a different release mid-movie.
-    const lockSourceAfterStart = useSettingsStore((s) => s.settings.streaming.lockSourceAfterStart) ?? true;
     const playbackStartedRef = useRef(false);
     const lastGoodTimeRef = useRef(0);
     const recoveryAttemptsRef = useRef(0);
@@ -1112,22 +1119,11 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         playbackStartedRef.current = false;
         lastGoodTimeRef.current = 0;
         recoveryAttemptsRef.current = 0;
-        const video = videoRef.current;
-        if (!video) return;
-        const onTime = () => {
-            if (video.currentTime > 5) {
-                playbackStartedRef.current = true;
-                lastGoodTimeRef.current = video.currentTime;
-                recoveryAttemptsRef.current = 0;
-            }
-        };
-        video.addEventListener("timeupdate", onTime);
-        return () => video.removeEventListener("timeupdate", onTime);
     }, [downloadUrl]);
 
     const tryRecoverSameSource = useCallback((): boolean => {
         const video = videoRef.current;
-        if (!video || !lockSourceAfterStart || !playbackStartedRef.current || isHlsUrl) return false;
+        if (!video || !playbackStartedRef.current || isHlsUrl) return false;
         const attempt = ++recoveryAttemptsRef.current;
         if (attempt > 3) return false;
         const resumeAt = lastGoodTimeRef.current;
@@ -1142,7 +1138,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             video.load();
         }, [2000, 5000, 10000][attempt - 1]);
         return true;
-    }, [lockSourceAfterStart, isHlsUrl, showOsd]);
+    }, [isHlsUrl, showOsd]);
 
     const handleError = useCallback(() => {
         setIsLoading(false);
@@ -1154,18 +1150,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         if (deviceSessionRef.current) {
             stopDeviceSession();
-            if (hlsUrl && !hlsFailedRef.current) {
+            if (engine !== "native" && hlsUrl && !hlsFailedRef.current) {
                 showOsd("On-device conversion stopped — switching to compatible stream");
-                setEngineOverride("compatible");
+                setEngineOverride("transcode");
             } else {
-                setEngineOverride("original");
+                setEngineOverride("native");
                 showLoadErrorToast("On-device conversion stopped. Try an external player.");
             }
             return;
         }
 
         if (tryRecoverSameSource()) return;
-        if (lockSourceAfterStart && playbackStartedRef.current) {
+        if (playbackStartedRef.current) {
             setError(true);
             showLoadErrorToast("Playback stopped and couldn't reconnect. Pick another source from the Sources menu.");
             onError?.(new Error("Playback interrupted"));
@@ -1173,14 +1169,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         }
 
         // If we haven't tried transcoded stream yet and one is available, try it
-        if (!triedTranscodeFallback && streamingLinks && Object.keys(streamingLinks).length > 0 && !isUsingTranscodedStream) {
+        if (engine !== "native" && !triedTranscodeFallback && streamingLinks && Object.keys(streamingLinks).length > 0 && !isUsingTranscodedStream) {
             setTriedTranscodeFallback(true);
             setIsLoading(true);
 
             // HLS must go through hls.js (Chrome can't play it as a plain src).
             if (hlsUrl && hlsUrl !== effectiveUrl) {
                 showOsd("Switching to compatible stream");
-                setEngineOverride("compatible");
+                setEngineOverride("transcode");
                 return;
             }
 
@@ -1201,12 +1197,14 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
 
         // For addon streams (no transcoded links): try resolving URL server-side.
         // Many addons return proxy/redirect URLs that fail in the browser's <video> element.
-        if (!triedUrlResolveRef.current && (!streamingLinks || Object.keys(streamingLinks).length === 0)) {
+        if (engine !== "transcode" && !triedUrlResolveRef.current && (!streamingLinks || Object.keys(streamingLinks).length === 0)) {
             triedUrlResolveRef.current = true;
             setIsLoading(true);
 
+            const sourceAtRequest = useStreamingStore.getState().selectedSource;
             resolveAddonStreamUrl(downloadUrl)
                 .then(data => {
+                    if (useStreamingStore.getState().selectedSource !== sourceAtRequest) return;
                     const resolvedUrl = data?.url;
                     if (resolvedUrl && resolvedUrl !== downloadUrl && (data?.status ?? 999) < 400) {
                         showOsd("Retrying stream URL");
@@ -1220,7 +1218,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     }
                     // Try falling back to the next best stream based on codec health
                     const streamingStore = useStreamingStore.getState();
-                    if (streamingStore.playNextBestSource()) {
+                    if (engine !== "native" && streamingStore.playNextBestSource()) {
                         showOsd("Playback failed. Trying next source...");
                         setIsLoading(true);
                         return;
@@ -1249,7 +1247,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 : "The video could not be loaded. This might be due to an unsupported format or a network issue."
         );
         onError?.(new Error(errorMessage));
-    }, [onError, triedTranscodeFallback, streamingLinks, hlsUrl, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl, showOsd, showLoadErrorToast, tryRecoverSameSource, lockSourceAfterStart, stopDeviceSession]);
+    }, [onError, triedTranscodeFallback, streamingLinks, hlsUrl, isUsingTranscodedStream, effectiveUrl, hasCodecIssue, downloadUrl, showOsd, showLoadErrorToast, tryRecoverSameSource, stopDeviceSession, engine]);
 
     const handleLoadedMetadata = useCallback(() => {
         const el = videoRef.current as (HTMLVideoElement & {
@@ -1464,9 +1462,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                 hls.destroy();
                 hlsRef.current = null;
                 hlsFailedRef.current = true;
-                if (finalUrl !== downloadUrl) {
+                if (finalUrl !== downloadUrl && engine !== "transcode") {
                     showOsd("Compatible stream failed — playing original file");
-                    setEngineOverride("original");
+                    setEngineOverride("native");
                 } else {
                     handleError();
                 }
@@ -1516,13 +1514,18 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             if (video.currentTime - startedAt < 3) return;
             video.removeEventListener("timeupdate", check);
             if (isAudioSilentlyUnsupported(video) !== true) return;
+            if (engine === "native") {
+                setError(true);
+                showLoadErrorToast("This browser cannot play this file’s audio. Try the transcoded version.");
+                return;
+            }
             if (hlsUrl && !hlsFailedRef.current && configuredEngine !== "device") {
                 showOsd("Audio format not supported here — switching to compatible stream");
-                setEngineOverride("compatible");
+                setEngineOverride("transcode");
                 return;
             }
             void startDeviceConversion().then((ok) => {
-                if (ok) return;
+                if (ok || engineRef.current === "native" || engineRef.current === "transcode") return;
                 // Nothing on this device can play this file's audio — move on to a
                 // source that plays, instead of leaving silent/black video.
                 if (useStreamingStore.getState().playNextBestSource()) {
@@ -1535,7 +1538,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         };
         video.addEventListener("timeupdate", check);
         return () => video.removeEventListener("timeupdate", check);
-    }, [finalUrl, isHlsUrl, hlsUrl, streamingLinks, deviceSession, configuredEngine, showOsd, showLoadErrorToast, startDeviceConversion]);
+    }, [finalUrl, isHlsUrl, hlsUrl, streamingLinks, deviceSession, configuredEngine, engine, showOsd, showLoadErrorToast, startDeviceConversion]);
 
     // hls.js: switch audio track when user selects a different one
     useEffect(() => {
@@ -3127,31 +3130,22 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}>
             <LegacyPlayerSubtitleStyle />
-            {error ? (
+            {error || (!awaitingHls && !finalUrl && !deviceSession) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-white">
                     <AlertCircle className="h-12 w-12 mb-2" />
-                    <p className="text-sm">Failed to load video</p>
+                    <p className="text-sm">{engine === "transcode" && !hlsUrl ? "Transcoding isn’t available for this file or account/plan." : "Failed to load video"}</p>
                     <p className="text-xs text-white/70 mt-1">{file.name}</p>
-                    {streamingLinks && Object.keys(streamingLinks).length > 0 && (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="mt-3"
-                            onClick={() => {
-                                setError(false);
-                                setIsLoading(true);
-                                setTriedTranscodeFallback(true);
-                                const transcodedUrl = streamingLinks.liveMP4 || streamingLinks.apple || streamingLinks.h264WebM;
-                                if (transcodedUrl && videoRef.current) {
-                                    videoRef.current.src = transcodedUrl;
-                                    videoRef.current.load();
-                                    videoRef.current.play().catch(() => { });
-                                }
-                            }}
-                        >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Try Transcoded Format
-                        </Button>
+                    {engine !== "transcode" && (
+                        <Button data-tv-focusable className="mt-3 min-h-phone-touch" onClick={() => {
+                            setError(false);
+                            setEngineOverride("transcode");
+                        }}>Try transcoded version</Button>
+                    )}
+                    {engine === "transcode" && (
+                        <Button data-tv-focusable className="mt-3 min-h-phone-touch" onClick={() => {
+                            setError(false);
+                            setEngineOverride("native");
+                        }}>Try native version</Button>
                     )}
                 </div>
             ) : (
@@ -3166,6 +3160,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         className="w-full h-full object-contain bg-black transition-opacity duration-500 ease-premium data-[loading=true]:opacity-[0.88] motion-reduce:transition-none"
                         data-loading={isLoading && !error ? "true" : undefined}
                         style={{ maxHeight: "100%" }}
+                        onPlaying={() => { playbackStartedRef.current = true; useStreamingStore.getState().markPlaybackStarted(); }}
+                        onTimeUpdate={(event) => {
+                            if (!event.currentTarget.paused && playbackStartedRef.current) {
+                                lastGoodTimeRef.current = event.currentTarget.currentTime;
+                                recoveryAttemptsRef.current = 0;
+                            }
+                        }}
                         onLoadedMetadata={handleLoadedMetadata}
                         onLoadedData={handleLoad}
                         onError={useHlsJs ? undefined : handleError}
@@ -3177,6 +3178,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         sourceUrl={selectedSourceFromStore?.url ?? finalUrl ?? null}
                         sourceLabel={selectedSourceFromStore?.addonName ?? null}
                     />
+
+                    {engine === "native" && originalIssue && (
+                        <div data-player-controls className="absolute bottom-20 inset-x-0 z-50 flex flex-wrap items-center justify-center gap-2 bg-black/90 p-3 text-xs text-white" onClick={(event) => event.stopPropagation()}>
+                            <span>{originalIssue}</span>
+                            <Button data-tv-focusable className="min-h-phone-touch" size="sm" onClick={() => setEngineOverride("transcode")}>Try transcoded version</Button>
+                        </div>
+                    )}
 
                     {/* YouTube-style top loading bar */}
                     {(isLoading && !error && !isTransitioning && !isSwitchingSource) && (
@@ -3828,16 +3836,16 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         <p className="px-2 pb-1.5 text-[11px] leading-snug text-white/50">{streamingSelection.reason}</p>
                                                     )}
                                                     <button
-                                                        onClick={() => { setOpenMenuTracked(null); setVariant(null); setEngineOverride(null); showOsd("Auto stream"); }}
+                                                        onClick={() => { setOpenMenuTracked(null); setVariant(null); setEngineOverride(null); showOsd("Profile playback mode"); }}
                                                         className={POPUP_ITEM}
                                                         data-active={engineOverride === null && !variant}
                                                     >
-                                                        Auto
+                                                        Profile playback mode
                                                     </button>
                                                     <button
-                                                        onClick={() => { setOpenMenuTracked(null); stopDeviceSession(); setEngineOverride("original"); showOsd("Original file"); }}
+                                                        onClick={() => { setOpenMenuTracked(null); stopDeviceSession(); setEngineOverride("native"); showOsd("Original file"); }}
                                                         className={cn(POPUP_ITEM, "flex items-center justify-between gap-3")}
-                                                        data-active={!isUsingTranscodedStream && !deviceSession && engineOverride === "original"}
+                                                        data-active={!isUsingTranscodedStream && !deviceSession && engineOverride === "native"}
                                                     >
                                                         <span>Original file</span>
                                                         {streamInfo && (

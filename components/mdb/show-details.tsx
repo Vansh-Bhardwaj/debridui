@@ -1,6 +1,7 @@
 "use client";
 
 import { type TraktMedia, type TraktEpisode, type TraktSeason, type TraktShowWatchedProgress } from "@/lib/trakt";
+import { useRememberedSeason } from "@/hooks/use-remembered-season";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { useTraktShowSeasons, useTraktShowEpisodes, useTraktCalendarShows, useTraktShowProgress, useMarkEpisodeWatched, useUnmarkEpisodeWatched } from "@/hooks/use-trakt";
@@ -12,7 +13,7 @@ import { MediaHeader } from "./media-header";
 import { RelatedMedia } from "./related-media";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, memo, useCallback, useMemo } from "react";
+import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { TMDBEpisodeGroupEpisode } from "@/lib/tmdb";
 import { CalendarDays, Tv, Eye, EyeOff, Loader as Loader2, Globe, Radio, ArrowUp, ArrowDown } from "reicon-react";
@@ -336,7 +337,9 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
     const groupParam = searchParams.get("group");
     const partParam = searchParams.get("part");
 
-    const [selectedSeason, setSelectedSeason] = useState<number | null>(seasonParam ? parseInt(seasonParam, 10) : null);
+    const [rememberedSeason, setSelectedSeason] = useRememberedSeason(media.ids?.imdb || mediaId);
+    const parsedSeason = seasonParam === null ? null : Number(seasonParam);
+    const selectedSeason = parsedSeason !== null && Number.isInteger(parsedSeason) && parsedSeason >= 0 ? parsedSeason : rememberedSeason;
     const [selectedGroup, setSelectedGroup] = useState<string>(groupParam || "");
     const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(partParam ? parseInt(partParam, 10) : 0);
 
@@ -365,7 +368,11 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
 
         return seasons.find((season) => season.number > 0)?.number ?? seasons[0]?.number ?? 1;
     }, [seasons, watchedProgress]);
-    const activeSeason = selectedSeason ?? preferredSeason ?? 1;
+    const activeSeason = selectedSeason != null && seasons?.some((s) => s.number === selectedSeason) ? selectedSeason : preferredSeason ?? 1;
+
+    useEffect(() => {
+        if (seasons?.some((s) => s.number === activeSeason)) setSelectedSeason(activeSeason);
+    }, [activeSeason, seasons, setSelectedSeason]);
 
     // TMDB episode groups (only when user has TMDB key configured)
     const tmdbId = media.ids?.tmdb;
@@ -381,7 +388,7 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
             params.delete("part");
             router.replace(`?${params.toString()}`, { scroll: false });
         },
-        [searchParams, router]
+        [searchParams, router, setSelectedSeason]
     );
 
     const handleGroupChange = useCallback(
@@ -591,8 +598,8 @@ export const ShowDetails = memo(function ShowDetails({ media, mediaId }: ShowDet
             </section>
 
             <section className="space-y-6" data-tv-section>
-                <SectionDivider label="Related Shows" />
-                <RelatedMedia mediaId={baseId} type="show" />
+                <SectionDivider label="More Like This" />
+                <RelatedMedia media={media} mediaId={baseId} type="show" />
             </section>
         </div>
     );

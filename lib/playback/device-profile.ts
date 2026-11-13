@@ -1,13 +1,9 @@
 /**
  * One place that decides how this device plays video.
  *
- * - "native": iPhone / iPad. WebKit can't open MKV, can't decode DTS/TrueHD, and
- *   iPhone only plays video in Apple's own player — so these devices get the
- *   provider's transcoded HLS stream in a native <video controls> player, and
- *   never the raw file (except MP4-family files Safari opens natively).
- * - "custom": everything else, using the full in-page player. Devices that can't
- *   open or decode the original still get only the compatible stream (see
- *   getOriginalIssue), via native HLS (Safari) or hls.js.
+ * - "native": iPhone / iPad use Apple's player for originals and provider HLS.
+ * - "custom": desktop / Android use the in-page player, with native HLS on
+ *   Safari and hls.js elsewhere. The playback mode chooses the media on both.
  */
 import { getCodecSupport, isIOS, type CodecSupport } from "@/lib/utils/codec-support";
 import { codecLabel, normalizeCodec, type StreamInfo } from "@/lib/streaming/stream-info";

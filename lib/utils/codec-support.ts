@@ -3,6 +3,7 @@
  * Helps determine which audio/video formats can be played natively
  */
 
+import { detectContainer, getDeviceProfile, getOriginalIssue, type DeviceProfile } from "@/lib/playback/device-profile";
 import { codecLabel, normalizeCodec, type StreamInfo } from "@/lib/streaming/stream-info";
 
 export interface CodecSupport {
@@ -200,11 +201,15 @@ export function selectBestStreamingUrl(
     return { url: downloadUrl, isTranscoded: false, format: "direct" };
 }
 
-/**
- * auto: original when playable, else provider stream, else on-device conversion.
- * device: original video + audio converted on this device (WASM + WebCodecs).
- */
-export type PlaybackEngine = "auto" | "original" | "compatible" | "device";
+export type PlaybackMode = "native" | "fallback" | "transcode";
+/** Device is an internal route for the advanced audio-remux option. */
+export type PlaybackEngine = PlaybackMode | "device";
+
+export function migratePlaybackMode(value: unknown): PlaybackMode {
+    if (value === "native" || value === "original") return "native";
+    if (value === "transcode" || value === "compatible") return "transcode";
+    return "fallback";
+}
 
 export interface StreamDecision {
     url: string;
@@ -238,41 +243,28 @@ export function getUnsupportedCodecs(info: StreamInfo, audioIndex = info.audioIn
  * keep full original quality and only unplayable ones get transcoded.
  */
 export function decideStream({
-    downloadUrl,
-    streamingLinks,
-    fileName,
-    info,
-    engine,
+    downloadUrl, streamingLinks, fileName, info, engine, profile = getDeviceProfile(),
 }: {
     downloadUrl: string;
     streamingLinks?: Record<string, string>;
     fileName: string;
     info?: StreamInfo;
     engine: PlaybackEngine;
+    profile?: DeviceProfile | null;
 }): StreamDecision {
+    const original = { url: downloadUrl, isTranscoded: false, format: "Original" };
+    if (engine === "native" || engine === "device") return original;
     const hls = streamingLinks?.apple;
-    if (engine === "device") {
-        return { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original video, audio converted on this device" };
+    if (engine === "transcode") {
+        return hls
+            ? { url: hls, isTranscoded: true, format: "HLS" }
+            : { url: "", isTranscoded: false, format: "Unavailable", reason: "Transcoding isn't available for this file or account/plan. Try native playback." };
     }
-    if (engine === "original" || !hls) {
-        return engine === "original"
-            ? { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original file (set in preferences)" }
-            : selectBestStreamingUrl(downloadUrl, streamingLinks, fileName);
-    }
-    if (engine === "compatible") {
-        return { url: hls, isTranscoded: true, format: "HLS", reason: "Compatible stream (set in preferences)" };
-    }
-    if (!info) return selectBestStreamingUrl(downloadUrl, streamingLinks, fileName);
-
-    // Safari can't open MKV/AVI containers at all, whatever the codecs.
-    if ((isSafari() || isIOS()) && !/\.(mp4|m4v|mov)$/i.test(fileName)) {
-        return { url: hls, isTranscoded: true, format: "HLS", reason: "Safari can't open this container" };
-    }
-    const blocked = getUnsupportedCodecs(info);
-    if (blocked.length > 0) {
-        return { url: hls, isTranscoded: true, format: "HLS", reason: `Browser can't decode ${blocked.join(" + ")}` };
-    }
-    return { url: downloadUrl, isTranscoded: false, format: "Original", reason: "Original file plays natively" };
+    const issue = profile ? getOriginalIssue(profile, detectContainer(fileName, downloadUrl), info) : null;
+    if (issue) return hls
+        ? { url: hls, isTranscoded: true, format: "HLS", reason: issue }
+        : { url: "", isTranscoded: false, format: "Unavailable", reason: issue };
+    return original;
 }
 
 /**

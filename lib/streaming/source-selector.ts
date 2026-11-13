@@ -86,7 +86,7 @@ const VIDEO_CODEC_PATTERNS: [DetectedVideoCodec, RegExp][] = [
 
 /** Detect audio codec from source title/description. Returns null if ambiguous. */
 export function detectAudioCodec(source: AddonSource): DetectedAudioCodec {
-    const text = `${source.title || ""} ${source.description || ""}`;
+    const text = `${source.title || ""} ${source.description || ""} ${source.fileName || ""}`;
     for (const [codec, pattern] of AUDIO_CODEC_PATTERNS) {
         if (pattern.test(text)) return codec;
     }
@@ -95,7 +95,7 @@ export function detectAudioCodec(source: AddonSource): DetectedAudioCodec {
 
 /** Detect video codec from source title/description. Returns null if ambiguous. */
 export function detectVideoCodec(source: AddonSource): DetectedVideoCodec {
-    const text = `${source.title || ""} ${source.description || ""}`;
+    const text = `${source.title || ""} ${source.description || ""} ${source.fileName || ""}`;
     for (const [codec, pattern] of VIDEO_CODEC_PATTERNS) {
         if (pattern.test(text)) return codec;
     }
@@ -361,6 +361,8 @@ export interface SelectionOptions {
     preferredBingeGroup?: string;
     /** Provider can transcode unplayable codecs (TorBox Pro) — soften codec gating. */
     transcodeAvailable?: boolean;
+    transcodeOnly?: boolean;
+    sourceTranscodeAvailable?: (source: AddonSource) => boolean | undefined;
     /** False on browsers that can't open MKV (Safari / iOS). */
     mkvPlayable?: boolean;
     skipCamReleases?: boolean;
@@ -372,6 +374,7 @@ export function selectBestSource(
     settings: StreamingSettings,
     options: SelectionOptions = {}
 ): SelectionResult {
+    if (options.transcodeOnly) options = { ...options, codecSupport: undefined, mkvPlayable: true };
     const range = getActiveRange(settings);
 
     // Filter sources that match preferences
@@ -411,7 +414,15 @@ export function selectBestSource(
     };
 
     // Sort by calculated score (lower = better)
+    const availabilityRank = (source: AddonSource) => {
+        const available = options.sourceTranscodeAvailable?.(source);
+        return available === true ? 0 : available === false ? 2 : 1;
+    };
     const sortByScore = (a: AddonSource, b: AddonSource) => {
+        if (options.transcodeOnly) {
+            const availability = availabilityRank(a) - availabilityRank(b);
+            if (availability) return availability;
+        }
         return getScore(a) - getScore(b);
     };
 
@@ -423,6 +434,12 @@ export function selectBestSource(
     // "alternative sources" picker still surfaces the full list; selection for auto-play
     // has already been narrowed to `selectable` above.
     const allSorted = [...matchingSources].sort(sortByScore);
+
+    if (options.transcodeOnly) {
+        const eligible = selectable.filter((source) => source.isCached || settings.allowUncached).sort(sortByScore);
+        if (eligible[0]) return { source: eligible[0], isCached: !!eligible[0].isCached, hasMatches: true,
+            cachedMatches, uncachedMatches, allSorted };
+    }
 
     // Prefer cached sources
     if (cachedMatches.length > 0) {

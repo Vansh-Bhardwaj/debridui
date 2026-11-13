@@ -100,6 +100,8 @@ Each phase can be shipped by itself and is committed straight to `main`.
 - External players can optionally receive the HLS stream instead of the raw file.
 
 ### Phase 4 — A Netflix-style home and plug-and-play onboarding
+> **Priority (2026-11-13):** existing users come first. The home, detail, My List and quality-of-life work ships now. Onboarding and automatic addon setup for new users are deferred.
+
 - **Onboarding:**
   1. Sign up.
   2. Create a profile.

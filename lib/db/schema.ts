@@ -264,3 +264,13 @@ export type WatchEvent = typeof watchEvents.$inferSelect;
 export type NewWatchEvent = typeof watchEvents.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type ProfileSetting = typeof profileSettings.$inferSelect;
+
+export const profileWatchlist = pgTable("profile_watchlist", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+    mediaId: text("media_id").notNull(),
+    type: text("type", { enum: ["movie", "show"] }).notNull(),
+    media: jsonb("media").$type<import("../trakt").TraktMedia>().notNull(),
+    addedAt: timestamp("added_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("profile_watchlist_unique").on(table.userId, table.profileId, table.type, table.mediaId)]);

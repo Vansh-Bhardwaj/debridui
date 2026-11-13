@@ -1,3 +1,4 @@
+import { mirrorTraktWatchlist, setLocalWatchlist } from "@/lib/actions/watchlist";
 import { useProfile } from "./use-profile";
 import { keepPreviousData, useQuery, useMutation, useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { traktClient, TraktError, maintainShowOnWatchlist, type TraktMedia, type TraktMediaItem } from "@/lib/trakt";
@@ -304,13 +305,29 @@ export const useTraktPersonShows = createTraktHook(
     CACHE_DURATION.LONG
 );
 
+// Back up only titles this device hasn't sent yet, in the background: the Trakt list itself
+// should never wait on (or be interrupted by) the local My List copy.
+function backupWatchlist(type: "movie" | "show", media: TraktMedia[], profileId: string) {
+    const key = `dui-wl-backup:${profileId}:${type}`;
+    const sent = new Set<string>(JSON.parse(localStorage.getItem(key) || "[]"));
+    const id = (m: TraktMedia) => m.ids?.imdb || String(m.ids?.trakt ?? m.ids?.tmdb ?? "");
+    const fresh = media.filter((m) => id(m) && !sent.has(id(m)));
+    if (!fresh.length) return;
+    void mirrorTraktWatchlist(type, fresh, profileId)
+        .then(() => localStorage.setItem(key, JSON.stringify([...sent, ...fresh.map(id)])))
+        .catch((error) => console.warn("[watchlist] backup failed", error));
+}
+
 // Watchlist hooks (require auth — only enabled when access token is set)
 export function useTraktWatchlistMovies() {
     const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
         queryKey: ["trakt", profileId, "watchlist", "movies"],
-        queryFn: () => traktClient.getWatchlist("movies", "added"),
-        placeholderData: keepPreviousData,
+        queryFn: async () => {
+            const items = await traktClient.getWatchlist("movies", "added");
+            backupWatchlist("movie", items.flatMap((i) => i.movie ? [i.movie] : []), profileId);
+            return items;
+        },
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -322,8 +339,11 @@ export function useTraktWatchlistShows() {
     const { activeProfile: { id: profileId } } = useProfile();
     return useQuery({
         queryKey: ["trakt", profileId, "watchlist", "shows"],
-        queryFn: () => traktClient.getWatchlist("shows", "added"),
-        placeholderData: keepPreviousData,
+        queryFn: async () => {
+            const items = await traktClient.getWatchlist("shows", "added");
+            backupWatchlist("show", items.flatMap((i) => i.show ? [i.show] : []), profileId);
+            return items;
+        },
         staleTime: CACHE_DURATION.SHORT,
         gcTime: CACHE_DURATION.SHORT * 2,
         enabled: !!traktClient.getAccessToken(),
@@ -335,15 +355,18 @@ export function useRemoveFromWatchlist() {
     const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+        mutationFn: async (params: { type: "movie" | "show"; imdbId?: string; traktId?: number; media?: TraktMedia }) => {
             const key = params.type === "movie" ? "movies" : "shows";
             const ids: { imdb?: string; trakt?: number } = {};
             if (params.imdbId) ids.imdb = params.imdbId;
             if (params.traktId) ids.trakt = params.traktId;
+            const media = params.media ?? await (params.type === "movie" ? traktClient.getMovie : traktClient.getShow).call(traktClient, params.imdbId || String(params.traktId));
+            await setLocalWatchlist(params.type, media, false, profileId);
             return traktClient.removeFromWatchlist({ [key]: [{ ids }] });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["local-watchlist", profileId] });
         },
     });
 }
@@ -352,15 +375,18 @@ export function useAddToWatchlist() {
     const { activeProfile: { id: profileId } } = useProfile();
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (params: { type: "movie" | "show"; imdbId?: string; traktId?: number }) => {
+        mutationFn: async (params: { type: "movie" | "show"; imdbId?: string; traktId?: number; media?: TraktMedia }) => {
             const key = params.type === "movie" ? "movies" : "shows";
             const ids: { imdb?: string; trakt?: number } = {};
             if (params.imdbId) ids.imdb = params.imdbId;
             if (params.traktId) ids.trakt = params.traktId;
+            const media = params.media ?? await (params.type === "movie" ? traktClient.getMovie : traktClient.getShow).call(traktClient, params.imdbId || String(params.traktId));
+            await setLocalWatchlist(params.type, media, true, profileId);
             return traktClient.addToWatchlist({ [key]: [{ ids }] });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["trakt", profileId, "watchlist"] });
+            queryClient.invalidateQueries({ queryKey: ["local-watchlist", profileId] });
         },
     });
 }

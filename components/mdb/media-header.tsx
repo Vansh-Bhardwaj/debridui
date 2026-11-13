@@ -1,15 +1,13 @@
 import { type TraktMedia } from "@/lib/trakt";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { MediaStats } from "./media-stats";
 import { memo } from "react";
 import { getPosterUrl, getBackdropUrl } from "@/lib/utils/media";
-import { ArrowUpRight as ArrowUpRightIcon, Play, Star } from "reicon-react";
-import { YoutubeTrailerIcon } from "@/components/icons/youtube-trailer-icon";
-import { WatchButton } from "@/components/common/watch-button";
-import { usePreviewStore } from "@/lib/stores/preview";
-import { FileType } from "@/lib/types";
+import { ArrowUpRight as ArrowUpRightIcon, Star } from "reicon-react";
+import { DetailPlayButton } from "./detail-play-button";
+import { TrailerButton } from "./trailer-button";
+import { MyListButton } from "./my-list-button";
 import { MediaActions } from "./media-actions";
 
 interface MediaHeaderProps {
@@ -19,7 +17,6 @@ interface MediaHeaderProps {
 }
 
 export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeaderProps) {
-    const openSinglePreview = usePreviewStore((s) => s.openSinglePreview);
     const posterUrl =
         getPosterUrl(media.images) ||
         `https://placehold.co/300x450/1a1a1a/3e3e3e?text=${encodeURIComponent(media.title)}`;
@@ -27,36 +24,9 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
 
     return (
         <div className="relative">
-            {/* Backdrop - Image or Gradient Fallback */}
-            {backdropUrl ? (
-                <>
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen overflow-hidden -mt-6">
-                        <img
-                            src={backdropUrl}
-                            alt=""
-                            className="media-backdrop-kenburns w-full h-full object-cover opacity-50"
-                            loading="eager"
-                            decoding="async"
-                        />
-                    </div>
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen bg-gradient-to-t from-background via-background/40 to-transparent -mt-6" />
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen bg-gradient-to-r from-background/60 via-transparent to-background/60 -mt-6" />
-                </>
-            ) : (
-                <>
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen overflow-hidden -mt-6">
-                        <img
-                            src={posterUrl}
-                            alt=""
-                            className="media-backdrop-kenburns w-full h-full object-cover opacity-40 blur-2xl scale-110"
-                            loading="eager"
-                            decoding="async"
-                        />
-                    </div>
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen bg-gradient-to-t from-background via-background/70 to-background/40 -mt-6" />
-                    <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen bg-gradient-to-r from-background/70 via-transparent to-background/70 -mt-6" />
-                </>
-            )}
+            <div className="absolute inset-0 left-1/2 -translate-x-1/2 w-screen overflow-hidden -mt-6 bg-muted/30">
+                {backdropUrl && <img src={backdropUrl} alt="" className="w-full h-full object-cover opacity-25" loading="eager" decoding="async" />}
+            </div>
 
             {/* Content */}
             <div className="relative pt-[12vh] sm:pt-[20vh] md:pt-[30vh] pb-8">
@@ -73,35 +43,6 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             />
                         </div>
 
-                        {/* Action Buttons */}
-                        <div className="hidden md:flex flex-col gap-2">
-                            {type === "movie" && media.ids?.imdb && (
-                                <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
-                                    <Button size="lg" className="w-full gap-2" data-tv-focusable>
-                                        <Play weight="Filled" className="size-4" />
-                                        Watch Now
-                                    </Button>
-                                </WatchButton>
-                            )}
-                            {media.trailer && (
-                                <Button
-                                    variant="outline"
-                                    size="lg"
-                                    className="w-full gap-2.5 border-red-500/35 bg-background/40 text-foreground hover:bg-red-600/10 hover:border-red-500/55 hover:text-foreground dark:border-red-500/30 dark:hover:bg-red-600/15 transition-[border-color,background-color,color,box-shadow] duration-300 ease-premium"
-                                    data-tv-focusable
-                                    onClick={() =>
-                                        openSinglePreview({
-                                            url: media.trailer!,
-                                            title: `${media.title} - Trailer`,
-                                            fileType: FileType.TRAILER,
-                                        })
-                                    }>
-                                    <YoutubeTrailerIcon className="size-5" />
-                                    Watch trailer
-                                </Button>
-                            )}
-                            <MediaActions media={media} type={type} variant="full" />
-                        </div>
                     </div>
 
                     {/* Info Column */}
@@ -169,12 +110,19 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             </div>
                         )}
 
+                        <div className="flex flex-wrap gap-3 pt-2" data-tv-section>
+                            <DetailPlayButton media={media} type={type} />
+                            <MyListButton media={media} type={type} />
+                            <TrailerButton url={media.trailer} title={media.title} imdbId={media.ids?.imdb} type={type} />
+                            <div className="md:hidden"><MediaActions media={media} type={type} hideWatchlist /></div>
+                        </div>
+
                         {/* Stats */}
                         <MediaStats media={media} type={type} />
 
                         {/* Trakt Actions (inline icons for desktop) */}
                         <div className="hidden md:block">
-                            <MediaActions media={media} type={type} />
+                            <MediaActions media={media} type={type} hideWatchlist />
                         </div>
 
                         {/* External Links */}
@@ -240,33 +188,6 @@ export const MediaHeader = memo(function MediaHeader({ media, type }: MediaHeade
                             </div>
                         )}
 
-                        {/* Mobile Action Buttons */}
-                        <div className="flex md:hidden flex-wrap items-center justify-center gap-2 pt-2">
-                            {type === "movie" && media.ids?.imdb && (
-                                <WatchButton imdbId={media.ids.imdb} mediaType="movie" title={media.title || "Movie"}>
-                                    <Button className="gap-2">
-                                        <Play weight="Filled" className="size-4" />
-                                        Watch Now
-                                    </Button>
-                                </WatchButton>
-                            )}
-                            {media.trailer && (
-                                <Button
-                                    variant="outline"
-                                    className="gap-2 border-red-500/35 hover:bg-red-600/10 hover:border-red-500/55 dark:hover:bg-red-600/15 transition-[border-color,background-color,color] duration-300 ease-premium"
-                                    onClick={() =>
-                                        openSinglePreview({
-                                            url: media.trailer!,
-                                            title: `${media.title} - Trailer`,
-                                            fileType: FileType.TRAILER,
-                                        })
-                                    }>
-                                    <YoutubeTrailerIcon className="size-4" />
-                                    Trailer
-                                </Button>
-                            )}
-                            <MediaActions media={media} type={type} />
-                        </div>
                     </div>
                 </div>
             </div>

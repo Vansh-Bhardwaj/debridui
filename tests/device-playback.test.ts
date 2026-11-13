@@ -3,10 +3,11 @@ import { extractHash, parseStream } from "../lib/addons/parser";
 import { detectContainer, getOriginalIssue, type DeviceProfile } from "../lib/playback/device-profile";
 import { pickPreferredAudio, type StreamInfo } from "../lib/streaming/stream-info";
 import { parseSubtitleCues } from "../lib/utils/subtitles";
-import type { CodecSupport } from "../lib/utils/codec-support";
+import { decideStream, migratePlaybackMode, type PlaybackEngine, type CodecSupport } from "../lib/utils/codec-support";
 import { selectBestSource } from "../lib/streaming/source-selector";
 import { Resolution, SourceQuality, type AddonSource } from "../lib/addons/types";
-import type { StreamingSettings } from "../lib/stores/settings";
+import { migrateStreamingSettings, type StreamingSettings } from "../lib/stores/settings";
+import { playbackEngine, playbackRankingOptions } from "../lib/playback/preferences";
 
 const HASH = "59fc622486a1b2c3d4e5f60718293a4b5c6d7e8f";
 const allCodecs = (overrides: Partial<CodecSupport> = {}): CodecSupport => ({
@@ -154,4 +155,144 @@ describe("subtitles inside the iPhone stream", () => {
         expect(names).toEqual(["English", "English 2", "Spanish", "English 3"]);
         expect(new Set(names).size).toBe(names.length);
     });
+});
+
+
+describe("playback modes", () => {
+    const original = "https://cdn/movie.mkv";
+    const hls = "https://cdn/stream.m3u8";
+    const metadata = info([{ codec: "dts", language: "eng" }]);
+    for (const profile of [iphone, chrome, { ...chrome, kind: "android", label: "Android · Chrome" } as DeviceProfile,
+        { ...iphone, kind: "mac", route: "custom", label: "Mac · Safari" } as DeviceProfile]) {
+        test(`${profile.label}: strict native never selects HLS, even for unsupported codecs`, () => {
+            expect(decideStream({ downloadUrl: original, streamingLinks: { apple: hls }, fileName: "movie.mkv",
+                info: metadata, profile, engine: "native" }).url).toBe(original);
+        });
+        test(`${profile.label}: fallback selects HLS for DTS`, () => {
+            expect(decideStream({ downloadUrl: original, streamingLinks: { apple: hls }, fileName: "movie.mkv",
+                info: metadata, profile, engine: "fallback" }).url).toBe(hls);
+        });
+        test(`${profile.label}: playable MP4 stays original in fallback`, () => {
+            expect(decideStream({ downloadUrl: original, streamingLinks: { apple: hls }, fileName: "movie.mp4",
+                info: info([{ codec: "aac", language: "eng" }]), profile, engine: "fallback" }).url).toBe(original);
+        });
+        test(`${profile.label}: transcode always selects HLS, even for a playable MP4`, () => {
+            expect(decideStream({ downloadUrl: original, streamingLinks: { apple: hls }, fileName: "movie.mp4",
+                profile, engine: "transcode" }).url).toBe(hls);
+        });
+    }
+    test("transcode without HLS never silently plays the original or another converted format", () => {
+        for (const streamingLinks of [undefined, {}, { liveMP4: "https://cdn/transcoded.mp4" }]) {
+            const result = decideStream({ downloadUrl: original, fileName: "movie.mp4", engine: "transcode", streamingLinks, profile: chrome });
+            expect(result.url).toBe("");
+            expect(result.reason).toContain("account/plan");
+        }
+    });
+    test("migrates legacy profile modes and keeps device audio conversion as an advanced option", () => {
+        for (const [old, mode] of [["original", "native"], ["auto", "fallback"], ["compatible", "transcode"], ["device", "fallback"]]) {
+            expect(migratePlaybackMode(old)).toBe(mode);
+            const migrated = migrateStreamingSettings({ playbackEngine: old } as unknown as StreamingSettings);
+            expect(migrated.playbackEngine).toBe(mode);
+            expect(migrated.deviceAudioRemux).toBe(old === "device");
+        }
+    });
+    test("device override wins over profile, and advanced remux is only used for fallback", () => {
+        const settings = { playbackEngine: "native", deviceAudioRemux: true } as StreamingSettings;
+        expect(playbackEngine(settings, null)).toBe("native");
+        expect(playbackEngine(settings, "transcode")).toBe("transcode");
+        expect(playbackEngine(settings, "fallback")).toBe("device");
+    });
+});
+
+describe("mode-aware source ranking", () => {
+    const settings = {
+        profileId: "max-quality", preferCached: true, allowUncached: true, rememberFailedSources: false,
+    } as StreamingSettings;
+    const source = (name: string, resolution: Resolution): AddonSource => ({
+        title: name, fileName: name, url: `https://cdn/${name}`, addonId: "test", addonName: "Test",
+        resolution, quality: SourceQuality.BLURAY, isCached: true,
+    });
+    const dts4k = source("Movie.HEVC.DTS.mkv", Resolution.UHD_4K);
+    const aac720 = source("Movie.H264.AAC.mp4", Resolution.HD_720P);
+    for (const profile of [iphone, chrome]) {
+        test(`${profile.label}: native penalizes unsupported codecs even with provider transcode`, () => {
+            const options = playbackRankingOptions("native", profile, true);
+            expect(selectBestSource([dts4k, aac720], settings, options).source).toBe(aac720);
+        });
+        test(`${profile.label}: transcode ignores codecs with or without plan capability`, () => {
+            for (const available of [true, false]) {
+                const options = playbackRankingOptions("transcode", profile, available);
+                expect(selectBestSource([aac720, dts4k], settings, options).source).toBe(dts4k);
+            }
+        });
+    }
+    test("transcode ranks known availability above original quality", () => {
+        const options = { ...playbackRankingOptions("transcode", chrome, true),
+            sourceTranscodeAvailable: (s: AddonSource) => s === aac720 };
+        expect(selectBestSource([dts4k, aac720], settings, options).source).toBe(aac720);
+    });
+    test("transcode ignores an accidentally supplied codec penalty", () => {
+        expect(selectBestSource([dts4k, aac720], settings, {
+            codecSupport: chrome.codecs, transcodeOnly: true,
+        }).source).toBe(dts4k);
+    });
+    test("fallback keeps desktop native preference and allows iPhone conversion", () => {
+        expect(playbackRankingOptions("fallback" as PlaybackEngine, chrome, true).transcodeAvailable).toBe(false);
+        expect(playbackRankingOptions("fallback", iphone, true).transcodeAvailable).toBe(true);
+    });
+});
+
+
+describe("locked playback source", () => {
+    test("blocks every automatic next-source request after playback starts, even with the old toggle off", async () => {
+        const { useStreamingStore } = await import("../lib/stores/streaming");
+        const { useSettingsStore } = await import("../lib/stores/settings");
+        const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+        Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+            getItem: () => null, setItem: () => {}, removeItem: () => {},
+        } });
+        const snapshot = useStreamingStore.getState();
+        const settings = useSettingsStore.getState().get("streaming");
+        const sources = ["first", "second"].map((name) => ({ title: name, url: `https://cdn/${name}`,
+            addonId: "test", addonName: "Test" }) as AddonSource);
+        const switched: AddonSource[] = [];
+        try {
+            useSettingsStore.getState().set("streaming", { ...settings, lockSourceAfterStart: false, rememberFailedSources: false });
+            useStreamingStore.setState({ allFetchedSources: sources, selectedSource: sources[0], playbackStarted: false,
+                playAlternativeSource: (source) => { switched.push(source); } });
+            useStreamingStore.getState().markPlaybackStarted();
+            expect(useStreamingStore.getState().playNextBestSource()).toBe(false);
+            expect(switched).toHaveLength(0);
+            expect(useStreamingStore.getState().playNextBestSource(true)).toBe(true);
+            expect(switched).toEqual([sources[1]]);
+        } finally {
+            useStreamingStore.setState(snapshot);
+            useSettingsStore.getState().set("streaming", settings);
+            if (storageDescriptor) Object.defineProperty(globalThis, "localStorage", storageDescriptor);
+            else Reflect.deleteProperty(globalThis, "localStorage");
+        }
+    });
+});
+
+
+test("source transcode availability follows provider lookup results and resets with the account", async () => {
+    const { setProviderTranscodeAvailable, setStreamLinkLookup, prefetchStreamLinks, sourceTranscodeAvailable } =
+        await import("../lib/streaming/stream-info");
+    const source = { url: "https://addon/movie", fileName: "movie.mkv" } as AddonSource;
+    try {
+        setProviderTranscodeAvailable(true);
+        setStreamLinkLookup(async () => ({ apple: "https://cdn/hls" }));
+        expect(sourceTranscodeAvailable(source)).toBeUndefined();
+        prefetchStreamLinks(source);
+        await Promise.resolve();
+        expect(sourceTranscodeAvailable(source)).toBe(true);
+        setStreamLinkLookup(async () => ({}));
+        expect(sourceTranscodeAvailable(source)).toBeUndefined();
+        prefetchStreamLinks(source);
+        await Promise.resolve();
+        expect(sourceTranscodeAvailable(source)).toBe(false);
+    } finally {
+        setStreamLinkLookup(null);
+        setProviderTranscodeAvailable(false);
+    }
 });

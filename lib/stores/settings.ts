@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { MediaPlayer } from "../types";
 import { Resolution, SourceQuality } from "../addons/types";
-import type { PlaybackEngine } from "../utils/codec-support";
+import { migratePlaybackMode, type PlaybackMode } from "../utils/codec-support";
 
 export type StreamingResolution = Resolution | "any";
 
@@ -108,11 +108,10 @@ export interface StreamingSettings {
     preferredLanguage: string;
     /** Prefer cached sources even if lower quality */
     preferCached: boolean;
-    /**
-     * auto: play the original file when the browser can decode it, otherwise the
-     * provider's compatible (transcoded) stream. original/compatible force one.
-     */
-    playbackEngine: PlaybackEngine;
+    /** Profile playback mode; this device can override it locally. */
+    playbackEngine: PlaybackMode;
+    /** Advanced fallback: remux Dolby audio on this device before provider HLS. */
+    deviceAudioRemux?: boolean;
     /** Once a source starts playing, recover on the same file instead of auto-switching. */
     lockSourceAfterStart: boolean;
     /** Rank CAM/telesync/screener rips last. */
@@ -273,7 +272,8 @@ const settingsConfig: SettingsConfig = {
             autoPlay: true,
             preferredLanguage: "english",
             preferCached: true,
-            playbackEngine: "auto",
+            playbackEngine: "fallback",
+            deviceAudioRemux: false,
             lockSourceAfterStart: true,
             skipCamReleases: true,
             rememberFailedSources: true,
@@ -442,10 +442,9 @@ export const useSettingsStore = create<SettingsStore>()(
                     return result;
                 };
 
-                return {
-                    ...current,
-                    settings: deepMerge(defaults, persistedSettings),
-                };
+                const settings = deepMerge(defaults, persistedSettings);
+                settings.streaming = migrateStreamingSettings(settings.streaming);
+                return { ...current, settings };
             },
         }
     )
@@ -469,6 +468,8 @@ export async function loadProfilePreferences(profileId: string, firstProfileId: 
             return [key, typeof current === "object" ? { ...current as object, ...value as object } : value];
         }));
         useSettingsStore.getState().setMultiple(updates);
+        const store = useSettingsStore.getState();
+        store.set("streaming", migrateStreamingSettings(store.get("streaming")));
     } finally {
         loadingProfile = false;
     }
@@ -478,4 +479,9 @@ export function profilePreferencesSnapshot() {
     const { settings } = useSettingsStore.getState();
     const { subtitleAutoSync: _deviceSubtitleSync, ...playback } = settings.playback;
     return Object.fromEntries(syncedPreferenceKeys.map((key) => [key, key === "playback" ? playback : settings[key]]));
+}
+
+export function migrateStreamingSettings(settings: StreamingSettings): StreamingSettings {
+    return { ...settings, playbackEngine: migratePlaybackMode(settings.playbackEngine),
+        deviceAudioRemux: (settings.playbackEngine as string) === "device" || !!settings.deviceAudioRemux };
 }

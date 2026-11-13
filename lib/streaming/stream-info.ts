@@ -54,6 +54,11 @@ export interface StreamInfo {
  * streaming). When true, codec-incompatible releases are still playable, so
  * source ranking stops filtering them out. Set by the auth provider.
  */
+const sourceTranscodes = new Map<string, boolean>();
+export function sourceTranscodeAvailable(source: AddonSource): boolean | undefined {
+    return sourceTranscodes.get(source.url ?? "") ?? (providerTranscode ? undefined : false);
+}
+
 let providerTranscode = false;
 export const setProviderTranscodeAvailable = (value: boolean) => {
     providerTranscode = value;
@@ -106,6 +111,7 @@ let streamLinkLookup: StreamLinkLookup | null = null;
 /** Registered by the auth provider for the active debrid account. */
 export const setStreamLinkLookup = (lookup: StreamLinkLookup | null) => {
     streamLinkLookup = lookup;
+    sourceTranscodes.clear();
 };
 
 type CacheChecker = (hashes: string[]) => Promise<Set<string>>;
@@ -144,7 +150,14 @@ export async function verifyCachedSources(sources: AddonSource[], timeoutMs = 4_
 export function prefetchStreamLinks(source: AddonSource, episode?: { season?: number | null; episode?: number | null } | null): void {
     if (!providerTranscode || !streamLinkLookup) return;
     const hint = sourceStreamHint(source, episode);
-    if (hint.infoHash || hint.fileName || hint.fileSize) void streamLinkLookup(source.url ?? "", hint).catch(() => {});
+    if (hint.infoHash || hint.fileName || hint.fileSize) {
+        const lookup = streamLinkLookup;
+        void lookup(source.url ?? "", hint).then((links) => {
+            if (lookup !== streamLinkLookup) return;
+            if (sourceTranscodes.size >= 200) sourceTranscodes.clear();
+            sourceTranscodes.set(source.url ?? "", !!links.apple);
+        }).catch(() => {});
+    }
 }
 
 const registry = new Map<string, StreamInfo>();

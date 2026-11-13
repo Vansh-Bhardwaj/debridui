@@ -1,3 +1,4 @@
+import { playbackEngine, playbackRankingOptions } from "@/lib/playback/preferences";
 import { create } from "zustand";
 import {
     type Addon,
@@ -28,7 +29,7 @@ import { usePreviewStore } from "./preview";
 import type { ProgressKey } from "@/hooks/use-progress";
 import { createDevTimer } from "@/lib/utils/dev-timing";
 import { cacheSource } from "@/lib/utils/source-cache";
-import { isProviderTranscodeAvailable, prefetchStreamLinks, verifyCachedSources } from "@/lib/streaming/stream-info";
+import { isProviderTranscodeAvailable, prefetchStreamLinks, sourceTranscodeAvailable, verifyCachedSources } from "@/lib/streaming/stream-info";
 import { detectContainer, getDeviceProfile } from "@/lib/playback/device-profile";
 import { getSourceFailure, isCamRelease, markSourceFailed } from "@/lib/streaming/source-health";
 
@@ -71,7 +72,9 @@ interface StreamingState {
     openSourcePicker: () => void;
     closeSourcePicker: () => void;
     playAlternativeSource: (source: AddonSource) => void;
-    playNextBestSource: () => boolean;
+    playbackStarted: boolean;
+    markPlaybackStarted: () => void;
+    playNextBestSource: (manual?: boolean) => boolean;
 
     // Preloading
     preloadedData: PreloadedData[];
@@ -131,21 +134,18 @@ function getCodecSupportForPlayer(player: string | undefined): CodecSupport | un
     return undefined;
 }
 
-/**
- * Should ranking treat every source as playable because the provider converts it?
- * Only on devices that always play the converted stream (iPhone/iPad). Elsewhere a
- * file the browser plays directly beats one that needs conversion — conversion is
- * the fallback, not an equal option (it costs startup time and can fail).
- */
+/** Transcode-only ignores codecs; iOS fallback can also use provider conversion. */
 function rankAsConverted(): boolean {
-    return isProviderTranscodeAvailable() && getDeviceProfile()?.route === "native";
+    const engine = playbackEngine(useSettingsStore.getState().get("streaming"));
+    return engine === "transcode" || (engine !== "native" && isProviderTranscodeAvailable() && getDeviceProfile()?.route === "native");
 }
 
 /** Shared ranking policy derived from settings + provider capabilities. */
 function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: StreamingSettings) {
     return {
-        transcodeAvailable: !!codecSupport && rankAsConverted(),
-        mkvPlayable: !codecSupport || (getDeviceProfile()?.mkv ?? true),
+        ...playbackRankingOptions(playbackEngine(settings), codecSupport ? getDeviceProfile() : null, isProviderTranscodeAvailable()),
+        codecSupport: rankAsConverted() ? undefined : codecSupport,
+        sourceTranscodeAvailable,
         skipCamReleases: settings.skipCamReleases,
         rememberFailedSources: settings.rememberFailedSources,
     };
@@ -564,7 +564,6 @@ async function preloadEpisodeTarget(
         preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
         preferredAddon: titleMemory?.preferredAddonId,
         preferCached: streamingSettings.preferCached,
-        codecSupport,
         ...rememberedSource(titleMemory),
         ...sourcePolicyOptions(codecSupport, streamingSettings),
     });
@@ -839,7 +838,10 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             progressKey: pendingPlayContext.progressKey ?? undefined,
         });
     },
-    playNextBestSource: () => {
+    playbackStarted: false,
+    markPlaybackStarted: () => set({ playbackStarted: true }),
+    playNextBestSource: (manual = false) => {
+        if (!manual && get().playbackStarted) return false;
         const { allFetchedSources, selectedSource, playAlternativeSource } = get();
         if (!selectedSource || allFetchedSources.length === 0) return false;
 
@@ -934,6 +936,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
 
     playSource: async (source, title, options) => {
         if (!source.url) return;
+        set({ playbackStarted: false });
 
         // If a single-mode preview is already open (user is mid-playback and switching
         // source / going to next episode), keep it open: we'll swap URL in place to
@@ -1296,7 +1299,6 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 preferredAddon: titleMemory?.preferredAddonId,
                 preferCached: streamingSettings.preferCached,
                 originalLanguage,
-                codecSupport,
                 ...rememberedSource(titleMemory),
                 ...sourcePolicyOptions(codecSupport, streamingSettings),
             });

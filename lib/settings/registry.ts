@@ -238,21 +238,12 @@ export const settingsRegistry: readonly SettingEntry[] = [
     {
         id: "compatibility",
         section: "playback",
-        label: "Browser Playback",
+        label: "Playback mode",
         description:
-            "Playback compatibility: Auto, Original file, Compatible stream or On this device; browser codec support",
+            "Native only, Native with transcode fallback, or Transcode only; optional local device override and browser codec support",
         devices: all,
         scope: "profile",
         control: { type: "custom", component: "compatibility" },
-    },
-    {
-        id: "lock-source",
-        section: "streaming",
-        label: "Keep Source Once Playing",
-        description: "If a stream drops mid-playback, reconnect to the same file instead of switching releases",
-        devices: all,
-        scope: "profile",
-        control: { type: "switch", key: "streaming.lockSourceAfterStart" },
     },
     {
         id: "skip-cam",

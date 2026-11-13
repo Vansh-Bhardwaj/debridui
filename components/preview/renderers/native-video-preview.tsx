@@ -33,10 +33,12 @@ import { useIntroSegments } from "@/hooks/use-intro-segments";
 import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
+import { decideStream, type PlaybackEngine } from "@/lib/utils/codec-support";
+import { playbackEngine, usePlaybackOverride } from "@/lib/playback/preferences";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
-import { detectContainer, getDeviceProfile, isMp4Family } from "@/lib/playback/device-profile";
+import { detectContainer, getDeviceProfile, getOriginalIssue } from "@/lib/playback/device-profile";
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
 import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
@@ -194,12 +196,21 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             clearTimeout(subs);
         };
     }, []);
-    const findingFile = !downloadUrl || (streamingLinks === undefined && !linksTimedOut);
+    const streamingSettings = useSettingsStore((s) => s.settings.streaming);
+    const modeOverride = usePlaybackOverride((s) => s.mode);
+    const [engineOverride, setEngineOverride] = useState<PlaybackEngine | null>(null);
+    const configuredEngine = playbackEngine(streamingSettings, modeOverride);
+    const engine = engineOverride ?? (configuredEngine === "device" ? "fallback" : configuredEngine);
+    const findingFile = !downloadUrl || (engine !== "native" && streamingLinks === undefined && !linksTimedOut);
 
     const [variant, setVariant] = useState<StreamInfo | null>(null);
-    const hlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
-    const info = variant ?? getStreamInfo(hlsUrl);
-    const container = detectContainer(source?.fileName, file.name, downloadUrl);
+    const providerHlsUrl = variant?.hlsUrl ?? streamingLinks?.apple;
+    const info = variant ?? getStreamInfo(providerHlsUrl);
+    const decision = decideStream({ downloadUrl, streamingLinks: providerHlsUrl ? { apple: providerHlsUrl } : streamingLinks,
+        fileName: source?.fileName ?? file.name, info, engine });
+    const hlsUrl = decision.isTranscoded ? providerHlsUrl : undefined;
+    const profile = getDeviceProfile();
+    const originalIssue = profile ? getOriginalIssue(profile, detectContainer(source?.fileName, file.name, downloadUrl), info) : null;
 
     // Video step: the provider has produced the first converted segment.
     const [videoCheck, setVideoCheck] = useState<{ url: string; ok: boolean } | null>(null);
@@ -276,14 +287,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [hlsUrl, videoReady, subsSettled, needsSubs, masterForStream, nativeSubs, subtitleLanguage, timings, currentSig]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
-    // Converted stream when the provider has one; the original only for MP4-family (or unknown) files.
-    const src = hlsUrl
-        ? videoReady && masterForStream
-            ? masterForStream.url
-            : null
-        : !findingFile && !(container && !isMp4Family(container))
-          ? downloadUrl
-          : null;
+    const src = findingFile ? null : hlsUrl
+        ? videoReady && masterForStream ? masterForStream.url : null
+        : decision.url || null;
     const failed = (!findingFile && (hlsUrl ? videoReady === false : !src)) || (!!src && failedSrc === src);
     const preparing = !src && !failed;
     const steps: { label: string; state: "done" | "active" | "waiting" }[] = [
@@ -729,13 +735,14 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             setVideoCheck({ url: next.hlsUrl, ok: true });
             setMaster({ hls: next.hlsUrl, url, subs: url === next.hlsUrl ? [] : subs, sig: master?.sig });
             setVariant(next);
+            setEngineOverride("transcode");
             setSwitching(false);
         },
         [info, master, subtitleLanguage, timings]
     );
 
     const tryNextSource = () => {
-        if (!useStreamingStore.getState().playNextBestSource()) toast.error("No other sources to try.");
+        if (!useStreamingStore.getState().playNextBestSource(true)) toast.error("No other sources to try.");
     };
     const externalPlayers = EXTERNAL_PLAYERS.filter((p) => isSupportedPlayer(p));
 
@@ -834,14 +841,18 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <div className="space-y-1">
                             <p className="text-sm font-medium">This source can&apos;t play on {device}</p>
                             <p className="max-w-sm text-xs leading-relaxed text-white/50">
-                                {hlsUrl
-                                    ? "Your provider didn't finish converting this file in time."
-                                    : "Your provider doesn't have this file ready yet (it may still be downloading). A cached source usually plays right away."}
+                                {engine === "transcode" && !providerHlsUrl
+                                    ? "Transcoding isn’t available for this file or account/plan. Try native playback."
+                                    : decision.reason ?? "This file could not be played. Try another playback mode or source."}
                             </p>
                         </div>
                         <div className="flex flex-wrap justify-center gap-2">
+                            <Button data-tv-focusable className="min-h-phone-touch" size="sm" onClick={() => {
+                                setFailedSrc(null);
+                                setEngineOverride(engine === "transcode" ? "native" : "transcode");
+                            }}>{engine === "transcode" ? "Try native version" : "Try transcoded version"}</Button>
                             {source && (
-                                <Button size="sm" onClick={tryNextSource}>
+                                <Button data-tv-focusable size="sm" onClick={tryNextSource}>
                                     <RefreshCw className="size-4" /> Next source
                                 </Button>
                             )}
@@ -877,7 +888,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 const dur = v ? mediaDuration(v) : 0;
                                 if (v && dur) void scrobble("start", (v.currentTime / dur) * 100);
                             }}
-                            onPlaying={() => setBuffering(false)}
+                            onPlaying={() => { setBuffering(false); useStreamingStore.getState().markPlaybackStarted(); }}
                             onWaiting={() => setBuffering(true)}
                             onCanPlay={() => setBuffering((b) => (videoRef.current?.paused ? false : b))}
                             onPause={() => {
@@ -903,6 +914,8 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 // Subtitle wrapper failed → play the provider stream without it.
                                 if (masterForStream && src === masterForStream.url && src !== hlsUrl) {
                                     setMaster({ ...masterForStream, url: masterForStream.hls, subs: [], failed: true });
+                                } else if (engine !== "native" && engine !== "transcode" && providerHlsUrl && src === downloadUrl) {
+                                    setEngineOverride("transcode");
                                 } else {
                                     setFailedSrc(src ?? null);
                                 }
@@ -1075,6 +1088,12 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     "flex shrink-0 gap-2 overflow-x-auto px-3 py-3 [scrollbar-width:none] landscape:absolute landscape:inset-x-0 landscape:top-0 landscape:bg-gradient-to-b landscape:from-black/70 landscape:to-transparent landscape:py-2 landscape:transition-opacity",
                     !showOverlay && "landscape:pointer-events-none landscape:opacity-0"
                 )}>
+                {engine === "native" && originalIssue && !failed && (
+                    <Button data-tv-focusable className="min-h-phone-touch shrink-0" size="sm" onClick={() => {
+                        setFailedSrc(null);
+                        setEngineOverride("transcode");
+                    }}>Try transcoded version</Button>
+                )}
                 {chips
                     .filter((c) => c.show)
                     .map((chip) => (

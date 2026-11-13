@@ -1,7 +1,11 @@
 "use client";
 
 import { memo } from "react";
-import { useTraktRelated } from "@/hooks/use-trakt";
+import { useQuery } from "@tanstack/react-query";
+import { useProfile } from "@/hooks/use-profile";
+import { useSettingsStore } from "@/lib/stores/settings";
+import { traktClient, type TraktMedia } from "@/lib/trakt";
+import { recommendations } from "./home-data";
 import { MediaCard } from "@/components/mdb/media-card";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,10 +15,18 @@ import { useIsTVMode } from "@/hooks/use-tv-mode";
 interface RelatedMediaProps {
     mediaId: string;
     type: "movie" | "show";
+    media: TraktMedia;
 }
 
-export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: RelatedMediaProps) {
-    const { data, isLoading } = useTraktRelated(mediaId, type);
+export const RelatedMedia = memo(function RelatedMedia({ mediaId, type, media }: RelatedMediaProps) {
+    const { activeProfile } = useProfile();
+    const key = useSettingsStore((s) => s.get("tmdbApiKey"));
+    const { data, isLoading } = useQuery({
+        queryKey: ["detail-related", activeProfile.id, type, mediaId, key],
+        queryFn: async () => key ? (await recommendations(media, type, key)).flatMap((r) => r.movie ? [r.movie] : r.show ? [r.show] : []) : type === "movie" ? traktClient.getRelatedMovies(mediaId) : traktClient.getRelatedShows(mediaId),
+        staleTime: 3600000,
+        refetchOnWindowFocus: false,
+    });
     const tvMode = useIsTVMode();
     const watchedIds = useWatchedIds();
 

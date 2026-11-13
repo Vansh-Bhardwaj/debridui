@@ -2,6 +2,7 @@
 export const dynamic = "force-static";
 
 import { memo, useMemo, useState, useCallback } from "react";
+import { LocalWatchlist } from "@/components/mdb/local-watchlist";
 import { PageHeader } from "@/components/common/page-header";
 import { MediaSection } from "@/components/mdb/media-section";
 import { MediaCard } from "@/components/mdb/media-card";
@@ -16,7 +17,7 @@ import {
     useTraktFavoritesShows,
 } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
-import { Bookmark, CalendarDays, Film, Tv, Link as LinkIcon, ChevronDown, Bell, Monitor, ClapperboardPlay as Clapperboard, Clock, Heart } from "reicon-react";
+import { Bookmark, CalendarDays, Film, Tv, ChevronDown, Bell, Monitor, ClapperboardPlay as Clapperboard, Clock, Heart } from "reicon-react";
 import { type TraktCalendarItem, type TraktWatchlistItem, type TraktFavoriteItem, type TraktMedia } from "@/lib/trakt";
 import Link from "next/link";
 import Image from "next/image";
@@ -373,35 +374,7 @@ const WatchlistPage = memo(function WatchlistPage() {
     }, [watchlistMovies.data, watchlistShows.data]);
 
     if (!isTraktConnected) {
-        return (
-            <div className="space-y-6">
-                <PageHeader
-                    icon={Bookmark}
-                    title="Watchlist"
-                    description="Trakt watchlist, favorites, and what airs next — connect Trakt to sync."
-                />
-                <div className="flex flex-col items-center justify-center py-16 space-y-4 text-center">
-                    <Bookmark className="size-12 text-muted-foreground/40" strokeWidth={1} />
-                    <p className="text-sm text-muted-foreground max-w-sm">
-                        Connect Trakt in Settings to sync your list and calendar. You can still browse and play from the
-                        catalog anytime.
-                    </p>
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                        <Link data-tv-focusable
-                            href="/discover/browse"
-                            className="inline-flex items-center gap-2 text-sm text-foreground border border-border/50 px-3 py-1.5 rounded-sm hover:bg-muted/40 transition-colors">
-                            Browse catalog
-                        </Link>
-                        <Link data-tv-focusable
-                            href="/settings"
-                            className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-                            <LinkIcon className="size-3.5" />
-                            Trakt in Settings
-                        </Link>
-                    </div>
-                </div>
-            </div>
-        );
+        return <div className="space-y-6"><PageHeader icon={Bookmark} title="My List" description="Movies and shows saved for this profile." /><LocalWatchlist /></div>;
     }
 
     return (

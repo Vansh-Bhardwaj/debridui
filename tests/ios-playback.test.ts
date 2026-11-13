@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "../lib/playback/native-fullscreen";
-import { isIOS } from "../lib/utils/codec-support";
+import { decideStream, isIOS } from "../lib/utils/codec-support";
 import { MediaPlayer, Platform } from "../lib/types";
 import { subtitleToVideoTime, videoToSubtitleTime, type SubtitleSyncState } from "../lib/utils/subtitle-sync";
 
@@ -63,4 +63,16 @@ describe("native caption timing", () => {
             }
         });
     }
+});
+
+
+describe("iOS playback mode respects the original container", () => {
+    test("native tries the original MKV while fallback waits for a converted stream", () => {
+        const profile = { kind: "iphone", engine: "webkit", route: "native", label: "iPhone · Safari", mkv: false,
+            hls: "native", codecs: {} } as import("../lib/playback/device-profile").DeviceProfile;
+        const input = { downloadUrl: "https://cdn/movie.mkv", fileName: "movie.mkv", profile };
+        expect(decideStream({ ...input, engine: "native" }).url).toBe(input.downloadUrl);
+        expect(decideStream({ ...input, engine: "fallback" }).url).toBe("");
+        expect(decideStream({ ...input, engine: "fallback", streamingLinks: { apple: "https://cdn/hls" } }).url).toBe("https://cdn/hls");
+    });
 });

@@ -38,8 +38,8 @@ export const MovieDetails = memo(function MovieDetails({ media, mediaId }: Movie
             </section>
 
             <section className="space-y-6" data-tv-section>
-                <SectionDivider label="Related Movies" />
-                <RelatedMedia mediaId={media.ids?.slug || media.ids?.imdb || mediaId} type="movie" />
+                <SectionDivider label="More Like This" />
+                <RelatedMedia media={media} mediaId={media.ids?.slug || media.ids?.imdb || mediaId} type="movie" />
             </section>
         </div>
     );
