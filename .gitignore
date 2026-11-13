@@ -61,3 +61,5 @@ vlc-bridge/*.zip
 *.openapi.json
 *.openapi.yaml
 *.openapi.md
+.claude/launch.json
+.playwright-mcp/
