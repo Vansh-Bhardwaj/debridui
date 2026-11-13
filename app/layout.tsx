@@ -83,13 +83,13 @@ export const metadata: Metadata = {
     },
     icons: {
         icon: "/icon.svg",
-        apple: "/icon.svg",
+        // iOS ignores SVG touch icons (shows a letter tile instead).
+        apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
     },
     manifest: "/manifest.json",
+    appleWebApp: { capable: true, title: siteConfig.name, statusBarStyle: "black-translucent" },
     other: {
         "mobile-web-app-capable": "yes",
-        "apple-mobile-web-app-capable": "yes",
-        "apple-mobile-web-app-status-bar-style": "black-translucent",
     },
 };
 

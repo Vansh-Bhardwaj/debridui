@@ -57,7 +57,7 @@ export const TVNavigationBar = memo(function TVNavigationBar() {
     if (!tvMode || previewOpen) return null;
 
     return (
-        <nav className="tv-nav-bar fixed top-0 inset-x-0 z-[60] flex items-center justify-between h-16 px-6 bg-background/80 backdrop-blur-xl border-b border-border/30">
+        <nav className="tv-nav-bar fixed top-0 inset-x-0 z-[60] flex items-center justify-between h-16 px-6 mt-[env(safe-area-inset-top)] bg-background/80 backdrop-blur-xl border-b border-border/30">
             {/* Brand */}
             <span className="text-xs tracking-widest uppercase text-muted-foreground">
                 DebridUI

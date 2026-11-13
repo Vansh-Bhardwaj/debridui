@@ -265,6 +265,15 @@
     }
 }
 
+/* Home-screen app: no rubber-band past the top (it reveals a blank strip under the
+   status bar); pull-to-refresh is handled by our own touch component. */
+@media (display-mode: standalone) {
+    html,
+    body {
+        overscroll-behavior-y: none;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;

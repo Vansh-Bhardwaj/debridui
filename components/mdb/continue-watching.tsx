@@ -1,6 +1,7 @@
 "use client";
 
 import { useContinueWatching, type ProgressKey, type ProgressData } from "@/hooks/use-progress";
+import { useNextEpisode } from "@/hooks/use-next-episode";
 import { WatchButton } from "@/components/common/watch-button";
 import { X, SkipForward, Play } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
 import { traktClient } from "@/lib/trakt";
-import { type TvSearchParams } from "@/lib/addons/types";
 import Image from "next/image";
 import Link from "next/link";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
@@ -21,41 +21,6 @@ import { type Addon } from "@/lib/addons/types";
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
     onRemove: (key: ProgressKey) => void;
-}
-
-/** Fetch season data from Trakt to determine the correct next episode,
- *  handling season transitions and hiding when no more episodes exist. */
-function useNextEpisode(
-    imdbId: string,
-    type: "movie" | "show",
-    season?: number,
-    episode?: number,
-): TvSearchParams | null {
-    const { data: seasons } = useQuery({
-        queryKey: ["trakt", "show", "seasons", imdbId],
-        queryFn: () => traktClient.getShowSeasons(imdbId),
-        staleTime: 24 * 60 * 60 * 1000,
-        enabled: type === "show" && !!season && !!episode,
-    });
-
-    return useMemo(() => {
-        if (!seasons || !season || !episode) return null;
-
-        const regularSeasons = seasons.filter((s) => s.number > 0).sort((a, b) => a.number - b.number);
-        const current = regularSeasons.find((s) => s.number === season);
-        if (!current) return null;
-
-        // More episodes in the current season
-        if (episode < (current.aired_episodes ?? 0)) {
-            return { season, episode: episode + 1 };
-        }
-
-        // Jump to the next season with aired episodes
-        const next = regularSeasons.find((s) => s.number > season && (s.aired_episodes ?? 0) > 0);
-        if (next) return { season: next.number, episode: 1 };
-
-        return null;
-    }, [seasons, season, episode]);
 }
 
 const ContinueWatchingItem = memo(function ContinueWatchingItem({ item, onRemove }: ContinueWatchingItemProps) {

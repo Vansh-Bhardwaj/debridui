@@ -151,6 +151,21 @@ function sourcePolicyOptions(codecSupport: CodecSupport | undefined, settings: S
     };
 }
 
+/**
+ * The release last played for this title (same pack, resolution, quality). Ignored on
+ * iPhone/iPad: every source plays there, and a pick a desktop made for codec reasons
+ * (e.g. a 1080p x264 over a 4K REMUX) would otherwise pin the phone to it for the show.
+ */
+function rememberedSource(memory: TitleMemoryEntry | null) {
+    if (!memory || rankAsConverted()) return {};
+    return {
+        preferredSourceTitle: memory.preferredSourceTitle,
+        preferredSourceResolution: memory.preferredSourceResolution,
+        preferredSourceQuality: memory.preferredSourceQuality,
+        preferredBingeGroup: memory.preferredBingeGroup,
+    };
+}
+
 const USER_ADDONS_QUERY_KEY = ["user-addons"] as const;
 
 function dedupeSourcesByUrl(sources: AddonSource[]): AddonSource[] {
@@ -549,11 +564,8 @@ async function preloadEpisodeTarget(
         preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
         preferredAddon: titleMemory?.preferredAddonId,
         preferCached: streamingSettings.preferCached,
-        preferredSourceTitle: titleMemory?.preferredSourceTitle,
-        preferredSourceResolution: titleMemory?.preferredSourceResolution,
-        preferredSourceQuality: titleMemory?.preferredSourceQuality,
         codecSupport,
-        preferredBingeGroup: titleMemory?.preferredBingeGroup,
+        ...rememberedSource(titleMemory),
         ...sourcePolicyOptions(codecSupport, streamingSettings),
     });
 
@@ -1281,12 +1293,9 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                 preferredLanguage: titleMemory?.preferredLanguage || streamingSettings.preferredLanguage,
                 preferredAddon: titleMemory?.preferredAddonId,
                 preferCached: streamingSettings.preferCached,
-                preferredSourceTitle: titleMemory?.preferredSourceTitle,
-                preferredSourceResolution: titleMemory?.preferredSourceResolution,
-                preferredSourceQuality: titleMemory?.preferredSourceQuality,
                 originalLanguage,
                 codecSupport,
-                preferredBingeGroup: titleMemory?.preferredBingeGroup,
+                ...rememberedSource(titleMemory),
                 ...sourcePolicyOptions(codecSupport, streamingSettings),
             });
             timer.step("selected-source", {

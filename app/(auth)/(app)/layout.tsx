@@ -64,9 +64,11 @@ function StandardLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset className="overflow-x-hidden">
+            {/* overflow-x-clip (not hidden): hidden makes this a scroll container and breaks the sticky header. */}
+            <SidebarInset className="overflow-x-clip">
                 <ControlledIndicator />
-                <header className="flex h-12 shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                {/* Home-screen app: the page draws under the status bar, so the bar sits below it and stays reachable. */}
+                <header className="sticky top-0 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 bg-background/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(3rem+env(safe-area-inset-top))]">
                     <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                         <SidebarTrigger className="-ml-1 shrink-0" />
                         <Separator orientation="vertical" className="h-4" />

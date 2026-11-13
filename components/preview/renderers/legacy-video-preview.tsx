@@ -57,6 +57,7 @@ import { VideoCodecWarning } from "@/components/preview/video-codec-warning";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
 import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
 import { useIntroSegments } from "@/hooks/use-intro-segments";
+import { useNextEpisode } from "@/hooks/use-next-episode";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
@@ -801,36 +802,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         historySessionIdRef.current = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
     }, []);
 
-    const { data: showSeasons } = useQuery({
-        queryKey: ["trakt", "show", "seasons", progressKey?.imdbId],
-        queryFn: () => traktClient.getShowSeasons(progressKey!.imdbId),
-        enabled: progressKey?.type === "show" && progressKey.season != null && progressKey.episode != null,
-        staleTime: 24 * 60 * 60 * 1000,
-    });
-
-    const nextEpisodeCursor = useMemo(() => {
-        if (progressKey?.type !== "show" || progressKey.season == null || progressKey.episode == null || !showSeasons) {
-            return undefined;
-        }
-        // Hoist into locals so TS retains the null narrowing inside `.find()` closures.
-        const currentSeasonNum = progressKey.season;
-        const currentEpisodeNum = progressKey.episode;
-
-        const regularSeasons = showSeasons.filter((season) => season.number > 0).sort((a, b) => a.number - b.number);
-        const currentSeason = regularSeasons.find((season) => season.number === currentSeasonNum);
-        if (!currentSeason) return undefined;
-
-        if (currentEpisodeNum < (currentSeason.aired_episodes ?? 0)) {
-            return { season: currentSeasonNum, episode: currentEpisodeNum + 1 };
-        }
-
-        const nextSeason = regularSeasons.find((season) => season.number > currentSeasonNum && (season.aired_episodes ?? 0) > 0);
-        if (nextSeason) {
-            return { season: nextSeason.number, episode: 1 };
-        }
-
-        return undefined;
-    }, [progressKey, showSeasons]);
+    const nextEpisodeCursor = useNextEpisode(progressKey?.imdbId, progressKey?.type, progressKey?.season, progressKey?.episode) ?? undefined;
 
     // Capture ? key before the global shortcuts dialog can handle it.
     // Uses capture phase on document to fire before any bubble-phase handlers.

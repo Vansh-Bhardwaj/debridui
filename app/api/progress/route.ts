@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hiddenContinueWatching, userProgress } from "@/lib/db/schema";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 
 // ── Rate limiter (per-user, in-memory) ────────────────────────────────────
 // Protects Hyperdrive free tier (100K queries/day) from misbehaving clients.
@@ -79,6 +79,23 @@ function buildHiddenConditions(
     }
 
     return conditions;
+}
+
+/**
+ * A finished episode makes every earlier episode's cursor stale. Clearing them stops
+ * Continue Watching from falling back to an old half-watched episode (e.g. S3E1)
+ * once the latest one is done. Movies / non-episodes: just this item.
+ */
+function completedProgressConditions(userId: string, imdbId: string, type: "movie" | "show" | null, season: number, episode: number): SQL[] {
+    if (type !== "show" || Number.isNaN(season) || Number.isNaN(episode)) {
+        return buildProgressConditions(userId, imdbId, type, season, episode);
+    }
+    return [
+        eq(userProgress.userId, userId),
+        eq(userProgress.imdbId, imdbId),
+        eq(userProgress.type, "show"),
+        or(lt(userProgress.season, season), and(eq(userProgress.season, season), lte(userProgress.episode, episode)))!,
+    ];
 }
 
 // GET /api/progress              → all user progress (continue watching list)
@@ -203,7 +220,7 @@ export async function POST(request: NextRequest) {
 
         // Completion clears cursor and un-hides any hidden shelf entry for this key.
         if (progressPercent >= 95) {
-            const conditions = buildProgressConditions(
+            const conditions = completedProgressConditions(
                 session.user.id,
                 imdbId,
                 normalizedType,
@@ -328,14 +345,16 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ success: true, mode: "hide" });
         }
 
-        // Delete completed episode + optionally seed next episode cursor
+        // Completion (a next episode is given): also clear stale earlier episodes, then seed the next.
+        const shouldSeedNext = type === "show" && !Number.isNaN(nextSeason) && !Number.isNaN(nextEp);
         const ops: Promise<unknown>[] = [
-            db.delete(userProgress).where(and(...progressConditions)),
+            db.delete(userProgress).where(and(...(shouldSeedNext
+                ? completedProgressConditions(session.user.id, imdbId, type, season, episode)
+                : progressConditions))),
             db.delete(hiddenContinueWatching).where(and(...hiddenConditions)),
         ];
 
         // Seed next episode cursor at 0 seconds so Continue Watching advances
-        const shouldSeedNext = type === "show" && !Number.isNaN(nextSeason) && !Number.isNaN(nextEp);
         if (shouldSeedNext) {
             ops.push(
                 db.insert(userProgress).values({

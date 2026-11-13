@@ -11,8 +11,10 @@ import {
     Gauge,
     Layers,
     Loader2,
+    Airplay,
     Maximize,
     Pause,
+    PictureInPicture2,
     Play,
     RefreshCw,
     Settings2,
@@ -25,6 +27,11 @@ import { cn } from "@/lib/utils";
 import { MediaPlayer, type DebridFileNode } from "@/lib/types";
 import type { AddonSubtitle } from "@/lib/addons/types";
 import { useProgress, type ProgressKey } from "@/hooks/use-progress";
+import { useNextEpisode } from "@/hooks/use-next-episode";
+import { useIntroSegments } from "@/hooks/use-intro-segments";
+import { useTraktScrobble } from "@/hooks/use-trakt-scrobble";
+import { useTraktMedia } from "@/hooks/use-trakt";
+import { getPosterUrl } from "@/lib/utils/media";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
@@ -45,6 +52,34 @@ const HIDE_CONTROLS_MS = 3_000;
 const DOUBLE_TAP_MS = 260;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const EXTERNAL_PLAYERS = [MediaPlayer.INFUSE, MediaPlayer.VLC, MediaPlayer.KODI];
+/** Counts as watched past this point (credits), once enough was actually played. */
+const COMPLETE_AT = 0.9;
+const COMPLETE_MIN_WATCHED = 0.3;
+
+/**
+ * Set when an episode ends and the next one is started for the user, so the next
+ * player instance resumes playback without a new tap (WebKit allows it while the
+ * page still has user activation; otherwise the play button shows as usual).
+ */
+let continueIntoNext = false;
+
+type WebKitVideo = HTMLVideoElement & {
+    webkitShowPlaybackTargetPicker?: () => void;
+    webkitSupportsPresentationMode?: (mode: string) => boolean;
+    webkitSetPresentationMode?: (mode: string) => void;
+    webkitPresentationMode?: string;
+    webkitDisplayingFullscreen?: boolean;
+    webkitExitFullscreen?: () => void;
+};
+
+// Module is client-only (dynamic import, ssr: false).
+const PIP_SUPPORTED = !!(document.createElement("video") as WebKitVideo).webkitSupportsPresentationMode?.("picture-in-picture");
+
+/** HLS sessions still being converted can report Infinity; the seekable range is the real length. */
+function mediaDuration(video: HTMLVideoElement): number {
+    if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+    return video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
+}
 
 type Sheet = "quality" | "audio" | "subtitles" | "speed" | null;
 
@@ -85,6 +120,12 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     );
     const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
+    const { scrobble } = useTraktScrobble(progressKey ?? null);
+    const nextEpisode = useNextEpisode(progressKey?.imdbId, progressKey?.type, progressKey?.season, progressKey?.episode);
+    const { data: segments } = useIntroSegments(progressKey);
+    const autoSkipIntro = useSettingsStore((s) => s.settings.playback.autoSkipIntro);
+    const autoNextEpisode = useSettingsStore((s) => s.settings.playback.autoNextEpisode);
+    const promptSeconds = useSettingsStore((s) => s.settings.playback.nextEpisodePromptSeconds);
 
     // ── Preparation: find the file → provider converts → subtitles → ready ──
     // Every step waits patiently and shows progress. The player is keyed per source
@@ -118,27 +159,41 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     }, [hlsUrl]);
     const videoReady = videoCheck && videoCheck.url === hlsUrl ? videoCheck.ok : null; // null = still converting
 
-    // Subtitle step: built into the stream once (never rebuilt mid-play).
+    // Subtitle step: built into the stream before it starts. Subtitles that arrive after
+    // it started (slow addons, long 4K conversions outlast the grace period) are added by
+    // swapping in a rebuilt playlist at the same position — otherwise they'd never show.
     const nativeSubs = useMemo(() => pickNativeSubtitles(subtitles, subtitleLanguage), [subtitles, subtitleLanguage]);
     const subsSettled = nativeSubs.length > 0 || subsGraceOver;
-    const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[] } | null>(null);
+    const [master, setMaster] = useState<{ hls: string; url: string; subs: AddonSubtitle[]; failed?: boolean } | null>(null);
     const masterForStream = master && master.hls === hlsUrl ? master : null;
+    /** Resume playback after the element reloads (subtitle or variant swap). */
+    const resumeAfterSwapRef = useRef(false);
+    const needsSubs = !masterForStream || (!masterForStream.failed && masterForStream.subs.length === 0 && nativeSubs.length > 0);
     // Only once the provider's stream exists: the wrapper fetches that playlist, so
     // checking it during a slow conversion would fail and silently drop subtitles.
     useEffect(() => {
-        if (!hlsUrl || !videoReady || !subsSettled || masterForStream) return;
+        if (!hlsUrl || !videoReady || !subsSettled || !needsSubs) return;
         let cancelled = false;
         const subs = nativeSubs;
         buildNativeHlsUrl(hlsUrl, subs, subtitleLanguage)
-            .then(async (url) => (url === hlsUrl || (await isPlaylistReachable(url)) ? url : hlsUrl))
-            .catch(() => hlsUrl)
+            .then(async (url) => (url === hlsUrl || (await isPlaylistReachable(url)) ? url : null))
+            .catch(() => null)
             .then((url) => {
-                if (!cancelled) setMaster({ hls: hlsUrl, url, subs: url === hlsUrl ? [] : subs });
+                if (cancelled) return;
+                if (!url) {
+                    toast.error("Subtitles couldn't be added to this stream.");
+                    setMaster((m) => (m?.hls === hlsUrl ? { ...m, failed: true } : { hls: hlsUrl, url: hlsUrl, subs: [], failed: true }));
+                    return;
+                }
+                if (url === hlsUrl && masterForStream) return; // nothing new to add
+                const video = videoRef.current;
+                resumeAfterSwapRef.current = !!video && !video.paused;
+                setMaster({ hls: hlsUrl, url, subs: url === hlsUrl ? [] : subs });
             });
         return () => {
             cancelled = true;
         };
-    }, [hlsUrl, videoReady, subsSettled, masterForStream, nativeSubs, subtitleLanguage]);
+    }, [hlsUrl, videoReady, subsSettled, needsSubs, masterForStream, nativeSubs, subtitleLanguage]);
 
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     // Converted stream when the provider has one; the original only for MP4-family (or unknown) files.
@@ -187,28 +242,212 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const wasPlayingRef = useRef(false);
     const lastSavedRef = useRef(0);
 
+    // ── Watch tracking: history, Trakt, completion (advances Continue Watching) ──
+    const [historySession] = useState(() => crypto.randomUUID());
+    const watchedRef = useRef(0);
+    const completedRef = useRef(false);
+    const sendHistory = useCallback(
+        (eventType: "pause" | "stop" | "complete") => {
+            const video = videoRef.current;
+            const dur = video ? mediaDuration(video) : 0;
+            if (!progressKey || !video || !dur || video.currentTime < 10) return;
+            fetch("/api/history", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...progressKey,
+                    fileName: file.name,
+                    progressSeconds: Math.round(video.currentTime),
+                    durationSeconds: Math.round(dur),
+                    eventType,
+                    sessionId: historySession,
+                }),
+                keepalive: eventType !== "pause",
+            }).catch(() => {});
+        },
+        [progressKey, file.name, historySession]
+    );
+    const complete = useCallback(() => {
+        if (completedRef.current || !progressKey) return;
+        completedRef.current = true;
+        void scrobble("stop", 100);
+        sendHistory("complete");
+        // Seeds the next episode so Continue Watching moves on instead of falling back to an older one.
+        markCompleted(nextEpisode ?? undefined);
+    }, [progressKey, scrobble, sendHistory, markCompleted, nextEpisode]);
+
+    // Leaving mid-episode: final history + Trakt stop (progress itself is flushed by useProgress).
+    const leaveRef = useRef(() => {});
+    useEffect(() => {
+        leaveRef.current = () => {
+            const video = videoRef.current;
+            const dur = video ? mediaDuration(video) : 0;
+            if (completedRef.current || !video || !dur || video.currentTime < 10) return;
+            sendHistory("stop");
+            void scrobble("stop", (video.currentTime / dur) * 100);
+        };
+    }, [sendHistory, scrobble]);
+    useEffect(() => () => leaveRef.current(), []);
+
     const handleLoadedMetadata = useCallback(() => {
         const video = videoRef.current;
         if (!video) return;
-        setDuration(video.duration);
+        const dur = mediaDuration(video);
+        setDuration(dur);
         const at = positionRef.current > 1 ? positionRef.current : (initialProgress ?? 0);
-        if (at > 5 && (!video.duration || at < video.duration - 30)) video.currentTime = at;
+        if (at > 5 && (!dur || at < dur - 30)) video.currentTime = at;
         video.playbackRate = speed;
         // WebKit allows play() without a new tap once the user has played this element.
-        if (wasPlayingRef.current) void video.play().catch(() => setBuffering(false));
+        if (wasPlayingRef.current || resumeAfterSwapRef.current || continueIntoNext) {
+            continueIntoNext = false;
+            resumeAfterSwapRef.current = false;
+            setBuffering(true);
+            void video.play().catch(() => setBuffering(false));
+        }
     }, [initialProgress, speed]);
 
+    // Intro/recap skip (IntroDB) and the up-next countdown before the credits.
+    const skippedRef = useRef(new Set<string>());
+    const [skipSegment, setSkipSegment] = useState<"intro" | "recap" | null>(null);
+    const [upNextIn, setUpNextIn] = useState<number | null>(null);
+    const upNextDismissedRef = useRef(false);
+    const advancedRef = useRef(false);
+    const playNextRef = useRef(() => {});
     const handleTimeUpdate = useCallback(() => {
         const video = videoRef.current;
         if (!video) return;
-        positionRef.current = video.currentTime;
-        setTime(video.currentTime);
+        const t = video.currentTime;
+        const delta = t - positionRef.current;
+        // Only real playback counts as watched (not seeking to the end).
+        if (!video.paused && delta > 0 && delta < 2) watchedRef.current += delta;
+        positionRef.current = t;
+        setTime(t);
+        const dur = mediaDuration(video);
+        if (dur && dur !== duration) setDuration(dur);
         if (video.buffered.length) setBufferedEnd(video.buffered.end(video.buffered.length - 1));
-        if (Math.abs(video.currentTime - lastSavedRef.current) >= SAVE_EVERY_S) {
-            lastSavedRef.current = video.currentTime;
-            updateProgress(video.currentTime, video.duration);
+        if (Math.abs(t - lastSavedRef.current) >= SAVE_EVERY_S) {
+            lastSavedRef.current = t;
+            updateProgress(t, dur);
+            if ("mediaSession" in navigator && dur) {
+                try {
+                    navigator.mediaSession.setPositionState({ duration: dur, position: Math.min(t, dur), playbackRate: video.playbackRate });
+                } catch { /* unsupported */ }
+            }
         }
-    }, [updateProgress]);
+        if (!dur) return;
+        if (t / dur >= COMPLETE_AT && watchedRef.current >= dur * COMPLETE_MIN_WATCHED) complete();
+
+        const active = (["intro", "recap"] as const).find((type) => {
+            const seg = segments?.[type];
+            return seg && t >= seg.start_sec && t < seg.end_sec - 1;
+        });
+        if (active && autoSkipIntro && !skippedRef.current.has(active)) {
+            skippedRef.current.add(active);
+            video.currentTime = segments![active]!.end_sec;
+        }
+        setSkipSegment(active && !autoSkipIntro ? active : null);
+
+        // Counts down from the credits (IntroDB outro, else the last N seconds), then moves on.
+        if (onNext && autoNextEpisode && !upNextDismissedRef.current) {
+            const lead = Math.max(5, Math.min(promptSeconds || 10, 30));
+            const outro = segments?.outro?.start_sec;
+            const startAt = Math.min(dur - lead, outro != null && outro > dur * 0.8 ? outro : Infinity);
+            const remaining = Math.min(dur, startAt + lead) - t;
+            if (t < startAt) setUpNextIn(null);
+            else if (remaining > 0) setUpNextIn(Math.ceil(remaining));
+            else playNextRef.current();
+        }
+    }, [updateProgress, duration, complete, segments, autoSkipIntro, onNext, autoNextEpisode, promptSeconds]);
+
+    const playNext = useCallback(() => {
+        if (!onNext || advancedRef.current) return;
+        advancedRef.current = true;
+        const v = videoRef.current;
+        const dur = v ? mediaDuration(v) : 0;
+        // Into the credits counts as watched; skipping ahead early doesn't.
+        if (v && dur && v.currentTime / dur >= 0.8) complete();
+        setUpNextIn(null);
+        continueIntoNext = true;
+        // The next episode is a new element; Apple's fullscreen player can't carry over.
+        const video = videoRef.current as WebKitVideo | null;
+        if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
+        onNext();
+    }, [onNext, complete]);
+    useEffect(() => {
+        playNextRef.current = playNext;
+    }, [playNext]);
+
+    // ── Apple integration: Now Playing (lock screen, Control Center, AirPods),
+    // AirPlay, Picture in Picture, and Apple's fullscreen player lifecycle ──
+    const seekByRef = useRef<(delta: number) => void>(() => {});
+    const [airplayAvailable, setAirplayAvailable] = useState(false);
+    useEffect(() => {
+        const video = videoRef.current as WebKitVideo | null;
+        if (!video || !src) return;
+        video.setAttribute("autopictureinpicture", "");
+        const onTargets = (e: Event) => setAirplayAvailable((e as Event & { availability?: string }).availability === "available");
+        // Apple's player has no hooks of its own: save on the way out of it.
+        const onEndFullscreen = () => forceSync();
+        video.addEventListener("webkitplaybacktargetavailabilitychanged", onTargets);
+        video.addEventListener("webkitendfullscreen", onEndFullscreen);
+        return () => {
+            video.removeEventListener("webkitplaybacktargetavailabilitychanged", onTargets);
+            video.removeEventListener("webkitendfullscreen", onEndFullscreen);
+        };
+    }, [src, forceSync]);
+
+    // Now Playing (lock screen / Control Center): show + episode, poster as artwork.
+    // iOS resets it whenever the stream (re)loads, so it is re-applied on every play.
+    const { data: media } = useTraktMedia(progressKey?.imdbId ?? "", progressKey?.type ?? "movie");
+    const nowPlayingRef = useRef(() => {});
+    useEffect(() => {
+        nowPlayingRef.current = () => {
+            if (!("mediaSession" in navigator)) return;
+            const episode = progressKey?.type === "show" && progressKey.season != null
+                ? `S${progressKey.season} E${progressKey.episode}`
+                : null;
+            const name = file.name.replace(/\s*\[[^\]]*\]\s*$/, "").replace(/\.(mkv|mp4|m4v|avi|mov|webm|ts)$/i, "");
+            const poster = getPosterUrl(media?.images)
+                ?? (progressKey?.imdbId.startsWith("tt") ? `https://images.metahub.space/poster/medium/${progressKey.imdbId}/img` : null);
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: name,
+                artist: [media?.title, episode].filter(Boolean).join(" · ") || "DebridUI",
+                album: "DebridUI",
+                artwork: poster ? [{ src: poster, sizes: "512x768", type: "image/jpeg" }] : [],
+            });
+        };
+        if (src) nowPlayingRef.current();
+    }, [src, file.name, media, progressKey]);
+    useEffect(() => {
+        if (!src || !("mediaSession" in navigator)) return;
+        const session = navigator.mediaSession;
+        const video = () => videoRef.current;
+        const handlers: [MediaSessionAction, MediaSessionActionHandler | null][] = [
+            ["play", () => void video()?.play()],
+            ["pause", () => video()?.pause()],
+            ["seekbackward", (d) => seekByRef.current(-(d.seekOffset ?? 10))],
+            ["seekforward", (d) => seekByRef.current(d.seekOffset ?? 10)],
+            ["seekto", (d) => {
+                const v = video();
+                if (v && d.seekTime != null) v.currentTime = d.seekTime;
+            }],
+            ["previoustrack", onPrev ? () => onPrev() : null],
+            ["nexttrack", onNext ? () => playNextRef.current() : null],
+        ];
+        for (const [action, handler] of handlers) {
+            try {
+                session.setActionHandler(action, handler);
+            } catch { /* action not supported */ }
+        }
+        return () => {
+            for (const [action] of handlers) {
+                try {
+                    session.setActionHandler(action, null);
+                } catch { /* ignore */ }
+            }
+            session.metadata = null;
+        };
+    }, [src, onPrev, onNext]);
 
     // Subtitle renditions from the HLS stream show up as native text tracks.
     // The preferred language is switched on when it appears, unless the user chose.
@@ -281,6 +520,9 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         video.currentTime = Math.max(0, Math.min((video.duration || Infinity) - 1, video.currentTime + delta));
         setSeekFlash({ side: delta < 0 ? "left" : "right", id: Date.now() });
     }, []);
+    useEffect(() => {
+        seekByRef.current = seekBy;
+    }, [seekBy]);
 
     // Single tap toggles controls; double tap on the left/right half seeks ±10s.
     const lastTapRef = useRef<{ at: number; timer: ReturnType<typeof setTimeout> | null }>({ at: 0, timer: null });
@@ -333,7 +575,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             }
             const subs = master?.subs ?? [];
             const url = await buildNativeHlsUrl(next.hlsUrl, subs, subtitleLanguage).catch(() => next.hlsUrl);
-            wasPlayingRef.current = !videoRef.current?.paused;
+            resumeAfterSwapRef.current = !videoRef.current?.paused;
             setVideoCheck({ url: next.hlsUrl, ok: true });
             setMaster({ hls: next.hlsUrl, url, subs: url === next.hlsUrl ? [] : subs });
             setVariant(next);
@@ -468,6 +710,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         <video
                             ref={videoRef}
                             src={src ?? undefined}
+                            x-webkit-airplay="allow"
                             playsInline
                             preload="metadata"
                             className="absolute inset-0 h-full w-full object-contain"
@@ -478,6 +721,10 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 wasPlayingRef.current = true;
                                 setPlaying(true);
                                 pokeControls();
+                                nowPlayingRef.current();
+                                const v = videoRef.current;
+                                const dur = v ? mediaDuration(v) : 0;
+                                if (v && dur) void scrobble("start", (v.currentTime / dur) * 100);
                             }}
                             onPlaying={() => setBuffering(false)}
                             onWaiting={() => setBuffering(true)}
@@ -488,16 +735,23 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                 setBuffering(false);
                                 setControlsVisible(true);
                                 forceSync();
+                                const v = videoRef.current;
+                                const dur = v ? mediaDuration(v) : 0;
+                                if (v && dur && !v.ended) {
+                                    void scrobble("pause", (v.currentTime / dur) * 100);
+                                    sendHistory("pause");
+                                }
                             }}
                             onEnded={() => {
                                 setEnded(true);
-                                markCompleted();
+                                complete();
+                                if (onNext && autoNextEpisode && !upNextDismissedRef.current) playNext();
                             }}
                             onError={() => {
                                 setBuffering(false);
                                 // Subtitle wrapper failed → play the provider stream without it.
                                 if (masterForStream && src === masterForStream.url && src !== hlsUrl) {
-                                    setMaster({ ...masterForStream, url: masterForStream.hls, subs: [] });
+                                    setMaster({ ...masterForStream, url: masterForStream.hls, subs: [], failed: true });
                                 } else {
                                     setFailedSrc(src ?? null);
                                 }
@@ -557,7 +811,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     type="button"
                                     aria-label="Next"
                                     disabled={!onNext}
-                                    onClick={onNext}
+                                    onClick={playNext}
                                     className={cn("pointer-events-auto rounded-full p-2 disabled:opacity-0", !showOverlay && "pointer-events-none")}>
                                     <SkipForward className="size-6 fill-current" />
                                 </button>
@@ -569,9 +823,34 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                     <span>
                                         {formatTime(time)} <span className="text-white/60">/ {formatTime(duration)}</span>
                                     </span>
-                                    <button type="button" aria-label="Fullscreen" onClick={goFullscreen} className="pointer-events-auto p-2">
-                                        <Maximize className="size-5" />
-                                    </button>
+                                    <span className="flex items-center">
+                                        {airplayAvailable && (
+                                            <button
+                                                type="button"
+                                                aria-label="AirPlay"
+                                                onClick={() => (videoRef.current as WebKitVideo | null)?.webkitShowPlaybackTargetPicker?.()}
+                                                className="pointer-events-auto p-2">
+                                                <Airplay className="size-5" />
+                                            </button>
+                                        )}
+                                        {PIP_SUPPORTED && (
+                                            <button
+                                                type="button"
+                                                aria-label="Picture in Picture"
+                                                onClick={() => {
+                                                    const video = videoRef.current as WebKitVideo | null;
+                                                    video?.webkitSetPresentationMode?.(
+                                                        video.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture"
+                                                    );
+                                                }}
+                                                className="pointer-events-auto p-2">
+                                                <PictureInPicture2 className="size-5" />
+                                            </button>
+                                        )}
+                                        <button type="button" aria-label="Fullscreen" onClick={goFullscreen} className="pointer-events-auto p-2">
+                                            <Maximize className="size-5" />
+                                        </button>
+                                    </span>
                                 </div>
                                 <div className="relative flex h-6 items-center">
                                     <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25" />
@@ -597,11 +876,42 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             </div>
                         </div>
 
-                        {ended && onNext && (
-                            <div className="absolute inset-x-0 top-3 flex justify-center">
-                                <Button size="sm" onClick={onNext}>
-                                    Next episode <ChevronRight className="size-4" />
-                                </Button>
+                        {/* Bottom-right above the scrubber: clear of the landscape chip row at the top. */}
+                        {(skipSegment || (onNext && (ended || upNextIn !== null))) && (
+                            <div className="absolute right-3 bottom-16 z-10 flex items-center gap-2">
+                                {skipSegment ? (
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => {
+                                            const seg = segments?.[skipSegment];
+                                            if (seg && videoRef.current) videoRef.current.currentTime = seg.end_sec;
+                                            skippedRef.current.add(skipSegment);
+                                            setSkipSegment(null);
+                                        }}>
+                                        Skip {skipSegment}
+                                    </Button>
+                                ) : (
+                                    <>
+                                        {upNextIn !== null && !ended && (
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="text-white/70"
+                                                onClick={() => {
+                                                    upNextDismissedRef.current = true;
+                                                    setUpNextIn(null);
+                                                }}>
+                                                Cancel
+                                            </Button>
+                                        )}
+                                        <Button size="sm" onClick={playNext}>
+                                            {nextEpisode ? `S${nextEpisode.season} E${nextEpisode.episode}` : "Next episode"}
+                                            {upNextIn !== null && !ended ? ` in ${upNextIn}s` : ""}
+                                            <ChevronRight className="size-4" />
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         )}
                     </>

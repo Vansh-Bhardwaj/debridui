@@ -17,7 +17,7 @@ export function LandingStickyNav() {
 
     return (
         <header
-            className={`fixed top-0 inset-x-0 z-50 backdrop-blur-md bg-background/80 border-b border-border/50 transition-all duration-300 ${
+            className={`fixed top-0 inset-x-0 z-50 pt-[env(safe-area-inset-top)] backdrop-blur-md bg-background/80 border-b border-border/50 transition-all duration-300 ${
                 visible ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
             }`}>
             <div className="max-w-6xl mx-auto px-6 md:px-12 lg:px-20 h-14 flex items-center justify-between">
