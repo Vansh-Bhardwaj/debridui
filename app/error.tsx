@@ -5,9 +5,17 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertCircle } from "reicon-react";
 
+// A tab opened before a deploy can't load the new build's code; a full reload fixes it.
+const STALE_BUILD = /module factory is not available|ChunkLoadError|Loading chunk .* failed|Failed to fetch dynamically imported module/i;
+
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
     useEffect(() => {
         console.error(error);
+        // Reload once per session so a genuine bug can't cause a reload loop.
+        if (STALE_BUILD.test(error.message) && !sessionStorage.getItem("dui-stale-reload")) {
+            sessionStorage.setItem("dui-stale-reload", "1");
+            window.location.reload();
+        }
     }, [error]);
 
     return (
