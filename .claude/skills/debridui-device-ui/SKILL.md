@@ -6,13 +6,13 @@ description: How DebridUI adapts its interface per device (phone, tablet, deskto
 # Device-specific UI in DebridUI
 
 ## Device model (Phase 0 contract)
-- `DeviceClass = "phone" | "tablet" | "desktop" | "tv"`, detected by the pure function `detectDeviceClass()` in `lib/device/detect.ts`. It uses the UA plus Client Hints (`Sec-CH-UA-Mobile`, `Sec-CH-UA-Platform`).
+- `DeviceClass = "phone" | "tablet" | "desktop" | "tv"`, detected by the pure function `detectDeviceClass()` in `lib/device/detect.ts`. It uses the UA plus `navigator.userAgentData` (mobile, platform).
   - TV: Android TV / Google TV / `CrKey` / `SmartTV` / Tizen / Web0S / VIDAA / AFT (Fire TV) / BRAVIA / `TV` tokens.
   - Tablet: iPad (including iPadOS presenting as Mac with touch, refined on the client), and Android without `Mobile`.
   - Phone: `Mobile` UAs.
   - Everything else is desktop.
-- `middleware.ts` writes the `dui-device` cookie, so the server renders the right layout on the first paint. There's no flash from SSR returning "desktop".
-- A user override is stored in the `dui-device-override` cookie and wins over detection.
+- Detection runs **only on the client** (`useSyncExternalStore`, server snapshot "desktop"). This keeps the `force-static` pages static, which matters for the Cloudflare CPU limits. Never read cookies or headers in layouts for this. App pages render after the client session check, so they never show the server value.
+- A user override is stored in localStorage `dui-device-override` and wins over detection.
 - **Client API:** `useDevice()` from `components/device/device-provider.tsx` returns `{ device, isPhone, isTablet, isDesktop, isTV, setOverride }`. Pages and components read **only this**. Don't add new `matchMedia`/UA checks, and don't use `useIsMobile` in new code.
 - **Big Picture** (`hooks/use-tv-mode.ts`) is on automatically for `tv` and can be toggled on desktop. Shrinking the window never exits it.
 - **Responsive CSS is still fine** for pure layout (grid columns etc.). Use `useDevice()` when **what** is shown changes, not just its size.
