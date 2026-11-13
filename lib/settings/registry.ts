@@ -303,7 +303,7 @@ export const settingsRegistry: readonly SettingEntry[] = [
         id: "torbox",
         section: "accounts",
         label: "TorBox",
-        description: "Account dashboard coming soon",
+        description: "Plan, slots, usage and streaming availability",
         devices: all,
         scope: "account",
         requires: "torbox",
