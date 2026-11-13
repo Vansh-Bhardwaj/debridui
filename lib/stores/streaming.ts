@@ -980,21 +980,7 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
             const meta = [source.resolution, source.quality, source.size].filter(Boolean).join(" ");
             const fileName = meta ? `${cleanTitle} [${meta}]` : cleanTitle;
 
-            // ── Auto-fetch subtitles when none provided ────────────────────
-            // Ensures every play path (continue watching, source picker, etc.)
-            // gets subtitles for the media, not just paths that pass them explicitly.
             const subtitles = options?.subtitles;
-            if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
-                const pk = options.progressKey;
-                const tvParams =
-                    pk.season != null && pk.episode != null ? { season: pk.season, episode: pk.episode } : undefined;
-                // Non-blocking: fetch in background, populate preview store when ready
-                fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
-                    if (fetched.length > 0) {
-                        usePreviewStore.getState().setDirectSubtitles(fetched);
-                    }
-                });
-            }
 
             // ── Device Sync interception ───────────────────────────────────
             // If a remote device is selected as the playback target, send
@@ -1029,6 +1015,22 @@ export const useStreamingStore = create<StreamingState>()((set, get) => ({
                         progressKey: options?.progressKey,
                     });
                 }
+            }
+
+            // ── Auto-fetch subtitles when none provided ────────────────────
+            // Ensures every play path (continue watching, source picker, etc.)
+            // gets subtitles for the media, not just paths that pass them explicitly.
+            // Runs after the preview opens: a cached result resolves immediately, and
+            // opening the preview afterwards would wipe it (why subtitles never showed).
+            if (!subtitles && options?.progressKey?.imdbId && options.progressKey.type) {
+                const pk = options.progressKey;
+                const tvParams =
+                    pk.season != null && pk.episode != null ? { season: pk.season, episode: pk.episode } : undefined;
+                fetchSubtitlesForMedia(pk.imdbId, pk.type, tvParams, titleMemory?.preferredLanguage).then((fetched) => {
+                    const current = usePreviewStore.getState().progressKey;
+                    const sameItem = !current || (current.imdbId === pk.imdbId && current.season === pk.season && current.episode === pk.episode);
+                    if (fetched.length > 0 && sameItem) usePreviewStore.getState().setDirectSubtitles(fetched);
+                });
             }
 
             // Look up the provider's compatible stream while the addon URL resolves.
