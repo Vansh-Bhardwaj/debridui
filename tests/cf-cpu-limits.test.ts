@@ -173,10 +173,10 @@ describe("config: optimizePackageImports includes heavy packages", () => {
 });
 
 describe("source: TV mode disabled on mobile", () => {
-    test("useTVMode auto-disables on mobile", () => {
+    test("useTVMode auto-disables on phones", () => {
         const src = readSource("hooks/use-tv-mode.ts");
-        expect(src).toContain("useIsMobile");
-        expect(src).toContain("isMobile");
+        expect(src).toContain("useDevice");
+        expect(src).toContain("isPhone");
     });
 });
 

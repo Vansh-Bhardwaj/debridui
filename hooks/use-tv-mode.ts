@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useDevice } from "@/components/device/device-provider";
 
 /**
  * TV mode state + branded curtain transition.
@@ -13,18 +13,19 @@ import { useIsMobile } from "@/hooks/use-mobile";
  * the black screen is an intentional design element.
  */
 export function useTVMode() {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const savedTVMode = useSettingsStore((s) => s.settings.tvMode);
     const set = useSettingsStore((s) => s.set);
-    const isMobile = useIsMobile();
+    const { isPhone, isTV } = useDevice();
+    const tvMode = !isPhone && (isTV || savedTVMode);
     const prevRef = useRef(tvMode);
     const animatingRef = useRef(false);
 
-    // Auto-disable TV mode on mobile devices
+    // Persisted desktop preferences must not enable Big Picture on phones.
     useEffect(() => {
-        if (isMobile && tvMode) {
+        if (isPhone && savedTVMode) {
             set("tvMode", false);
         }
-    }, [isMobile, tvMode, set]);
+    }, [isPhone, savedTVMode, set]);
 
     useEffect(() => {
         const root = document.getElementById("tv-mode-root");
@@ -128,7 +129,7 @@ export function useTVMode() {
 
     // Exit TV mode on fullscreen exit (Esc key)
     useEffect(() => {
-        if (!tvMode) return;
+        if (!tvMode || isTV) return;
         const handler = () => {
             if (!document.fullscreenElement && !animatingRef.current) {
                 set("tvMode", false);
@@ -136,11 +137,11 @@ export function useTVMode() {
         };
         document.addEventListener("fullscreenchange", handler);
         return () => document.removeEventListener("fullscreenchange", handler);
-    }, [tvMode, set]);
+    }, [tvMode, isTV, set]);
 
     const toggle = useCallback(() => {
-        set("tvMode", !tvMode);
-    }, [tvMode, set]);
+        if (!isPhone && !isTV) set("tvMode", !tvMode);
+    }, [tvMode, isPhone, isTV, set]);
 
     return { tvMode, toggle };
 }

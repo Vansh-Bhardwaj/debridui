@@ -5,6 +5,7 @@ import "./globals.css";
 import Providers from "./providers";
 import { cn } from "@/lib/utils";
 import { Analytics } from "@/components/common/analytics";
+import { DeviceProvider } from "@/components/device/device-provider";
 
 const siteConfig = {
     name: "DebridUI",
@@ -123,7 +124,9 @@ export default function RootLayout({
                     })();
                     `}
                 </Script>
-                <Providers>{children}</Providers>
+                <DeviceProvider>
+                    <Providers>{children}</Providers>
+                </DeviceProvider>
                 <Analytics />
                 <Script id="sw-register" strategy="lazyOnload">
                     {`if("serviceWorker"in navigator){navigator.serviceWorker.register("/sw.js")}`}
