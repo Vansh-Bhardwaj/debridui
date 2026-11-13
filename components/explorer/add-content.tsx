@@ -19,6 +19,7 @@ export function AddContent() {
     const [isAddingLinks, setIsAddingLinks] = useState(false);
     const [isUploadingFiles, setIsUploadingFiles] = useState(false);
     const { client, currentAccount } = useAuthGuaranteed();
+    const isTorBox = currentAccount.type === "torbox";
 
     const handleOperationResults = (results: AddResult, itemType: "link" | "file", toastId: string | number) => {
         let successCount = 0;
@@ -111,7 +112,7 @@ export function AddContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
                     <div className="flex flex-col space-y-1 md:space-y-2">
                         <span className="text-xs tracking-widest uppercase text-muted-foreground">
-                            Upload Torrent Files
+                            {isTorBox ? "Upload Torrent / NZB Files" : "Upload Torrent Files"}
                         </span>
                         <Dropzone
                             onDropAccepted={handleFileSelect}
@@ -119,10 +120,11 @@ export function AddContent() {
                             maxFiles={100}
                             accept={{
                                 "application/x-bittorrent": [".torrent"],
+                                ...(isTorBox ? { "application/x-nzb": [".nzb"] } : {}),
                             }}
                             className="max-sm:h-24">
                             <FileUp className="size-5 md:size-8 text-muted-foreground" />
-                            <p className="text-sm font-medium">Drop .torrent files here</p>
+                            <p className="text-sm font-medium">{isTorBox ? "Drop .torrent or .nzb files here" : "Drop .torrent files here"}</p>
                             <p className="text-xs md:text-sm text-muted-foreground">or click to browse</p>
                         </Dropzone>
                     </div>

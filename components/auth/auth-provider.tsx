@@ -16,6 +16,7 @@ import { syncUser } from "@/lib/actions/auth";
 import { setCacheChecker, setProviderTranscodeAvailable, setStreamLinkLookup } from "@/lib/streaming/stream-info";
 import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { AccountType } from "@/lib/schemas";
+import { useQuery } from "@tanstack/react-query";
 
 interface AuthContextType {
     session: ReturnType<typeof authClient.useSession>["data"];
@@ -174,11 +175,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return getClientInstance(currentUser);
     }, [currentUser]);
 
-    // TorBox (Pro) transcodes on demand, which makes codec-incompatible releases
-    // playable — source ranking uses this to stop filtering them out.
+    const { data: torboxDetails } = useQuery({
+        queryKey: [currentAccount?.id, "torbox-account"],
+        queryFn: () => client && "getAccountDetails" in client ? client.getAccountDetails() : null,
+        enabled: currentAccount?.type === AccountType.TORBOX && !!client,
+        staleTime: 60_000,
+    });
+
     useEffect(() => {
-        setProviderTranscodeAvailable(currentAccount?.type === AccountType.TORBOX);
-    }, [currentAccount?.type]);
+        // Stay on while the plan loads so startup playback isn't downgraded; a known non-Pro plan turns it off.
+        setProviderTranscodeAvailable(currentAccount?.type === AccountType.TORBOX && torboxDetails?.transcodeAllowed !== false);
+    }, [currentAccount?.type, torboxDetails?.transcodeAllowed]);
 
     useEffect(() => {
         setStreamLinkLookup(client ? (url, hint) => client.getStreamingLinksFromUrl(url, hint) : null);

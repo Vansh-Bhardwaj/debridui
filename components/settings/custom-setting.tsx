@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { format, formatDistanceToNow } from "date-fns";
 import { useDevice } from "@/components/device/device-provider";
@@ -16,6 +17,8 @@ import { QualityProfile } from "./quality-profile";
 import { DataControl } from "./data-control";
 import { MediaPlayerControl } from "./media-player-control";
 import { SettingRow, SettingsSelect } from "./setting-row";
+
+const TorBoxAccount = dynamic(() => import("./torbox-account"));
 
 const BUILD_TIME = process.env.NEXT_PUBLIC_BUILD_TIME || new Date().toISOString();
 const noopSubscribe = () => () => {};
@@ -127,7 +130,7 @@ export function CustomSetting({ entry, component }: { entry: SettingEntry; compo
                 </div>
             )}
             {component === "torbox" && (
-                <p className="text-sm text-muted-foreground">Plan, usage and limits will be available here.</p>
+                <TorBoxAccount />
             )}
             {component === "override" && <DeviceOverride />}
             {component === "build" && <BuildInfo />}

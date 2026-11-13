@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 import { detectAudioCodec, detectVideoCodec } from "@/lib/streaming/source-selector";
 import { getSourceFailure, isCamRelease } from "@/lib/streaming/source-health";
 import { codecLabel } from "@/lib/streaming/stream-info";
+import { extractHash } from "@/lib/addons/parser";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/components/auth/auth-provider";
 import { getCodecSupport } from "@/lib/utils/codec-support";
 
 const DV_PATTERN = /\b(dv|dovi|dolby[\s.-]?vision)\b/i;
@@ -172,6 +175,19 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
     const playAlternativeSource = useStreamingStore((s) => s.playAlternativeSource);
     const pendingPlayContext = useStreamingStore((s) => s.pendingPlayContext);
 
+    const { client, currentAccount } = useAuth();
+    const [chosenSource, setChosenSource] = useState<AddonSource | null>(null);
+    const progressSource = chosenSource && allFetchedSources.includes(chosenSource) ? chosenSource : selectedSource;
+    const hash = progressSource ? extractHash({ url: progressSource.url ?? progressSource.magnet, behaviorHints: { bingeGroup: progressSource.bingeGroup } }) : undefined;
+    const { data: downloadProgress } = useQuery({
+        queryKey: [currentAccount?.id, "torbox-source-progress", hash],
+        queryFn: () => client && "getDownloadProgress" in client && hash ? client.getDownloadProgress(hash) : null,
+        enabled: sourcePickerOpen && currentAccount?.type === "torbox" && !!hash && !progressSource?.isCached,
+        staleTime: 10_000,
+        refetchInterval: (query) => query.state.data?.finished ? false : 10_000,
+        refetchIntervalInBackground: false,
+    });
+
     const [resFilter, setResFilter] = useState<ResolutionFilter>("all");
     const [cachedOnly, setCachedOnly] = useState(false);
     const [sort, setSort] = useState<SortMode>("default");
@@ -190,6 +206,7 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
     );
 
     const handleSelect = useCallback((source: AddonSource) => {
+        setChosenSource(source);
         playAlternativeSource(source);
     }, [playAlternativeSource]);
 
@@ -326,6 +343,14 @@ export const SourcePickerSheet = memo(function SourcePickerSheet() {
                         ))}
                     </div>
                 </SheetHeader>
+                {currentAccount?.type === "torbox" && !progressSource?.isCached && downloadProgress && (
+                    <div role="status" className="border-b border-border/50 px-4 py-3 text-sm">
+                        <span className="text-muted-foreground">{downloadProgress.state}</span> · {Math.round(downloadProgress.progress)}%
+                        <div role="progressbar" aria-label="Source download" aria-valuenow={downloadProgress.progress} aria-valuemin={0} aria-valuemax={100} className="mt-2 h-1 bg-muted/30">
+                            <div className="h-full bg-primary" style={{ width: `${downloadProgress.progress}%` }} />
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto">
                     {filtered.length === 0 ? (

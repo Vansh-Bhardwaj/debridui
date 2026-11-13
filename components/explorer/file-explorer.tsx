@@ -17,13 +17,14 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { DebridFile } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { PAGE_SIZE } from "@/lib/constants";
 import { useDelayedFlag } from "@/hooks/use-delayed-flag";
 import { useIsTVMode } from "@/hooks/use-tv-mode";
 import { cn } from "@/lib/utils";
 
 export const FileExplorer = memo(function FileExplorer() {
-    const { files, isLoading, currentPage, totalPages, setPage } = useFileExplorer();
+    const { files, isLoading, isError, isFetching, isPlaceholderData, refetch, currentPage, totalPages, setPage } = useFileExplorer();
     const queryClient = useQueryClient();
     const { currentAccount } = useAuthGuaranteed();
     const pathname = usePathname();
@@ -36,6 +37,7 @@ export const FileExplorer = memo(function FileExplorer() {
     const [isSearching, setIsSearching] = useState(false);
     const [searchPage, setSearchPage] = useState(1);
     const showLoading = useDelayedFlag(isLoading || isSearching, 120);
+    const loading = isLoading || isSearching || showLoading;
 
     const selectedFileIds = useSelectionStore((state) => state.selectedFileIds);
     const selectAll = useSelectionStore((state) => state.selectAll);
@@ -158,14 +160,16 @@ export const FileExplorer = memo(function FileExplorer() {
                             selectedCount={selectedFileIds.size}
                         />
                         <FileListBody>
-                            {showLoading ? (
+                            {isError && !queryParam ? (
+                                <div className="p-6 text-center"><p role="alert">Could not load files.</p><Button variant="outline" data-tv-focusable onClick={() => void refetch()}>Retry</Button></div>
+                            ) : loading ? (
                                 <FileListLoading />
                             ) : activeData.length > 0 && !isSearching ? (
                                 activeData.map((file) => (
                                     <FileListRow key={file.id} file={file} autoExpand={isIdSearch} />
                                 ))
                             ) : (
-                                !showLoading && activeData.length === 0 && <FileListEmpty />
+                                !loading && activeData.length === 0 && <FileListEmpty />
                             )}
                         </FileListBody>
                     </FileList>
@@ -178,7 +182,7 @@ export const FileExplorer = memo(function FileExplorer() {
                                     currentPage={searchPage}
                                     totalPages={searchTotalPages}
                                     onPageChange={handleSearchPageChange}
-                                    disabled={showLoading}
+                                    disabled={loading || isFetching || isPlaceholderData}
                                 />
                             )}
                             {!queryParam && totalPages > 1 && (
@@ -186,7 +190,7 @@ export const FileExplorer = memo(function FileExplorer() {
                                     currentPage={currentPage}
                                     totalPages={totalPages}
                                     onPageChange={handlePageChange}
-                                    disabled={showLoading}
+                                    disabled={loading || isFetching || isPlaceholderData}
                                 />
                             )}
                         </>

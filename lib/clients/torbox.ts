@@ -55,20 +55,190 @@ interface TorBoxSearchResponse {
 }
 
 // TorBox API Response types
-interface TorBoxUser {
+export interface TorBoxUser {
     id: number;
+    auth_id: string;
     created_at: string;
     updated_at: string;
-    email: string;
     plan: number;
-    total_downloaded: number;
-    customer_id: string;
-    premium_expires_at?: string;
-    cooldown_until?: string;
-    auth_id: string;
+    total_downloaded?: number;
+    customer?: string | null;
+    is_subscribed?: boolean;
+    premium_expires_at?: string | null;
+    cooldown_until?: string | null;
+    email: string;
     user_referral?: string;
-    server: number;
-    is_subscribed: boolean;
+    base_email?: string;
+    total_bytes_downloaded?: number;
+    total_bytes_uploaded?: number;
+    torrents_downloaded?: number;
+    web_downloads_downloaded?: number;
+    usenet_downloads_downloaded?: number;
+    additional_concurrent_slots?: number;
+    long_term_seeding?: boolean;
+    long_term_storage?: boolean;
+    is_vendor?: boolean;
+    vendor_id?: number;
+    purchases_referred?: number;
+    settings?: {
+        email_notifications?: boolean;
+        web_notifications?: boolean;
+        mobile_notifications?: boolean;
+        rss_notifications?: boolean;
+        download_speed_in_tab?: boolean;
+        show_tracker_in_torrent?: boolean;
+        stremio_quality?: number[];
+        stremio_resolution?: number[];
+        stremio_language?: number[];
+        stremio_cache?: number[];
+        stremio_size_lower?: number;
+        google_drive_folder_id?: string;
+        onedrive_save_path?: string;
+        discord_id?: string;
+        discord_notifications?: boolean;
+        stremio_allow_adult?: boolean;
+        stremio_seed_torrents?: number;
+        seed_torrents?: number;
+        allow_zipped?: boolean;
+        stremio_allow_zipped?: boolean;
+        onefichier_folder_id?: string;
+        gofile_folder_id?: string;
+        jdownloader_notifications?: boolean;
+        webhook_notifications?: boolean;
+        webhook_url?: string;
+        telegram_notifications?: boolean;
+        telegram_id?: string;
+        mega_email?: string;
+        mega_password?: string;
+        stremio_sort?: string;
+        cdn_selection?: string;
+        stremio_use_custom_search_engines?: string;
+        stremio_result_sort?: string;
+        webdav_use_local_files?: boolean;
+        stremio_legacy_your_media?: boolean;
+        stremio_only_your_media_streams?: boolean;
+        stremio_disable_your_media_streams?: boolean;
+        webdav_use_folder_view?: boolean;
+        webdav_flatten?: boolean;
+        stremio_limit_per_resolution_torrent?: number;
+        stremio_limit_per_resolution_usenet?: number;
+        stremio_size_upper?: number;
+        stremio_torrent_seeders_cutoff?: number;
+        pixeldrain_api_key?: string;
+        onefichier_api_key?: string;
+        gofile_api_key?: string;
+        patreon_id?: string;
+        stremio_wait_for_download_usenet?: boolean;
+        stremio_wait_for_download_torrent?: boolean;
+        stremio_disable_filtered_note?: boolean;
+        stremio_emoji_in_description?: boolean;
+        dashboard_filter?: {
+                active?: boolean;
+            cached?: boolean;
+            queued?: boolean;
+            private?: boolean;
+            borrowed?: boolean;
+            inactive?: boolean;
+            torrents?: boolean;
+            uncached?: boolean;
+            uploading?: boolean;
+            processing?: boolean;
+            downloading?: boolean;
+            web_downloads?: boolean;
+            download_ready?: boolean;
+            usenet_downloads?: boolean;
+        };
+        web_player_always_transcode?: boolean;
+        web_player_always_skip_intro?: boolean;
+        web_player_audio_preferred_language?: string;
+        web_player_subtitle_preferred_language?: string;
+        web_player_disable_prestream_selector?: boolean;
+        dashboard_sort?: string;
+        web_player_disable_next_up_dialogue?: boolean;
+        web_player_enable_scrobbling?: boolean;
+        append_filename_to_links?: boolean;
+    };
+    download_monthly?: number;
+    referred_by?: string | null;
+}
+
+export interface TorBoxStats {
+    general?: { total_downloaded?: number; total_uploaded?: number; ratio?: number; total_items_downloaded?: number };
+}
+
+type TorBoxUsage = { active: number | null; queued: number | null };
+export interface TorBoxAccountDetails {
+    planTier: number;
+    planName: string;
+    expiry: string | null;
+    renewal: boolean | null;
+    totalDownloaded: number | null;
+    totalUploaded: number | null;
+    activeSlots: number | null;
+    maxSlots: number | null;
+    queued: number | null;
+    cooldown_until: string | null;
+    server: number | null;
+    streamingAllowed: boolean;
+    transcodeAllowed: boolean;
+    usage: { torrent: TorBoxUsage; usenet: TorBoxUsage; webdl: TorBoxUsage };
+    downloads: { torrent: number | null; usenet: number | null; webdl: number | null };
+    referral: string | null;
+    notifications: { email: boolean | null; web: boolean | null };
+}
+
+// Plan IDs: API "Get User Data". Slots: torbox.app/pricing (2026-11-13).
+const TORBOX_PLANS: Record<number, { name: string; slots: number }> = {
+    0: { name: "Free", slots: 1 }, 1: { name: "Essential", slots: 3 },
+    2: { name: "Pro", slots: 10 }, 3: { name: "Standard", slots: 5 },
+};
+
+export function normalizeTorBoxAccount(user: TorBoxUser, stats: TorBoxStats | null = null, usage: TorBoxUsage[] = []): TorBoxAccountDetails {
+    const plan = TORBOX_PLANS[user.plan];
+    const expiry = user.premium_expires_at ?? null;
+    const paidActive = !!expiry && Number.isFinite(Date.parse(expiry)) && Date.parse(expiry) > Date.now();
+    // TorBox documents streaming/transcode as a Pro feature.
+    const transcodeAllowed = user.plan === 2 && paidActive;
+    const unknown = { active: null, queued: null };
+    const [torrent = unknown, usenet = unknown, webdl = unknown] = usage;
+    const sum = (key: keyof TorBoxUsage) => [torrent, usenet, webdl].every((item) => item[key] !== null)
+        ? [torrent, usenet, webdl].reduce((total, item) => total + item[key]!, 0) : null;
+    return {
+        planTier: user.plan, planName: plan?.name ?? "Unknown", expiry, renewal: user.is_subscribed ?? null,
+        totalDownloaded: stats?.general?.total_downloaded ?? user.total_bytes_downloaded ?? null,
+        totalUploaded: stats?.general?.total_uploaded ?? user.total_bytes_uploaded ?? null,
+        activeSlots: sum("active"), queued: sum("queued"),
+        maxSlots: plan ? plan.slots + Math.max(0, user.additional_concurrent_slots ?? 0) : null,
+        cooldown_until: user.cooldown_until ?? null,
+        server: null, // Current user/me schema has no assigned server field.
+        streamingAllowed: transcodeAllowed, transcodeAllowed,
+        usage: { torrent, usenet, webdl },
+        downloads: { torrent: user.torrents_downloaded ?? null, usenet: user.usenet_downloads_downloaded ?? null, webdl: user.web_downloads_downloaded ?? null },
+        referral: user.user_referral ?? null,
+        notifications: { email: user.settings?.email_notifications ?? null, web: user.settings?.web_notifications ?? null },
+    };
+}
+
+export interface TorBoxUsenetDownload {
+    id: number; name: string; hash: string; size: number; created_at: string;
+    progress: number; download_state: string; download_speed: number;
+    active: boolean; cached: boolean; download_finished: boolean; download_present: boolean;
+    cached_at?: string; files?: TorBoxFile[];
+}
+
+export function mapTorBoxUsenetItem(item: TorBoxUsenetDownload): DebridFile {
+    const state = item.download_state.toLowerCase();
+    const status: DebridFileStatus = item.download_finished && item.download_present ? "completed"
+        : /error|fail|missing/.test(state) ? "failed"
+        : /queued|pending|stalled/.test(state) ? "waiting"
+        : state === "paused" ? "paused"
+        : /download|metadl/.test(state) ? "downloading" : "processing";
+    return {
+        id: `usenet:${item.id}`, name: item.name, size: Math.max(0, item.size), status,
+        progress: Math.min(100, Math.max(0, item.progress * 100)), downloadSpeed: item.download_speed,
+        createdAt: new Date(item.created_at), completedAt: item.cached_at ? new Date(item.cached_at) : undefined,
+        files: item.files?.map((file) => ({ id: `usenet:${item.id}:${file.id}`, name: file.short_name || file.name, size: file.size, type: "file", children: [] })),
+    };
 }
 
 interface TorBoxTorrent {
@@ -190,7 +360,7 @@ export default class TorBoxClient extends BaseClient {
     private readonly apiBaseUrl = "https://api.torbox.app/v1/api";
 
     // TorBox downloads on server, needs refresh for progress
-    readonly refreshInterval = 5000;
+    readonly refreshInterval = 10000;
     readonly supportsEphemeralLinks = false;
 
     constructor(user: User) {
@@ -248,7 +418,7 @@ export default class TorBoxClient extends BaseClient {
 
         const user = data.data;
         const premiumExpiry = user.premium_expires_at ? new Date(user.premium_expires_at) : new Date();
-        const isPremium = user.is_subscribed && premiumExpiry > new Date();
+        const isPremium = user.plan > 0 && premiumExpiry > new Date();
 
         return {
             id: `${AccountType.TORBOX}:${user.email}`,
@@ -292,29 +462,77 @@ export default class TorBoxClient extends BaseClient {
         return { success: false };
     }
 
-    async getTorrentList({
-        offset = 0,
-        limit = 20,
-        bypass_cache = true,
-    }: {
-        offset?: number;
-        limit?: number;
-        bypass_cache?: boolean;
-    } = {}): Promise<DebridFileList> {
-        const data = await this.makeRequest<TorBoxTorrent[]>(
-            `torrents/mylist?bypass_cache=${bypass_cache}&offset=${offset}&limit=${limit}&files=true`
-        );
+    async getAccountDetails(): Promise<TorBoxAccountDetails> {
+        const user = await this.makeRequest<TorBoxUser>("user/me?settings=true");
+        const types = ["torrent", "usenet", "webdl"] as const;
+        const [stats, ...usage] = await Promise.all([
+            this.makeRequest<TorBoxStats>("user/stats?general=true&bandwidth=false").catch(() => null),
+            ...types.map(async (type) => {
+                if (type === "usenet" && user.plan !== 2 && TORBOX_PLANS[user.plan]) return { active: 0, queued: 0 };
+                const endpoint = type === "torrent" ? "torrents" : type;
+                const [active, queued] = await Promise.all([
+                    this.makeRequest<unknown[]>(`${endpoint}/mylist?active=true&files=false&limit=1000`).catch(() => null),
+                    this.makeRequest<unknown[]>(`queued/getqueued?type=${type}&limit=1000`).catch(() => null),
+                ]);
+                return { active: Array.isArray(active) ? active.length : null, queued: Array.isArray(queued) ? queued.length : null };
+            }),
+        ]);
+        return normalizeTorBoxAccount(user, stats, usage);
+    }
 
-        const paginatedTorrents = Array.isArray(data) ? data : [];
+    override async addTorrent(uris: string[]): Promise<Record<string, DebridFileAddStatus>> {
+        const nzbs = uris.filter((uri) => /\.nzb(?:[?#]|$)/i.test(uri));
+        const results = await super.addTorrent(uris.filter((uri) => !nzbs.includes(uri)));
+        await Promise.all(nzbs.map(async (uri) => {
+            try {
+                const item = await this.createUsenetDownload(uri);
+                results[uri] = { success: true, id: `usenet:${item.usenetdownload_id}`, message: "NZB added", is_cached: false };
+            } catch (error) {
+                results[uri] = { success: false, message: error instanceof Error ? error.message : "NZB failed", is_cached: false };
+            }
+        }));
+        return results;
+    }
 
-        const files: DebridFile[] = paginatedTorrents.map((torrent) => this.mapToDebridFile(torrent));
+    async createUsenetDownload(input: string | File): Promise<{ usenetdownload_id: number; hash: string }> {
+        const body = new FormData();
+        if (typeof input === "string") body.append("link", input);
+        else body.append("file", input);
+        return this.makeRequest("usenet/createusenetdownload", { method: "POST", body });
+    }
 
-        return {
-            files,
-            offset,
-            limit,
-            hasMore: limit == paginatedTorrents.length,
-        };
+    async getUsenetList({ offset = 0, limit = 1000 } = {}): Promise<DebridFileList> {
+        const data = await this.makeRequest<TorBoxUsenetDownload[]>(`usenet/mylist?offset=${offset}&limit=${limit}&files=true`);
+        const files = (data ?? []).map(mapTorBoxUsenetItem);
+        return { files, offset, limit, hasMore: files.length === limit };
+    }
+
+    async deleteUsenetDownload(id: string): Promise<void> {
+        await this.makeRequest("usenet/controlusenetdownload", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ usenet_id: Number(id.replace(/^usenet:/, "")), operation: "delete" }),
+        });
+    }
+
+    async getTorrentList({ offset = 0, limit = 20, bypass_cache = true } = {}): Promise<DebridFileList> {
+        // Fetch enough of each list to merge before slicing; independent endpoint offsets skip items.
+        const count = offset + limit + 1;
+        const [torrents, usenet] = await Promise.all([
+            this.makeRequest<TorBoxTorrent[]>(`torrents/mylist?bypass_cache=${bypass_cache}&limit=${count}&files=true`),
+            this.getUsenetList({ limit: count }).catch((error) => {
+                if (error instanceof Error && /PLAN_RESTRICTED|upgrade your plan/i.test(error.message)) return { files: [] };
+                throw error;
+            }),
+        ]);
+        const merged = [...(torrents ?? []).map((torrent) => this.mapToDebridFile(torrent)), ...usenet.files]
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return { files: merged.slice(offset, offset + limit), offset, limit, hasMore: merged.length > offset + limit };
+    }
+
+    async getDownloadProgress(hash: string): Promise<{ progress: number; state: string; finished: boolean } | null> {
+        const torrents = await this.makeRequest<TorBoxTorrent[]>("torrents/mylist?bypass_cache=true&files=false&limit=1000");
+        const torrent = torrents?.find((item) => item.hash.toLowerCase() === hash.toLowerCase());
+        return torrent ? { progress: Math.min(100, Math.max(0, torrent.progress * 100)), state: torrent.download_state, finished: torrent.download_finished } : null;
     }
 
     async findTorrents(searchQuery: string): Promise<DebridFile[]> {
@@ -344,6 +562,10 @@ export default class TorBoxClient extends BaseClient {
 
     async findTorrentById(torrentId: string): Promise<DebridFile | null> {
         try {
+            if (torrentId.startsWith("usenet:")) {
+                const item = await this.makeRequest<TorBoxUsenetDownload>(`usenet/mylist?id=${torrentId.slice(7)}`);
+                return mapTorBoxUsenetItem(item);
+            }
             const torrent = await this.makeRequest<TorBoxTorrent>(`torrents/mylist?id=${torrentId}`);
             return this.mapToDebridFile(torrent);
         } catch {
@@ -358,6 +580,11 @@ export default class TorBoxClient extends BaseClient {
         fileNode: DebridFileNode;
         resolve?: boolean;
     }): Promise<DebridLinkInfo> {
+        if (fileNode.id.startsWith("usenet:")) {
+            const [, id, fileId] = fileNode.id.split(":");
+            const link = await this.requestUsenetLink(id, fileId);
+            return { link, name: fileNode.name, size: fileNode.size || 0, streamingLinks: await this.getStreamingLinks(fileNode.id, fileNode) };
+        }
         const [torrentId, targetFileId] = fileNode.id.split(":");
 
         if (!torrentId || !targetFileId) {
@@ -380,12 +607,18 @@ export default class TorBoxClient extends BaseClient {
         };
     }
 
+    async requestUsenetLink(id: string, fileId: string): Promise<string> {
+        return this.makeRequest(`usenet/requestdl?token=${encodeURIComponent(this.user.apiKey)}&usenet_id=${id}&file_id=${fileId}&redirect=false`);
+    }
+
     async getStreamingLinks(id: string, fileNode?: DebridFileNode): Promise<Record<string, string>> {
-        const [torrentId, fileId] = (fileNode?.id || id).split(":");
+        const parts = (fileNode?.id || id).split(":");
+        const type = parts[0] === "usenet" ? "usenet" : "torrent";
+        const [torrentId, fileId] = type === "usenet" ? parts.slice(1) : parts;
         if (!torrentId || !fileId) return {};
         // Failures reject so they aren't cached; the next attempt retries.
-        return cached(streamLinksCache, `${this.user.apiKey}:${torrentId}:${fileId}`, STREAM_TTL_MS, async () => {
-            let info = await this.createStream(torrentId, fileId);
+        return cached(streamLinksCache, `${this.user.apiKey}:${type}:${torrentId}:${fileId}`, STREAM_TTL_MS, async () => {
+            let info = await this.createStream(torrentId, fileId, {}, type);
             if (!info) throw new Error("No stream");
             // TorBox defaults to the first audio track (often a dub). Native HLS players
             // (iOS) only get that one track, so request the user's language up front.
@@ -400,14 +633,14 @@ export default class TorBoxClient extends BaseClient {
      * HLS url that TorBox transcodes server-side, plus real codec metadata.
      * Docs: https://api-docs.torbox.app -> Stream -> Create Stream.
      */
-    async createStream(torrentId: string, fileId: string, opts: StreamVariantOptions = {}): Promise<StreamInfo | null> {
-        const params = new URLSearchParams({ id: torrentId, file_id: fileId, type: "torrent" });
+    async createStream(torrentId: string, fileId: string, opts: StreamVariantOptions = {}, type: "torrent" | "usenet" = "torrent"): Promise<StreamInfo | null> {
+        const params = new URLSearchParams({ id: torrentId, file_id: fileId, type });
         if (opts.audioIndex != null) params.set("chosen_audio_index", String(opts.audioIndex));
         if (opts.resolutionIndex != null) params.set("chosen_resolution_index", String(opts.resolutionIndex));
         try {
             const data = await this.makeRequest<TorBoxStreamData>(`stream/createstream?${params}`);
             if (!data?.hls_url) return null;
-            const info = this.toStreamInfo(data, torrentId, fileId);
+            const info = this.toStreamInfo(data, torrentId, fileId, type);
             registerStreamInfo(info);
             return info;
         } catch (error) {
@@ -420,7 +653,7 @@ export default class TorBoxClient extends BaseClient {
         }
     }
 
-    private toStreamInfo(data: TorBoxStreamData, torrentId: string, fileId: string): StreamInfo {
+    private toStreamInfo(data: TorBoxStreamData, torrentId: string, fileId: string, type: "torrent" | "usenet"): StreamInfo {
         const video = data.metadata?.video;
         const height = video?.height || undefined;
         const resolutions: StreamResolution[] = [
@@ -449,7 +682,7 @@ export default class TorBoxClient extends BaseClient {
                 this.createStream(torrentId, fileId, {
                     audioIndex: next.audioIndex ?? data.audio_index ?? 0,
                     resolutionIndex: next.resolutionIndex === undefined ? (data.resolution_index ?? null) : next.resolutionIndex,
-                }),
+                }, type),
         };
     }
 
@@ -559,6 +792,7 @@ export default class TorBoxClient extends BaseClient {
     }
 
     async getTorrentFiles(torrentId: string): Promise<DebridNode[]> {
+        if (torrentId.startsWith("usenet:")) return (await this.findTorrentById(torrentId))?.files ?? [];
         // For TorBox, files should already be available in DebridFile.files
         // This method exists only for backward compatibility
         // Make direct API request as fallback since this should rarely be called
@@ -567,6 +801,10 @@ export default class TorBoxClient extends BaseClient {
     }
 
     async removeTorrent(torrentId: string): Promise<string> {
+        if (torrentId.startsWith("usenet:")) {
+            await this.deleteUsenetDownload(torrentId);
+            return "Usenet download removed successfully";
+        }
         const payload = {
             torrent_id: torrentId,
             operation: "delete",
@@ -586,6 +824,7 @@ export default class TorBoxClient extends BaseClient {
     async restartTorrents(torrentIds: string[]): Promise<Record<string, OperationResult>> {
         const promises = torrentIds.map(async (torrentId) => {
             try {
+                if (torrentId.startsWith("usenet:")) throw new Error("Usenet downloads cannot be resumed");
                 const payload = {
                     torrent_id: torrentId,
                     operation: "resume",
@@ -688,6 +927,10 @@ export default class TorBoxClient extends BaseClient {
         // Parallelize torrent file uploads for 10x faster bulk operations
         const promises = files.map(async (file) => {
             try {
+                if (/\.nzb$/i.test(file.name)) {
+                    const response = await this.createUsenetDownload(file);
+                    return { fileName: file.name, status: { success: true, id: `usenet:${response.usenetdownload_id}`, message: "NZB uploaded", is_cached: false } as DebridFileAddStatus };
+                }
                 const formData = new FormData();
                 formData.append("file", file);
                 formData.append("seed", "0");
@@ -960,7 +1203,7 @@ export default class TorBoxClient extends BaseClient {
                 );
             }
 
-            throw new DebridError(errorMessage, AccountType.TORBOX);
+            throw new DebridError(`${errorCode}: ${errorMessage}`, AccountType.TORBOX);
         }
 
         return data;
