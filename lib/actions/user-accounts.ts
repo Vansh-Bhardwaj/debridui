@@ -5,7 +5,7 @@ import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { userAccounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { createAccountSchema } from "@/lib/schemas";
 import { type CreateAccount } from "@/lib/types";
 import { v7 as uuidv7 } from "uuid";
@@ -126,7 +126,7 @@ export async function removeUserAccount(accountId: string) {
         redirect("/login");
     }
 
-    const validatedId = z.string().min(1, "Account ID is required").parse(accountId);
+    const validatedId = z.string().check(z.minLength(1, "Account ID is required")).parse(accountId);
 
     // Single DELETE with ownership check — avoids redundant SELECT (saves 1 DB query)
     const deleted = await db

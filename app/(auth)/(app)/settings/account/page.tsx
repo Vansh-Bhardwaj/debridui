@@ -28,7 +28,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { useForm } from "react-hook-form";
 import { useState, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { formatDistanceToNow } from "date-fns";
 import { EmptyState } from "@/components/common/async-state";
 
@@ -37,30 +37,30 @@ const USER_SESSIONS_KEY = ["user-sessions"];
 
 // Schemas
 const profileSchema = z.object({
-    name: z.string().min(1, "Name is required"),
-    image: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+    name: z.string().check(z.minLength(1, "Name is required")),
+    image: z.optional(z.union([z.url("Must be a valid URL"), z.literal("")])),
 });
 
 const passwordChangeSchema = z
     .object({
-        currentPassword: z.string().min(1, "Current password is required"),
-        newPassword: z.string().min(8, "Password must be at least 8 characters"),
-        confirmPassword: z.string().min(1, "Please confirm your password"),
+        currentPassword: z.string().check(z.minLength(1, "Current password is required")),
+        newPassword: z.string().check(z.minLength(8, "Password must be at least 8 characters")),
+        confirmPassword: z.string().check(z.minLength(1, "Please confirm your password")),
     })
-    .refine((data) => data.newPassword === data.confirmPassword, {
+    .check(z.refine((data) => data.newPassword === data.confirmPassword, {
         message: "Passwords do not match",
         path: ["confirmPassword"],
-    });
+    }));
 
 const passwordSetSchema = z
     .object({
-        newPassword: z.string().min(8, "Password must be at least 8 characters"),
-        confirmPassword: z.string().min(1, "Please confirm your password"),
+        newPassword: z.string().check(z.minLength(8, "Password must be at least 8 characters")),
+        confirmPassword: z.string().check(z.minLength(1, "Please confirm your password")),
     })
-    .refine((data) => data.newPassword === data.confirmPassword, {
+    .check(z.refine((data) => data.newPassword === data.confirmPassword, {
         message: "Passwords do not match",
         path: ["confirmPassword"],
-    });
+    }));
 
 // Types
 type Session = typeof authClient.$Infer.Session;

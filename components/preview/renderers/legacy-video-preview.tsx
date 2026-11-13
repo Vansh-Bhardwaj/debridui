@@ -10,7 +10,8 @@ import { DebridFileNode, MediaPlayer } from "@/lib/types";
 import { Play, Pause, VolumeHigh as Volume2, VolumeX, Fullscreen as Maximize2, ExitFullscreen as Minimize2, Settings, Plus, Minus, ArrowUpRightSquare as ExternalLink, AlertCircle, SkipPrev as SkipBack, SkipNext as SkipForward, Refresh as RefreshCw, Screencast as Cast, Pip as PictureInPicture2, X, ChevronRight, ArrowLeft, Layers } from "reicon-react";
 import { toast } from "sonner";
 import { useBingeTransition } from "@/components/player/use-binge-transition";
-import { TransitionOverlay } from "@/components/player/binge-overlays";
+import { StillWatchingCard, TransitionOverlay } from "@/components/player/binge-overlays";
+import { readShowLanguages, rememberShowLanguage, useStillWatching } from "@/components/player/player-memory";
 import { DiagnosticsOverlay } from "@/components/player/diagnostics-overlay";
 import {
     INITIAL_SUBTITLE_SYNC,
@@ -38,6 +39,7 @@ import {
     decodeSubtitleFileBytes,
     getLanguageDisplayName,
     isSubtitleLanguage,
+    subtitleLanguageName,
     normalizeSubtitleCueText,
     parseSubtitleCues,
     type SubtitleCue,
@@ -461,10 +463,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const speedProbeInFlightRef = useRef(false);
     const lastSpeedProbeAtRef = useRef(0);
 
-    // User's preferred subtitle language from settings
-    const preferredSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
-    // User's preferred audio language from streaming settings
-    const preferredAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
+    // What this profile last picked for this show wins over the global language settings.
+    const showLanguageId = progressKey?.type === "show" ? progressKey.imdbId : undefined;
+    const showLanguages = useMemo(() => readShowLanguages(profileId, showLanguageId), [profileId, showLanguageId]);
+    const settingsSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
+    const settingsAudioLang = useSettingsStore((s) => s.settings.streaming.preferredLanguage);
+    const preferredSubLang = showLanguages.subtitle === "off" ? "" : showLanguages.subtitle ?? settingsSubLang;
+    const preferredAudioLang = showLanguages.audio ?? settingsAudioLang;
     // IntroDB: auto-skip intro/recap/outro
     const autoSkipIntro = useSettingsStore((s) => s.settings.playback.autoSkipIntro);
     const autoNextEpisode = useSettingsStore((s) => s.settings.playback.autoNextEpisode);
@@ -521,6 +526,9 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     // See components/player/use-binge-transition.ts for design rationale.
     const binge = useBingeTransition();
     const { isTransitioning, autoNextCountdown, autoNextTotalDuration, guardedNav, clearTransition, cancelAutoNext, startAutoNextCountdown, isTransitioningRef } = binge;
+    const stillWatching = useStillWatching(videoRef);
+    const autoAdvanceRef = useRef(stillWatching.autoAdvance);
+    autoAdvanceRef.current = stillWatching.autoAdvance;
 
     const onNextRef = useRef(onNext);
     onNextRef.current = onNext;
@@ -1684,7 +1692,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     // Use promptSeconds as the countdown duration (matches user settings).
                     // The countdown ring animation runs for this full duration.
                     startAutoNextCountdown(promptSeconds, () => {
-                        if (nextFn) guardedNav(() => nextFn());
+                        if (nextFn) autoAdvanceRef.current(() => guardedNav(() => nextFn()));
                     });
                 }
             }
@@ -1748,7 +1756,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             // Auto-next: advance via guardedNav (single-flight protection).
             if (onNext && autoNextEpisode && !isTransitioningRef.current) {
                 cancelAutoNext(); // clear any stale countdown
-                guardedNav(() => onNext());
+                autoAdvanceRef.current(() => guardedNav(() => onNext()));
             }
         };
 
@@ -3410,6 +3418,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         during native fullscreen (elements outside the fullscreen
                         element are hidden by the browser). */}
                     <TransitionOverlay isVisible={isTransitioning} />
+                    {stillWatching.asking && <StillWatchingCard onAnswer={stillWatching.answer} />}
 
                     {/* Source-switch loading overlay: shown when switching streams via the picker.
                         Uses the same visual language as TransitionOverlay so it feels consistent. */}
@@ -3946,7 +3955,13 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                         return (
                                                             <button
                                                                 key={i}
-                                                                onClick={() => { setSelectedAudioIndex(i); showOsd(`Audio: ${label}`); setOpenMenuTracked(null); }}
+                                                                onClick={() => {
+                                                                    setSelectedAudioIndex(i);
+                                                                    const el = videoRef.current as (HTMLVideoElement & { audioTracks?: { [i: number]: { language?: string } } }) | null;
+                                                                    rememberShowLanguage(profileId, showLanguageId, "audio", hlsAudioTracks[i]?.lang ?? el?.audioTracks?.[i]?.language);
+                                                                    showOsd(`Audio: ${label}`);
+                                                                    setOpenMenuTracked(null);
+                                                                }}
                                                                 className={POPUP_ITEM}
                                                                 data-active={selectedAudioIndex === i}
                                                             >
@@ -3994,7 +4009,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                 >
                                                     <div className={POPUP_LABEL}>Subtitles</div>
                                                     <button
-                                                        onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(-1); setOpenMenuTracked(null); }}
+                                                        onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(-1); rememberShowLanguage(profileId, showLanguageId, "subtitle", "off"); setOpenMenuTracked(null); }}
                                                         className={POPUP_ITEM}
                                                         data-active={activeSubtitleIndex === -1}
                                                     >
@@ -4003,7 +4018,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                                                     {displayedSubtitles.map((sub, i) => (
                                                         <button
                                                             key={`${sub.source ?? "addon"}-${sub.lang}-${sub.url ?? sub.trackId ?? ""}-${i}`}
-                                                            onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); setOpenMenuTracked(null); }}
+                                                            onClick={() => { userSetSubtitleRef.current = true; setActiveSubtitleIndex(i); rememberShowLanguage(profileId, showLanguageId, "subtitle", subtitleLanguageName(sub)); setOpenMenuTracked(null); }}
                                                             className={POPUP_ITEM}
                                                             data-active={activeSubtitleIndex === i}
                                                         >

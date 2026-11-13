@@ -7,7 +7,8 @@ import nextDynamic from "next/dynamic";
 import { SearchDialog } from "@/components/mdb/search-dialog";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
 import { useRouter } from "next/navigation";
-import { memo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { dedupeItems, useShownIds } from "@/components/mdb/home-dedup";
 import {
     useTraktTrendingMovies,
     useTraktTrendingShows,
@@ -223,14 +224,18 @@ const AddonCatalogRow = memo(function AddonCatalogRow({
     isVisible: boolean;
 }) {
     const { data, isLoading, error } = useAddonCatalog(catalog, isVisible);
+    const shown = useShownIds();
+    // Titles our own rows already show are skipped here only for display; they return when those rows change.
+    const items = useMemo(() => data && dedupeItems(data, shown), [data, shown]);
 
     // Don't render anything until visible the first time
     if (!isVisible && !data) return null;
+    if (data && items && items.length < 4 && data.length >= 4) return null;
 
     return (
         <MediaSection
             title={catalog.name}
-            items={data ?? undefined}
+            items={items ?? undefined}
             isLoading={isLoading}
             error={error}
             rows={1}

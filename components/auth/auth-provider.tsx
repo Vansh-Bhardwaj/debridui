@@ -308,7 +308,7 @@ function ProfileEntry({ children }: { children: React.ReactNode }) {
     const { session } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
-    const needsPick = profiles.length > 1 && !sessionStorage.getItem(`dui-profile-picked:${session?.user.id}`) && pathname !== "/profiles";
+    const needsPick = profiles.length > 1 && !localStorage.getItem(`dui-profile-picked:${session?.user.id}`) && pathname !== "/profiles";
     useEffect(() => {
         if (needsPick) router.replace("/profiles");
     }, [needsPick, router]);

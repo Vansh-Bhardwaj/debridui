@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { profiles, profileSettings, userSettings } from "@/lib/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getActor, UnauthorizedError } from "@/lib/auth/actor";
+import { z } from "zod/mini";
 import { serverSettingsSchema, profilePreferencesSchema } from "@/lib/schemas";
 import { TraktClient } from "@/lib/trakt";
 import { getAppUrl, getEnv } from "@/lib/env";
@@ -34,7 +35,7 @@ export async function getUserSettings(): Promise<ServerSettings | null> {
 
 export async function saveUserSettings(input: Partial<ServerSettings>) {
     const { userId, profileId } = await getActor();
-    const { tmdb_api_key, ...personal } = serverSettingsSchema.partial().parse(input);
+    const { tmdb_api_key, ...personal } = z.partial(serverSettingsSchema).parse(input);
     if (tmdb_api_key !== undefined) {
         const updates = { tmdb_api_key };
         await db.insert(userSettings).values({ userId, settings: updates }).onConflictDoUpdate({

@@ -96,10 +96,11 @@ function ProfilesScreen() {
                     {profile.id === activeProfile.id && <span aria-label="Current profile" className="size-1.5 shrink-0 bg-primary" />}
                 </span>
             </button>)}
-            <button data-tv-focusable onMouseEnter={() => setGlow("#ffffff")} onFocus={() => setGlow("#ffffff")} onClick={(e) => edit("new", e.currentTarget)} className={tile}>
+            {/* Adding lives in Manage; the picker stays just "pick who's watching". */}
+            {manage && <button data-tv-focusable onMouseEnter={() => setGlow("#ffffff")} onFocus={() => setGlow("#ffffff")} onClick={(e) => edit("new", e.currentTarget)} className={tile}>
                 <span className={cn("flex aspect-square items-center justify-center border-2 border-dashed border-border text-muted-foreground group-hover:border-white group-hover:text-foreground group-focus-visible:text-foreground", frame, large && "min-h-40")}><Plus className="size-12" strokeWidth={1.5} /></span>
                 <span className="text-base text-muted-foreground transition-colors group-hover:text-foreground group-focus-visible:text-foreground">Add profile</span>
-            </button>
+            </button>}
         </div>
         <div data-tv-section="profile-actions" className="relative"><Button data-tv-focusable variant="outline" className="min-h-phone-touch tracking-widest uppercase text-xs" onClick={() => setManage(!manage)}>{manage ? "Done" : "Manage profiles"}</Button></div>
         <Dialog open={editing !== null} onOpenChange={(open) => { if (!open && !busy) setEditing(null); }}>

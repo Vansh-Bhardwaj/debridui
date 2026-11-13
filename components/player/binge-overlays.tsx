@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { SkipNext as SkipForward, X } from "reicon-react";
+import { Button } from "@/components/ui/button";
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    Transition Overlay
@@ -140,6 +141,26 @@ export function AutoNextCard({
             >
                 <X className="size-3" />
             </button>
+        </div>
+    );
+}
+
+/** Netflix-style pause after several episodes auto-played with no input. */
+export function StillWatchingCard({ onAnswer }: { onAnswer: (keepWatching: boolean) => void }) {
+    return (
+        <div
+            data-tv-section="still-watching"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-6"
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+        >
+            <div className="flex flex-col items-center gap-6 text-center">
+                <p className="text-2xl font-light text-white">Are you still watching?</p>
+                <div className="flex flex-wrap justify-center gap-3">
+                    <Button data-tv-focusable autoFocus onClick={() => onAnswer(true)}>Continue watching</Button>
+                    <Button data-tv-focusable variant="outline" onClick={() => onAnswer(false)}>Not now</Button>
+                </div>
+            </div>
         </div>
     );
 }

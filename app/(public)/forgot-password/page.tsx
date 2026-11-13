@@ -8,14 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Envelope as Mail } from "reicon-react";
 
 const forgotPasswordSchema = z.object({
-    email: z.string().email("Invalid email address"),
+    email: z.email("Invalid email address"),
 });
 
 export default function ForgotPasswordPage() {

@@ -39,6 +39,10 @@ const nextConfig: NextConfig = {
         resolveAlias: {
             "@vercel/og": path.join(__dirname, "lib/og-stub.ts"),
             "next/dist/compiled/@vercel/og": path.join(__dirname, "lib/og-stub.ts"),
+            // Neon Auth only imports AuthError/AuthApiError/isAuthError from auth-js; the package
+            // index drags in the whole GoTrue client (~120 KB source). Same module, without the rest.
+            // Relative: Turbopack on Windows can't resolve absolute alias targets.
+            "@supabase/auth-js": "./node_modules/@supabase/auth-js/dist/module/lib/errors.js",
         },
     },
     webpack(config, { isServer }) {

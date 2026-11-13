@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "reicon-react";
+import { useRegisterShown } from "./home-dedup";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { useSettingsStore } from "@/lib/stores/settings";
@@ -76,6 +77,7 @@ function EpisodeRow({ kind }: { kind: "next" | "new" }) {
         },
     });
     const visible = data?.filter(({ imdbId, episode }) => !hidden.has(hiddenKey(imdbId, episode)));
+    useRegisterShown(`episodes:${kind}`, visible?.map(({ media }) => media.ids) ?? []);
     if (!visible?.length) return null;
     return <section data-tv-section className="space-y-4">
         <h2 className={isTV ? "text-tv-title font-light" : "text-xl font-light"}>{kind === "next" ? "Up Next" : "New Episodes"}</h2>
@@ -95,6 +97,7 @@ function BecauseRow({ media, type }: { media: TraktMedia; type: "movie" | "show"
     const { activeProfile } = useProfile();
     const key = useSettingsStore((s) => s.get("tmdbApiKey"));
     const { data } = useQuery({ queryKey: ["home-because", activeProfile.id, type, media.ids?.imdb, key], queryFn: () => recommendations(media, type, key), enabled: !!key, ...cache });
+    useRegisterShown(`because:${type}:${media.ids?.imdb}`, data?.map((item) => (item.movie ?? item.show)?.ids) ?? []);
     return data?.length ? <MediaSection title={`Because You Watched ${media.title}`} items={data} rows={1} /> : null;
 }
 
@@ -110,6 +113,7 @@ function TopTen() {
     const { isTV } = useDevice();
     const key = useSettingsStore((s) => s.get("tmdbApiKey"));
     const { data } = useQuery({ queryKey: ["home-top-ten", activeProfile.id, new Date().toISOString().slice(0, 10), key], queryFn: async () => key ? tmdbItems("trending/all/day", key) : traktClient.getTrendingMovies(10), ...cache });
+    useRegisterShown("top-ten", data?.slice(0, 10).map((item) => (item.movie ?? item.show)?.ids) ?? []);
     if (!data?.length) return null;
     return <section data-tv-section className="space-y-4">
         <h2 className={isTV ? "text-tv-title font-light" : "text-xl font-light"}>Top 10 Today</h2>
@@ -132,6 +136,7 @@ function GenreRow({ genre }: { genre: string }) {
         const catalog = await homeJson<{ metas: Parameters<typeof cinemetaToTraktMedia>[0][] }>(`https://v3-cinemeta.strem.io/catalog/movie/top/genre=${encodeURIComponent(genre.charAt(0).toUpperCase() + genre.slice(1))}.json`);
         return catalog.metas.slice(0, 20).map((m) => ({ movie: cinemetaToTraktMedia(m, "movie") }));
     }, ...cache });
+    useRegisterShown(`genre:${genre}`, data?.map((item) => item.movie.ids) ?? []);
     return data?.length ? <MediaSection title={genre.charAt(0).toUpperCase() + genre.slice(1)} items={data} rows={1} /> : null;
 }
 

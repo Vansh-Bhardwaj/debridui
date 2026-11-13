@@ -5,7 +5,7 @@ import { getAccount, UnauthorizedError } from "@/lib/auth/actor";
 import { db } from "@/lib/db";
 import { addons } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { addonSchema, addonOrderUpdateSchema } from "@/lib/schemas";
 import { type CreateAddon } from "@/lib/types";
 import { v7 as uuidv7 } from "uuid";
@@ -80,7 +80,7 @@ export async function removeAddon(addonId: string) {
         redirect("/login");
     }
 
-    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
+    const validatedId = z.string().check(z.minLength(1, "Addon ID is required")).parse(addonId);
     await db.delete(addons).where(and(eq(addons.id, validatedId), eq(addons.userId, actor.userId)));
 
     return { success: true };
@@ -99,8 +99,8 @@ export async function toggleAddon(addonId: string, enabled: boolean) {
         redirect("/login");
     }
 
-    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
-    const validatedEnabled = z.boolean({ message: "Enabled must be a boolean" }).parse(enabled);
+    const validatedId = z.string().check(z.minLength(1, "Addon ID is required")).parse(addonId);
+    const validatedEnabled = z.boolean("Enabled must be a boolean").parse(enabled);
 
     await db
         .update(addons)
@@ -123,8 +123,8 @@ export async function toggleAddonCatalogs(addonId: string, showCatalogs: boolean
         redirect("/login");
     }
 
-    const validatedId = z.string().min(1, "Addon ID is required").parse(addonId);
-    const validatedShow = z.boolean({ message: "showCatalogs must be a boolean" }).parse(showCatalogs);
+    const validatedId = z.string().check(z.minLength(1, "Addon ID is required")).parse(addonId);
+    const validatedShow = z.boolean("showCatalogs must be a boolean").parse(showCatalogs);
 
     await db
         .update(addons)

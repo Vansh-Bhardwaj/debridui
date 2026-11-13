@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -17,13 +17,13 @@ import { CheckCircle } from "reicon-react";
 
 const resetPasswordSchema = z
     .object({
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        password: z.string().check(z.minLength(8, "Password must be at least 8 characters")),
         confirmPassword: z.string(),
     })
-    .refine((data) => data.password === data.confirmPassword, {
+    .check(z.refine((data) => data.password === data.confirmPassword, {
         message: "Passwords don't match",
         path: ["confirmPassword"],
-    });
+    }));
 
 function ResetPasswordForm() {
     const router = useRouter();

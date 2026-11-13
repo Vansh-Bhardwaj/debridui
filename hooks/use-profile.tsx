@@ -90,7 +90,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
             traktClient.reset();
             queryClient.removeQueries({ predicate: (q) => perProfile.has(String(q.queryKey[0])) });
             setReadyId(null);
-            sessionStorage.setItem(`dui-profile-picked:${session?.user.id}`, id);
+            // Per device (not per tab/session) so locking the phone or refreshing doesn't re-ask "Who's watching?".
+            localStorage.setItem(`dui-profile-picked:${session?.user.id}`, id);
             queryClient.setQueryData<ProfileList>(queryKey, (old) => old ? { ...old, activeProfileId: id } : old);
         } finally {
             setSwitching(false);

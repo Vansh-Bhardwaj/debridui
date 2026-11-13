@@ -37,11 +37,14 @@ import { decideStream, type PlaybackEngine } from "@/lib/utils/codec-support";
 import { playbackEngine, usePlaybackOverride } from "@/lib/playback/preferences";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { useSettingsStore } from "@/lib/stores/settings";
-import { getStreamInfo, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
+import { getStreamInfo, pickPreferredAudio, type StreamInfo, type StreamVariantOptions } from "@/lib/streaming/stream-info";
+import { StillWatchingCard } from "@/components/player/binge-overlays";
+import { readShowLanguages, rememberShowLanguage, useStillWatching } from "@/components/player/player-memory";
+import { useProfile } from "@/hooks/use-profile";
 import { detectContainer, getDeviceProfile, getOriginalIssue } from "@/lib/playback/device-profile";
 import { enterNativeFullscreen, type NativeFullscreenVideo } from "@/lib/playback/native-fullscreen";
 import { isSupportedPlayer, openInPlayer } from "@/lib/utils/media-player";
-import { getLanguageDisplayName, isSubtitleLanguage } from "@/lib/utils/subtitles";
+import { getLanguageDisplayName, isSubtitleLanguage, subtitleLanguageName } from "@/lib/utils/subtitles";
 import {
     buildNativeHlsUrl,
     isPlaylistReachable,
@@ -174,7 +177,13 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         () => allSources.filter((s) => s.url && s.url !== source?.url).slice(0, 8),
         [allSources, source?.url]
     );
-    const subtitleLanguage = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
+    // What this profile last picked for this show wins over the global language settings.
+    const { activeProfile: { id: profileId } } = useProfile();
+    const showLanguageId = progressKey?.type === "show" ? progressKey.imdbId : undefined;
+    const showLanguages = useMemo(() => readShowLanguages(profileId, showLanguageId), [profileId, showLanguageId]);
+    const settingsSubLang = useSettingsStore((s) => s.settings.playback.subtitleLanguage);
+    const subtitlesOff = showLanguages.subtitle === "off";
+    const subtitleLanguage = !subtitlesOff && showLanguages.subtitle ? showLanguages.subtitle : settingsSubLang;
     const { initialProgress, updateProgress, forceSync, markCompleted } = useProgress(progressKey ?? null);
     const { scrobble } = useTraktScrobble(progressKey ?? null);
     const nextEpisode = useNextEpisode(progressKey?.imdbId, progressKey?.type, progressKey?.season, progressKey?.episode);
@@ -441,10 +450,15 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             const remaining = Math.min(dur, startAt + lead) - t;
             if (t < startAt) setUpNextIn(null);
             else if (remaining > 0) setUpNextIn(Math.ceil(remaining));
-            else playNextRef.current();
+            else if (!advancedRef.current) autoAdvanceRef.current(() => playNextRef.current());
         }
     }, [updateProgress, duration, complete, segments, autoSkipIntro, onNext, autoNextEpisode, promptSeconds]);
 
+    const stillWatching = useStillWatching(videoRef);
+    const autoAdvanceRef = useRef(stillWatching.autoAdvance);
+    useEffect(() => {
+        autoAdvanceRef.current = stillWatching.autoAdvance;
+    }, [stillWatching.autoAdvance]);
     const playNext = useCallback(() => {
         if (!onNext || advancedRef.current) return;
         advancedRef.current = true;
@@ -544,7 +558,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         const list = video.textTracks;
         const sync = () => {
             const all = Array.from(list);
-            if (!userPickedTrackRef.current && !all.some((t) => t.mode === "showing")) {
+            if (!userPickedTrackRef.current && !subtitlesOff && !all.some((t) => t.mode === "showing")) {
                 const preferred = all.find(
                     (t) => (t.kind === "subtitles" || t.kind === "captions") && isSubtitleLanguage({ url: "", lang: t.language || t.label }, subtitleLanguage)
                 );
@@ -565,7 +579,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
             list.removeEventListener("removetrack", sync);
             list.removeEventListener("change", sync);
         };
-    }, [src, subtitleLanguage]);
+    }, [src, subtitleLanguage, subtitlesOff]);
     const showTrack = useCallback((index: number) => {
         const list = videoRef.current?.textTracks;
         if (!list) return;
@@ -740,6 +754,14 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
         },
         [info, master, subtitleLanguage, timings]
     );
+    // Switch to the audio language this profile last picked for the show, once per stream.
+    const audioRestoredRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!info || !showLanguages.audio || audioRestoredRef.current === info.hlsUrl) return;
+        audioRestoredRef.current = info.hlsUrl;
+        const index = pickPreferredAudio(info, showLanguages.audio);
+        if (index !== null) void switchVariant({ audioIndex: index });
+    }, [info, showLanguages.audio, switchVariant]);
 
     const tryNextSource = () => {
         if (!useStreamingStore.getState().playNextBestSource(true)) toast.error("No other sources to try.");
@@ -778,7 +800,10 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                         .filter(Boolean)
                         .join(" · "),
                     active: a.index === info?.audioIndex,
-                    onSelect: () => void switchVariant({ audioIndex: a.index }),
+                    onSelect: () => {
+                        rememberShowLanguage(profileId, showLanguageId, "audio", a.language);
+                        void switchVariant({ audioIndex: a.index });
+                    },
                 }))
               : sheet === "subtitles"
                 ? [{ index: -1, label: "Off" }, ...textTracks].map((t) => ({
@@ -788,6 +813,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                       onSelect: () => {
                           userPickedTrackRef.current = true;
                           showTrack(t.index);
+                          rememberShowLanguage(profileId, showLanguageId, "subtitle", "language" in t ? subtitleLanguageName({ url: "", lang: t.language || t.label }) : "off");
                           setSheet(null);
                       },
                   }))
@@ -907,7 +933,7 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                             onEnded={() => {
                                 setEnded(true);
                                 complete();
-                                if (onNext && autoNextEpisode && !upNextDismissedRef.current) playNext();
+                                if (onNext && autoNextEpisode && !upNextDismissedRef.current && !advancedRef.current) stillWatching.autoAdvance(playNext);
                             }}
                             onError={() => {
                                 setBuffering(false);
@@ -1150,6 +1176,8 @@ export function NativeVideoPreview({ file, downloadUrl, streamingLinks, subtitle
                     ))}
                 </div>
             )}
+
+            {stillWatching.asking && <StillWatchingCard onAnswer={stillWatching.answer} />}
 
             {/* ── Bottom sheet ── */}
             {sheet && (

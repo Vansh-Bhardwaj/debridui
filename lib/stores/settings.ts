@@ -135,6 +135,8 @@ export interface PlaybackSettings {
     autoNextEpisode: boolean;
     /** Seconds before end to show "next episode" overlay */
     nextEpisodePromptSeconds: number;
+    /** Pause and ask "Are you still watching?" after several auto-played episodes with no input */
+    stillWatchingPrompt: boolean;
     /** Preferred subtitle language (e.g. "english", "spanish"). Empty = disabled. */
     subtitleLanguage: string;
     /** Auto-skip intros/recaps/outros using IntroDB community timestamps */
@@ -288,6 +290,7 @@ const settingsConfig: SettingsConfig = {
             skipIntro: 0,
             autoNextEpisode: true,
             nextEpisodePromptSeconds: 30,
+            stillWatchingPrompt: true,
             subtitleLanguage: "english",
             autoSkipIntro: false,
             subtitleAutoSync: true,

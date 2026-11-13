@@ -1,6 +1,6 @@
 "use server";
 
-import { z } from "zod";
+import { z } from "zod/mini";
 import { auth } from "@/lib/auth";
 
 /**
@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth";
  */
 export async function setPassword(newPassword: string) {
     try {
-        const validated = z.string().min(8, "Password must be at least 8 characters").parse(newPassword);
+        const validated = z.string().check(z.minLength(8, "Password must be at least 8 characters")).parse(newPassword);
 
         const { error } = await auth.changePassword({
             newPassword: validated,

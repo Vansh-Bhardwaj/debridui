@@ -18,6 +18,8 @@ import { getCachedSource } from "@/lib/utils/source-cache";
 import { useStreamingStore } from "@/lib/stores/streaming";
 import { useUserAddons } from "@/hooks/use-addons";
 import { type Addon } from "@/lib/addons/types";
+import { useRegisterShown } from "./home-dedup";
+import type { TraktMedia } from "@/lib/trakt";
 
 interface ContinueWatchingItemProps {
     item: ProgressKey & ProgressData;
@@ -261,6 +263,7 @@ export function ContinueWatching() {
             : item.imdbId;
         return !removedIds.has(id);
     });
+    useRegisterShown("continue-watching", items.map((item) => ({ imdb: item.imdbId }) as TraktMedia["ids"]));
 
     const handleRemove = useCallback((key: ProgressKey) => {
         // Optimistic removal from UI immediately

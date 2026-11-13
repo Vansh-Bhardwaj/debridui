@@ -95,6 +95,15 @@ export const settingsRegistry: readonly SettingEntry[] = [
         control: { type: "switch", key: "playback.autoNextEpisode" },
     },
     {
+        id: "still-watching-prompt",
+        section: "playback",
+        label: "Ask If Still Watching",
+        description: "Pause after 3 episodes play on their own with no input",
+        devices: all,
+        scope: "profile",
+        control: { type: "switch", key: "playback.stillWatchingPrompt" },
+    },
+    {
         id: "auto-skip-intro",
         section: "playback",
         label: "Auto-Skip Intros",

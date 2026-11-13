@@ -118,6 +118,11 @@ export function isSubtitleLanguage(sub: AddonSubtitle, preferredLang: string): b
     return entry.aliases.some((a) => lang.includes(a) || name.includes(a));
 }
 
+/** The settings-style language name ("english") a subtitle track is in, if known. */
+export function subtitleLanguageName(sub: AddonSubtitle): string | undefined {
+    return Object.keys(LANG_MATCH).find((name) => isSubtitleLanguage(sub, name));
+}
+
 /** Font stack tail so musical symbols / emoji in cues render instead of “tofu” (especially with mono/serif faces). */
 export const SUBTITLE_SYMBOL_FONT_FALLBACK =
     '"Segoe UI Symbol","Segoe UI Emoji","Apple Color Emoji","Noto Sans Symbols 2","Noto Music","Noto Color Emoji",emoji,sans-serif';

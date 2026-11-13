@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { GoogleSignInButton } from "@/components/auth/google-signin-button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -18,7 +18,7 @@ import { NEON_AUTH_URL } from "@/lib/constants";
 
 const loginSchema = z.object({
     email: z.email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    password: z.string().check(z.minLength(8, "Password must be at least 8 characters")),
 });
 
 export default function LoginForm() {

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 import { AccountType, accountSchema, createAccountSchema, userSchema, addonSchema, serverSettingsSchema } from "./schemas";
 
 export { AccountType };

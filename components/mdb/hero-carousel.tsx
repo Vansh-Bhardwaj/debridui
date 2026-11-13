@@ -13,6 +13,7 @@ import { useTraktRecommendations } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import { HeroCarouselSkeleton } from "./hero-carousel-skeleton";
+import { useRegisterShown } from "./home-dedup";
 import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface HeroSlideProps {
@@ -341,6 +342,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
     const isTraktConnected = !!traktClient.getAccessToken();
     const { data: items, isLoading: recoLoading } = useTraktRecommendations(isTraktConnected);
     const isLoading = settingsLoading || (isTraktConnected && recoLoading);
+    useRegisterShown("hero", items?.items?.map((item) => (item.movie ?? item.show)?.ids) ?? []);
 
     const scrollPrev = useCallback(() => api?.scrollPrev(), [api]);
     const scrollNext = useCallback(() => api?.scrollNext(), [api]);

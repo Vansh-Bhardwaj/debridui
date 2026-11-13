@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { GoogleSignInButton } from "@/components/auth/google-signin-button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -19,9 +19,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 
 const signupSchema = z.object({
-    name: z.string().min(1, "Name is required"),
+    name: z.string().check(z.minLength(1, "Name is required")),
     email: z.email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    password: z.string().check(z.minLength(8, "Password must be at least 8 characters")),
 });
 
 export default function SignupForm() {
