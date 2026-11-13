@@ -2,6 +2,8 @@
 
 A comprehensive design system for building refined, modern interfaces with an editorial aesthetic.
 
+Source of truth: `app/globals.css`, `components/` and `components/ui/`. The [quick reference](./ui-minimal.md) summarizes the same system.
+
 ---
 
 ## Design Philosophy
@@ -51,7 +53,7 @@ Always search existing components before creating new ones:
 - `components/common/` — Utilities (wrappers, loaders, shared patterns)
 - `components/[feature]/` — Domain-specific patterns
 
-**IMPORTANT:** Before implementing any new UI, read the existing `components/ui/` files. All shadcn components have been pre-styled with the editorial minimalist aesthetic — `rounded-sm`, `border-border/50`, `font-light`, `duration-300`, etc. are already baked in. Don't add redundant class overrides.
+**IMPORTANT:** Before implementing any new UI, read the existing `components/ui/` files. All shadcn components have been pre-styled with the editorial minimalist aesthetic — square radius tokens, subtle borders, light titles and component-specific transitions are already baked in. Check each source file for its exact defaults. Don't add redundant class overrides.
 
 ### 2. Compose, Don't Duplicate
 
@@ -60,8 +62,10 @@ Build complex UIs by combining simpler components:
 ```tsx
 // Compose existing components
 <Card>
-    <Header {...props} />
-    <Stats {...props} />
+    <CardHeader>
+        <CardTitle>{title}</CardTitle>
+    </CardHeader>
+    <CardContent>{children}</CardContent>
 </Card>
 
 // Don't copy markup from other components
@@ -86,7 +90,9 @@ Use `className` and `variant` props to customize, not source changes:
 
 ```tsx
 // Extend via props
-<Button className="h-12 px-8 tracking-wide" variant="outline" size="lg">
+<Button className="tracking-wide" variant="outline" size="lg">
+    {label}
+</Button>
 
 // Don't add one-off variants to base components
 ```
@@ -117,20 +123,20 @@ All base UI primitives in `components/ui/` have been customized for the editoria
 
 | Component        | Pre-styled Defaults                                                                                                                |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Button**       | `rounded-sm`, `duration-300`, `border-border/50` (outline), `hover:bg-muted/50` (ghost), sizes: sm=`h-8`, default=`h-9`, lg=`h-10` |
-| **Input**        | `rounded-sm`, `border-border/50`, `duration-300`, `h-9`, focus ring styling                                                        |
+| **Button** | `rounded-md` (0px), `duration-200 ease-premium`; outline: `bg-background shadow-xs hover:bg-accent`, dark `border-input`; ghost: `hover:bg-accent`; xs/sm/default/lg: `h-6`/`h-8`/`h-9`/`h-10` |
+| **Input** | `rounded-sm` (0px), `border-border/50`, `duration-200 ease-premium`, `h-9`, `focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50` |
 | **Badge**        | `rounded-sm`, `text-xs`, `px-2.5 py-0.5`, `tracking-wide`, default variant=`outline` with `border-border/50`                       |
 | **Card**         | `rounded-sm`, `border-border/50`, `font-light` title                                                                               |
 | **Dialog**       | `rounded-sm`, `border-border/50`, `font-light` title, backdrop blur                                                                |
 | **Sheet**        | `border-border/50`, `font-light` title, `duration-300` animations                                                                  |
-| **Select**       | `rounded-sm`, `border-border/50`, `duration-300`, `hover:bg-muted/50` items                                                        |
-| **DropdownMenu** | `rounded-sm`, `border-border/50`, `duration-200` items, `hover:bg-muted/50`                                                        |
+| **Select** | Trigger: `rounded-sm`, `border-border/50`, `duration-200 ease-premium`, sm=`h-8`, default=`h-9`; items: `focus:bg-muted/50` |
+| **DropdownMenu** | `rounded-sm`, `border-border/50` content, `duration-200` items, `focus:bg-muted/50` |
 | **Checkbox**     | `rounded-sm`, `border-border/50`, `duration-300`                                                                                   |
 | **Separator**    | `bg-border/50`                                                                                                                     |
-| **Skeleton**     | `rounded-sm`, `bg-muted/50`                                                                                                        |
+| **Skeleton** | `rounded-sm`, `bg-muted/50 animate-pulse` |
 | **Tooltip**      | `rounded-sm`                                                                                                                       |
 | **Alert**        | `rounded-sm`, `border-border/50`                                                                                                   |
-| **Command**      | `rounded-sm`, `border-border/50` (input), `duration-200` items                                                                     |
+| **Command** | `rounded-md` container, `border-border/50` input wrapper; items: `duration-150 ease-premium`, `data-[selected=true]:bg-accent` |
 
 ### Usage Guidelines
 
@@ -141,8 +147,8 @@ All base UI primitives in `components/ui/` have been customized for the editoria
 <Dialog><DialogContent>...</DialogContent></Dialog>
 
 // ✗ WRONG: Don't add redundant overrides
-<Button className="rounded-sm border-border/50">  // Already in base
-<Badge className="h-5 text-xs">              // Already in base
+<Button className="rounded-md">                  // Already in base
+<Badge className="text-xs tracking-wide">         // Already in base
 <DialogContent className="rounded-sm">            // Already in base
 ```
 
@@ -174,14 +180,17 @@ Before creating any UI:
 
 | Component | Size      | Height | Class    | Usage              |
 | --------- | --------- | ------ | -------- | ------------------ |
+| Button    | `xs`      | 24px   | `h-6`    | Extra compact actions |
 | Button    | `sm`      | 32px   | `h-8`    | Compact, secondary |
 | Button    | `default` | 36px   | `h-9`    | Standard actions   |
 | Button    | `lg`      | 40px   | `h-10`   | Primary CTAs       |
-| Button    | `icon`    | 36px   | `size-9` | Icon-only buttons  |
-| Input     | `sm`      | 32px   | `h-8`    | Compact forms      |
-| Input     | `default` | 36px   | `h-9`    | Standard forms     |
-| Select    | `sm`      | 32px   | `h-8`    | Compact forms      |
-| Select    | `default` | 36px   | `h-9`    | Standard forms     |
+| Button    | `icon-xs` | 24px   | `size-6` | Extra compact icons |
+| Button    | `icon-sm` | 32px   | `size-8` | Compact icons |
+| Button    | `icon`    | 36px   | `size-9` | Icon-only buttons |
+| Button    | `icon-lg` | 40px   | `size-10` | Large icons |
+| Input     | No variant | 36px  | `h-9`    | Standard forms; `size` is a native HTML attribute |
+| SelectTrigger | `sm`      | 32px   | `h-8`    | Compact forms |
+| SelectTrigger | `default` | 36px   | `h-9`    | Standard forms     |
 
 ### Icon Sizes
 
@@ -220,14 +229,14 @@ Before creating any UI:
 
 ### Border Radius
 
-| Class          | Size   | Usage                    |
-| -------------- | ------ | ------------------------ |
-| `rounded-sm`   | 2px    | Cards, badges, inputs    |
-| `rounded-md`   | 6px    | Buttons (shadcn default) |
-| `rounded-lg`   | 8px    | Large containers         |
-| `rounded-full` | 9999px | Avatars, pills           |
+| Class | Computed radius | Usage |
+| --- | --- | --- |
+| `rounded-sm` | 0px | Cards, badges, inputs |
+| `rounded-md` | 0px | Button and Command defaults |
+| `rounded-lg` / `rounded-xl` | 0px | Same square theme token |
+| `rounded-full` | Full rounding | Existing avatars and pills, including carousel indicator pills |
 
-**Editorial Minimalism Rule:** Use `rounded-sm` for most elements. Avoid `rounded-lg` except for specific cases.
+**Editorial Minimalism Rule:** `--radius: 0rem`; `--radius-sm/md/lg/xl` each map directly to `var(--radius)`. These token classes do not create different corner sizes. Keep primitive defaults; do not add arbitrary rounding. Reserve `rounded-full` for existing avatar and pill patterns.
 
 ---
 
@@ -239,18 +248,44 @@ This design system uses OKLCH color space for perceptually uniform colors with C
 
 #### Semantic Colors
 
-| Token                      | Light Mode                 | Dark Mode                  | Usage                             |
-| -------------------------- | -------------------------- | -------------------------- | --------------------------------- |
-| `--background`             | `oklch(0.992 0 0)`         | `oklch(0.199 0 0)`         | Page background                   |
-| `--foreground`             | `oklch(0.204 0 0)`         | `oklch(0.947 0 0)`         | Primary text                      |
-| `--card`                   | `oklch(0.963 0 0)`         | `oklch(0.255 0 0)`         | Card backgrounds                  |
-| `--muted`                  | `oklch(0.93 0 0)`          | `oklch(0.3 0 0)`           | Muted backgrounds                 |
-| `--muted-foreground`       | `oklch(0.541 0 0)`         | `oklch(0.706 0 0)`         | Secondary text                    |
-| `--border`                 | `oklch(0.891 0 0)`         | `oklch(0.364 0 0)`         | Borders, dividers                 |
-| `--primary`                | `oklch(0.87 0.156 89.2)`   | `oklch(0.87 0.156 89.2)`   | Primary actions, accents          |
-| `--secondary`              | `oklch(0.641 0.133 157.6)` | `oklch(0.641 0.133 157.6)` | Secondary accents                 |
-| `--destructive`            | `oklch(0.625 0.193 22.9)`  | `oklch(0.625 0.193 22.9)`  | Error states, destructive actions |
-| `--destructive-foreground` | `oklch(0.969 0 0)`         | `oklch(0.969 0 0)`         | Text on destructive backgrounds   |
+<a id="colour-tokens"></a>
+
+Exact OKLCH values from `:root` and `.dark` in `app/globals.css`:
+
+| Token | Light mode | Dark mode | Usage |
+| --- | --- | --- | --- |
+| `--background` | `oklch(0.9911 0 0)` | `oklch(0.199 0 0)` | Page background |
+| `--foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Primary text |
+| `--card` | `oklch(1 0 0)` | `oklch(0.255 0 0)` | Card backgrounds |
+| `--card-foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Text on card |
+| `--popover` | `oklch(0.9791 0 0)` | `oklch(0.227 0 0)` | Floating surfaces |
+| `--popover-foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Text on popover |
+| `--primary` | `oklch(0.8696 0.1559 89.1782)` | `oklch(0.87 0.156 89.2)` | Gold actions and accents |
+| `--primary-foreground` | `oklch(0.2046 0 0)` | `oklch(0.199 0 0)` | Text on primary |
+| `--secondary` | `oklch(0.6406 0.1329 157.6795)` | `oklch(0.641 0.133 157.6)` | Green accents |
+| `--secondary-foreground` | `oklch(0.9911 0 0)` | `oklch(0.947 0 0)` | Text on secondary |
+| `--muted` | `oklch(0.931 0 0)` | `oklch(0.3 0 0)` | Muted fills |
+| `--muted-foreground` | `oklch(0.5417 0 0)` | `oklch(0.706 0 0)` | Secondary text |
+| `--accent` | `oklch(0.8297 0 0)` | `oklch(0.43 0 0)` | Primitive hover and selected fills |
+| `--accent-foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Text on accent |
+| `--destructive` | `oklch(0.6256 0.1933 23.0261)` | `oklch(0.625 0.193 22.9)` | Destructive states |
+| `--destructive-foreground` | `oklch(0.9911 0 0)` | `oklch(0.947 0 0)` | Text on destructive |
+| `--border` | `oklch(0.9006 0 0)` | `oklch(0.364 0 0)` | Borders and dividers |
+| `--input` | `oklch(0.9461 0 0)` | `oklch(0.278 0 0)` | Input surface/border token |
+| `--ring` | `oklch(0.8696 0.1559 89.1782)` | `oklch(0.87 0.156 89.2)` | Focus rings |
+| `--chart-1` | `oklch(0.8696 0.1559 89.1782)` | `oklch(0.87 0.156 89.2)` | Chart series 1 |
+| `--chart-2` | `oklch(0.6406 0.1329 157.6795)` | `oklch(0.641 0.133 157.6)` | Chart series 2 |
+| `--chart-3` | `oklch(0.6256 0.1933 23.0261)` | `oklch(0.625 0.193 22.9)` | Chart series 3 |
+| `--chart-4` | `oklch(0.65 0 0)` | `oklch(0.593 0 0)` | Chart series 4 |
+| `--chart-5` | `oklch(0.6167 0 0)` | `oklch(0.545 0 0)` | Chart series 5 |
+| `--sidebar` | `oklch(0.9911 0 0)` | `oklch(0.199 0 0)` | Sidebar background |
+| `--sidebar-foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Text on sidebar |
+| `--sidebar-primary` | `oklch(0.8696 0.1559 89.1782)` | `oklch(0.87 0.156 89.2)` | Sidebar primary |
+| `--sidebar-primary-foreground` | `oklch(0.2046 0 0)` | `oklch(0.199 0 0)` | Text on sidebar-primary |
+| `--sidebar-accent` | `oklch(0.931 0 0)` | `oklch(0.3 0 0)` | Sidebar accent |
+| `--sidebar-accent-foreground` | `oklch(0.2046 0 0)` | `oklch(0.947 0 0)` | Text on sidebar-accent |
+| `--sidebar-border` | `oklch(0.9128 0 0)` | `oklch(0.326 0 0)` | Sidebar border |
+| `--sidebar-ring` | `oklch(0.8696 0.1559 89.1782)` | `oklch(0.87 0.156 89.2)` | Sidebar ring |
 
 #### Opacity Conventions
 
@@ -301,8 +336,8 @@ ring-primary         /* Selection rings */
 
 #### Accessibility
 
-- All text meets WCAG 2.1 AA contrast requirements (4.5:1 for normal text, 3:1 for large text)
-- Interactive elements maintain 3:1 contrast against backgrounds
+- Check text against its actual background for WCAG 2.1 AA contrast (4.5:1 for normal text, 3:1 for large text)
+- Check interactive boundaries and indicators for 3:1 contrast against adjacent backgrounds
 - Focus states use `ring` color with visible outlines
 
 ### 1.2 Typography
@@ -310,9 +345,11 @@ ring-primary         /* Selection rings */
 #### Font Stack
 
 ```css
---font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+--font-sans: "Styrene B", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 ```
+
+Styrene B is loaded by `@font-face` in `app/globals.css` at 400 and 700 with `font-display: swap`; Inter is a fallback. Other requested weights, including `font-light`, may be synthesized.
 
 #### Type Scale
 
@@ -326,7 +363,7 @@ ring-primary         /* Selection rings */
 | Caption   | `text-xs`                | `font-normal` (400) | Default                               | Metadata, timestamps, captions               |
 | Label     | `text-xs`                | `font-medium` (500) | `tracking-wider` to `tracking-widest` | Editorial labels (with tracking + uppercase) |
 
-**Important**: Always use standard Tailwind text sizes (`text-xs`, `text-sm`, `text-base`, `text-lg`, etc.). Never use custom arbitrary values like `text-xs` or `text-xs`.
+**Important**: Always use standard Tailwind text sizes (`text-xs`, `text-sm`, `text-base`, `text-lg`, etc.). Avoid arbitrary sizes such as `text-[11px]`; use the named device type tokens for TV UI.
 
 #### Editorial Label Pattern
 
@@ -411,26 +448,56 @@ Standardized icon sizes ensure visual consistency across the interface:
 
 ### 1.5 Border Radii
 
-This design system uses minimal border radii for a sharp, editorial aesthetic:
+This design system uses square corners. The declarations in `app/globals.css` are:
 
 ```css
---radius: 0rem /* Base radius — sharp corners */ rounded-sm /* 0.125rem — Subtle rounding for cards, badges */
-    rounded-md /* 0.375rem — Buttons, inputs */ rounded-lg /* 0.5rem — Larger containers, screenshots */;
+/* :root and .dark */
+--radius: 0rem;
+
+/* @theme inline */
+--radius-sm: var(--radius);
+--radius-md: var(--radius);
+--radius-lg: var(--radius);
+--radius-xl: var(--radius);
 ```
+
+Keep existing `rounded-sm` and `rounded-md` defaults: both resolve to 0px. `rounded-lg` and `rounded-xl` also resolve to 0px. `rounded-full` bypasses these aliases; keep it only for existing avatar and pill patterns.
 
 ### 1.6 Shadows & Elevation
 
-Shadows are subtle and increase opacity in dark mode:
+Prefer flat fills and borders; add no heavy shadows. Existing shadow tokens differ by theme:
 
 ```css
 /* Light mode */
---shadow-xs: 0px 4px 10px 0px hsl(0, 0, 0 / 0.05);
---shadow-sm: 0px 4px 10px 0px hsl(0, 0, 0 / 0.1), 0px 1px 2px -1px hsl(0, 0, 0 / 0.1);
+--shadow-xs: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.03);
+--shadow-sm: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
 
 /* Dark mode — stronger shadows for depth */
 --shadow-xs: 0px 8px 20px 0px hsl(0, 0, 0 / 0.25);
 --shadow-sm: 0px 8px 20px 0px hsl(0, 0, 0 / 0.5), 0px 1px 2px -1px hsl(0, 0, 0 / 0.5);
 ```
+
+---
+
+### 1.7 Device Tokens
+
+These opt-in tokens are defined in `:root` and mapped in `@theme inline`:
+
+| Token | Value | Utility / usage |
+| --- | --- | --- |
+| `--phone-touch-target` | `44px` | `min-h-phone-touch min-w-phone-touch` |
+| `--tv-text-base` | `1.5rem` (24px) | `text-tv-base` |
+| `--tv-text-title` | `2.25rem` (36px) | `text-tv-title` |
+| `--tv-text-hero` | `3.5rem` (56px) | `text-tv-hero` |
+| `--tv-focus-ring-color` | `var(--primary)` | Gold TV outline |
+| `--tv-focus-ring-width` | `3px` | Default outline width |
+| `--tv-focus-ring-offset` | `4px` | Default outline offset |
+
+Touch minimums do not change primitive defaults. The TV type scale is opt-in; existing `[data-tv-mode]` typography is unchanged. TV nav keeps a 2px outline with zero offset; list rows keep a 2px, 60% primary outline inset by 2px.
+
+### 1.8 Device classes
+
+See [Device classes in ui-minimal.md](./ui-minimal.md#device-classes) for the phone/tablet/desktop/TV frame contract and `useDevice()` API, and the [device UI skill](../.claude/skills/debridui-device-ui/SKILL.md) for implementation rules. Use device state when content changes and responsive CSS for layout sizes. The Phase 2 frame contract is guidance for new UI, not a claim that every frame already exists.
 
 ---
 
@@ -518,10 +585,12 @@ Every component in this system is built from these atomic pieces:
 "bg-black/60 backdrop-blur-sm"; // Overlay badge
 
 // Radius
-"rounded-sm"; // Standard (2px)
+"rounded-sm"; // Square (0px), same as rounded-md/lg/xl
 ```
 
 **Interactive Atoms:**
+
+Hover reveal recipes apply to pointer interfaces. Keep content and actions visible on phone and TV, expose them on keyboard focus, and add `data-tv-focusable` to actual focusable controls plus `data-tv-section` to groups. These state recipes do not provide device branching by themselves.
 
 ```tsx
 // Hover color change
@@ -593,13 +662,13 @@ Use these templates as starting points for common section types:
     <div className="flex items-center justify-between">
         <h3 className="text-xs tracking-widest uppercase text-muted-foreground">{sectionLabel}</h3>
         {viewAllLink && (
-            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors">View All</Link>
+            <Link href={viewAllLink} className="text-xs text-muted-foreground hover:text-foreground transition-colors">View All</Link>
         )}
     </div>
 
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {items.map((item) => (
-            <Card key={item.id} {...item} />
+            <Card key={item.id}><CardContent>{item.title}</CardContent></Card>
         ))}
     </div>
 </section>
@@ -637,7 +706,7 @@ Use these templates as starting points for common section types:
         </span>
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
         {/* Content revealed on hover */}
         <div className="absolute inset-x-0 bottom-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
@@ -688,7 +757,7 @@ Use these templates as starting points for common section types:
 
 ```tsx
 // Internal navigation
-<Link className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+<Link href={href} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
   <Icon className="size-4" />
   {label}
 </Link>
@@ -746,7 +815,7 @@ Use these templates as starting points for common section types:
                 animationDelay: `${index * 100}ms`,
                 animationFillMode: "backwards",
             }}>
-            <ItemComponent {...item} />
+            <span className="text-sm">{item.title}</span>
         </div>
     ));
 }
@@ -797,14 +866,16 @@ Use these templates as starting points for common section types:
 
 **Layout Shifts:**
 
+Breakpoints describe viewport layout, not device classes. Use `useDevice()` for device-specific content; see [Device classes](#18-device-classes).
+
 ```tsx
 // Stack on mobile → Grid on desktop
 "flex flex-col sm:flex-row";
 "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
 // Hide/Show based on viewport
-"hidden sm:flex"; // Hide on mobile
-"flex md:hidden"; // Show only on mobile
+"hidden sm:flex"; // Visible at widths >= 640px
+"flex md:hidden"; // Visible at widths < 768px
 ```
 
 **Spacing Adaptation:**
@@ -820,25 +891,31 @@ Use these templates as starting points for common section types:
 
 ## 3. Core Component Patterns
 
-These are the fundamental patterns used throughout the design system. Adapt them to your specific use case.
+These are the fundamental patterns used throughout the design system. Adapt them to your specific use case. Import primitives from their `components/ui/<name>` files, `Link` from `next/link`, icons from `lucide-react`, and `cn` from `@/lib/utils`. Values such as `title`, `items`, `Icon` and `children` are caller-supplied example data/slots, not additional repository components. Use flat overlays: no gradient recipes.
 
 ### 3.1 Page Header
 
-Page headers with icon accent for visual interest.
+Use `PageHeader` from `components/common/page-header.tsx`; `icon` is optional, `title` and `description` are required, and `divider` defaults to false.
 
 ```tsx
-<div className="space-y-6">
+<PageHeader icon={Icon} title={title} description={description} action={action} divider />
+```
+
+The component composes this structure (entrance animation and TV section marker included):
+
+```tsx
+<div className={cn("animate-in fade-in-0 slide-in-from-bottom-1 duration-500 ease-premium motion-reduce:animate-none", divider && "space-y-10")} data-tv-section>
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="space-y-2">
             <div className="flex items-center gap-3">
-                <Icon className="size-6 text-primary" strokeWidth={1.5} />
+                {Icon && <Icon className="size-6 sm:size-7 text-primary" strokeWidth={1.5} />}
                 <h1 className="text-2xl sm:text-3xl font-light">{title}</h1>
             </div>
             <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {action && <div className="shrink-0">{action}</div>}
     </div>
-    <div className="h-px bg-border/50" />
+    {divider && <div className="h-px bg-border/50" />}
 </div>
 ```
 
@@ -846,13 +923,19 @@ Page headers with icon accent for visual interest.
 
 - Icon uses `text-primary` for visual accent
 - `strokeWidth={1.5}` for refined icon appearance
-- `size-6` (24px) icon balances with heading size
+- Icon is `size-6 sm:size-7` (24px, then 28px)
 - Description on second line for clear hierarchy
 - Optional action slot for buttons (right-aligned on desktop)
 
 ### 3.2 Section Divider
 
-The signature layout pattern — centered label with horizontal lines.
+The signature layout pattern — centered label with horizontal lines. Reuse `SectionDivider` from `components/common/section-divider.tsx` with its required `label` prop:
+
+```tsx
+<SectionDivider label={label} />
+```
+
+Its underlying markup is:
 
 ```tsx
 <div className="flex items-center gap-4">
@@ -882,19 +965,26 @@ Based on shadcn/ui with editorial refinements.
 | Variant       | Appearance                          | Usage               |
 | ------------- | ----------------------------------- | ------------------- |
 | `default`     | Solid primary background            | Primary actions     |
-| `outline`     | Border with transparent background  | Secondary actions   |
-| `ghost`       | No border, transparent background   | Tertiary actions    |
-| `destructive` | Red background, semantic foreground | Destructive actions |
-| `link`        | Underlined text                     | Inline links        |
+| `outline`     | Border, `bg-background`; dark `bg-input/30` | Secondary actions |
+| `ghost`       | Transparent, accent hover fill | Tertiary actions |
+| `secondary` | Green background, secondary foreground | Secondary emphasis |
+| `destructive` | Red background, `text-white`; dark `bg-destructive/60` | Destructive actions |
+| `link`        | Primary text, underline on hover | Inline links |
 
 #### Sizes
 
 | Size      | Height | Padding | Usage             |
 | --------- | ------ | ------- | ----------------- |
+| `xs`      | 24px   | `px-2` | Extra compact |
 | `sm`      | 32px   | `px-3`  | Compact contexts  |
 | `default` | 36px   | `px-4`  | Standard buttons  |
 | `lg`      | 40px   | `px-6`  | Hero CTAs         |
+| `icon-xs` | 24px | — | Extra compact icons |
+| `icon-sm` | 32px | — | Compact icons |
 | `icon`    | 36px   | —       | Icon-only buttons |
+| `icon-lg` | 40px | — | Large icons |
+
+Padding above is the base padding; direct SVG children reduce horizontal padding via `has-[>svg]`. `xs` and `icon-xs` default to 12px icons; other sizes use 16px unless explicitly sized.
 
 #### Small Button Pattern
 
@@ -1012,7 +1102,7 @@ Displays vertical aspect ratio images with hover interactions.
         )}
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
         {/* Content on hover */}
         <div className="absolute inset-x-0 bottom-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
@@ -1026,7 +1116,7 @@ Displays vertical aspect ratio images with hover interactions.
 **States:**
 
 - Default: Image only, clean appearance
-- Hover: Scale up (1.03), reveal gradient overlay, slide up content
+- Hover: Scale up (1.04 via `--scale-hover`), reveal a flat overlay, slide up content
 - Label visible: Zero-padded number or text in top-left ("01", "New")
 
 **Performance Optimization:**
@@ -1046,7 +1136,7 @@ Hero section for detail pages with backdrop imagery.
 
 **Structure:**
 
-1. Full-width backdrop with gradient overlays
+1. Full-width backdrop with a flat overlay
 2. Two-column grid: Feature image + Info
 3. Type label → Title → Metadata → Description → Stats → Actions
 
@@ -1061,14 +1151,14 @@ Hero section for detail pages with backdrop imagery.
 </div>;
 
 {
-    /* Vertical gradient */
+    /* Flat backdrop tint */
 }
-<div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/20" />;
+<div className="absolute inset-0 bg-background/60" />;
 
 {
-    /* Horizontal vignette */
+    /* Content-side contrast panel */
 }
-<div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/80" />;
+<div className="absolute inset-y-0 left-0 w-full md:w-1/2 bg-background/80" />;
 ```
 
 **Typography Hierarchy:**
@@ -1130,27 +1220,27 @@ Tab-based navigation with underline indicator.
   {tabLabel}
 </button>
 
-// Progress dot states (for carousels)
+// Progress indicator pills (existing hero-carousel.tsx pattern)
 <button className={cn(
-  "h-1 rounded-full transition-all duration-300",
+  "h-1 rounded-full transition-[width,background-color] duration-500 ease-premium cursor-pointer motion-reduce:transition-none",
   isActive
-    ? "w-6 bg-foreground/70"
-    : "w-1.5 bg-foreground/20 hover:bg-foreground/40"
+    ? "w-6 bg-primary"
+    : "w-1.5 bg-foreground/30 hover:bg-foreground/50"
 )} />
 ```
 
 ### 3.9 Search Input
 
-Faux input button that opens search dialog, or actual input field.
+Faux input button that opens search dialog, or actual input field. The shared header action is `SearchButton` from `components/common/search-button.tsx` (inside `SearchProvider`). This larger faux input is a page composition; for new device-aware UI, derive `isDesktop` from `useDevice()` so keyboard hints only appear on desktop.
 
 ```tsx
 // Faux input (clickable, opens dialog)
 <button className="w-full max-w-xl mx-auto flex items-center gap-3 h-12 px-4 text-sm text-muted-foreground bg-muted/30 hover:bg-muted/50 border border-border/50 rounded-sm transition-colors">
   <SearchIcon className="size-4" />
   <span>{placeholder}</span>
-  <kbd className="ml-auto hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 font-mono text-xs text-muted-foreground">
+  {isDesktop && <kbd className="ml-auto inline-flex h-5 items-center gap-0.5 rounded-sm border border-border/50 bg-muted/50 px-1.5 font-mono text-xs text-muted-foreground">
     <span className="text-xs">⌘</span>K
-  </kbd>
+  </kbd>}
 </button>
 
 // Real input with icon
@@ -1173,8 +1263,8 @@ Card with selection state indicator, useful for multi-select interfaces.
         )}>
         <img className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-hover" />
 
-        {/* Always-visible gradient for text legibility */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        {/* Always-visible flat overlay for text legibility */}
+        <div className="absolute inset-0 bg-black/60" />
 
         {/* Label badge - changes style when selected */}
         <span
@@ -1199,7 +1289,7 @@ Card with selection state indicator, useful for multi-select interfaces.
 - `pt-1` on outer container prevents ring clipping
 - `ring-offset-1 ring-offset-background` creates visible gap around ring
 - Selected state uses `ring-primary` and label switches to `bg-primary`
-- Gradient always visible for text readability over images
+- Flat overlay always visible for text readability over images
 
 ### 3.11 Horizontal Content Card
 
@@ -1214,7 +1304,7 @@ Collapsible horizontal card with thumbnail and metadata, useful for list items.
                     {/* Thumbnail */}
                     <div className="relative w-full sm:w-48 md:w-56 shrink-0 aspect-video bg-muted/30 overflow-hidden">
                         <img className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-hover" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        <div className="absolute inset-0 bg-black/60" />
 
                         {/* Label badge */}
                         <span className="absolute top-2.5 left-2.5 text-xs font-medium tracking-wider text-white/90 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-sm">
@@ -1303,7 +1393,7 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 ```tsx
 // Basic shapes
 <Skeleton className="h-[35vh]" />                    // Large hero area
-<Skeleton className="aspect-2/3 rounded-sm" />       // Vertical image (3:4 ratio)
+<Skeleton className="aspect-2/3 rounded-sm" />       // Vertical image (2:3 ratio)
 <Skeleton className="aspect-video rounded-sm" />     // Video/horizontal image
 <Skeleton className="h-10 w-3/4" />                  // Large text (title)
 <Skeleton className="h-4 w-full max-w-2xl" />        // Body text line
@@ -1351,7 +1441,7 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 <div className="flex w-max gap-3 pb-4">
     {items.map((item) => (
         <div key={item.id} className="w-28 sm:w-32 md:w-36 shrink-0">
-            <Card {...item} />
+            <Card><CardContent>{item.title}</CardContent></Card>
         </div>
     ))}
 </div>
@@ -1362,12 +1452,12 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 ```tsx
 // 2-6 columns depending on viewport
 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-  {items.map(item => <Card key={item.id} {...item} />)}
+  {items.map(item => <Card key={item.id}><CardContent>{item.title}</CardContent></Card>)}
 </div>
 
 // Fixed 3-column feature grid
 <div className="grid md:grid-cols-3 gap-12 md:gap-16">
-  {features.map(feature => <Feature key={feature.id} {...feature} />)}
+  {features.map(feature => <section key={feature.id}><h3>{feature.title}</h3><p>{feature.description}</p></section>)}
 </div>
 ```
 
@@ -1427,16 +1517,16 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 </div>
 ```
 
-**Section Divider with Icon Pill:**
+**Section Divider with Icon Label:**
 
 ```tsx
 <div className="flex items-center gap-4 py-2">
-    <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border/50 to-border/50" />
-    <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-border/50 bg-card/50 backdrop-blur-sm">
+    <div className="h-px flex-1 bg-border/50" />
+    <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-sm border border-border/50 bg-card/50 backdrop-blur-sm">
         <Icon className="size-3.5 text-primary" />
         <span className="text-xs tracking-widest uppercase text-muted-foreground">{label}</span>
     </div>
-    <div className="h-px flex-1 bg-gradient-to-l from-transparent via-border/50 to-border/50" />
+    <div className="h-px flex-1 bg-border/50" />
 </div>
 ```
 
@@ -1444,18 +1534,18 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 
 | Breakpoint | Min Width | Usage                           |
 | ---------- | --------- | ------------------------------- |
-| `sm`       | 640px     | Mobile landscape, small tablets |
-| `md`       | 768px     | Tablets, layout shifts          |
-| `lg`       | 1024px    | Desktop, sidebar layouts        |
+| `sm`       | 640px     | Small viewport layout |
+| `md`       | 768px     | Medium viewport layout shifts |
+| `lg`       | 1024px    | Wide viewport, sidebar layouts |
 | `xl`       | 1280px    | Large desktops                  |
 | `2xl`      | 1536px    | Ultra-wide displays             |
 
 ### 4.4 Container Strategy
 
-**Mobile padding rule:** Never add `px-*` on mobile for private pages. The layout wrapper provides `p-4` (16px). Only add horizontal padding for desktop using `lg:px-6`.
+**Frame padding rule:** Account for the authenticated layout before adding page padding. Its standard frame provides `p-4 pt-6` (16px horizontal); the TV frame provides `px-8 xl:px-12 2xl:px-16`. Avoid double padding on small viewports; add page-specific wide-viewport padding only where needed, for example `lg:px-6`.
 
 ```tsx
-// Base padding (private layout wrapper - all authenticated pages inherit this)
+// Standard authenticated frame padding (TV frame has wider horizontal padding)
 <div className="p-4 pt-6">{children}</div>
 
 // Page content sections - desktop padding only
@@ -1475,9 +1565,9 @@ Loading placeholders with pulse animation. Match skeleton dimensions to actual c
 </div>
 ```
 
-**Exceptions (no base padding):**
+**Full-bleed content (compensates for frame padding):**
 
-- File explorer - full-width interface, handles own padding
+- File explorer - full-width interface with its own internal spacing
 - Hero carousel - bleeds to screen edges with negative margins
 
 ### 4.5 Responsive Patterns
@@ -1498,10 +1588,10 @@ className = "text-sm sm:text-base";
 **Visibility:**
 
 ```tsx
-// Hide on mobile
+// Hide below 640px (viewport, not device detection)
 className = "hidden sm:flex";
 
-// Show only on mobile
+// Show below 768px (viewport, not device detection)
 className = "flex md:hidden";
 ```
 
@@ -1535,7 +1625,8 @@ className = "px-6 md:px-12 lg:px-20";
 **Easing:**
 
 ```css
-ease-out         /* Default for most interactions */
+ease-premium     /* Button/Input/Select: cubic-bezier(0.16, 1, 0.3, 1) */
+ease-out         /* Existing generic reveals */
 transition-all   /* Catch-all for multiple properties */
 ```
 
@@ -1545,10 +1636,10 @@ transition-all   /* Catch-all for multiple properties */
 
 ```tsx
 // Media cards
-hover: scale - [1.03];
+className = "hover:scale-hover"; // --scale-hover: 1.04
 
 // Subtle scale
-hover: scale - 105;
+className = "hover:scale-105";
 ```
 
 **Color Transitions:**
@@ -1623,6 +1714,8 @@ Subtle zoom animation for hero carousel images.
 
 ### 5.5 Focus States
 
+In Big Picture, put `data-tv-focusable` on every focusable interactive element and group rows with `data-tv-section`. Up/down moves between sections, left/right within one; Back is Escape/Backspace or gamepad B. Restore focus after dialogs close. See [Device classes in the quick reference](./ui-minimal.md#device-classes) for the full contract.
+
 ```tsx
 className = "outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-3";
 ```
@@ -1668,7 +1761,7 @@ className = "animate-pulse bg-muted/50";
 
 **Problem:** Showing all metadata on cards creates visual noise; hiding it reduces discoverability.
 
-**Solution:** Show only the image by default; reveal title and metadata on hover with a smooth gradient overlay.
+**Solution:** Show only the image by default; reveal title and metadata on hover with a flat contrast overlay; keep metadata available on phone and TV and reveal it on keyboard focus.
 
 **Result:** Clean browse experience with information available on demand.
 
@@ -1702,9 +1795,9 @@ className = "animate-pulse bg-muted/50";
 
 ### 7.1 Color Contrast
 
-- All text meets WCAG 2.1 AA requirements
-- `text-muted-foreground` tested against both light and dark backgrounds
-- Interactive elements have sufficient contrast in all states
+- Verify text contrast against WCAG 2.1 AA in both themes
+- Check `text-muted-foreground` on each actual fill, especially translucent image overlays
+- Check interactive elements in default, hover, focus, selected and disabled states; tokens alone do not establish compliance
 
 ### 7.2 Focus Visibility
 
@@ -1712,17 +1805,19 @@ className = "animate-pulse bg-muted/50";
 className = "focus-visible:ring-3 focus-visible:ring-ring/50";
 ```
 
-- Focus rings only appear on keyboard navigation
+- `focus-visible` shows focus for keyboard and TV navigation according to browser heuristics
 - Ring color matches brand for visual consistency
 - 3px ring width ensures visibility
 
 ### 7.3 Touch Targets
 
-- Minimum 44x44px for interactive elements on mobile
-- Buttons use `h-12` (48px) for primary CTAs
+- Phone controls need at least 44×44px: add `min-h-phone-touch min-w-phone-touch` where needed; primitive defaults are smaller
+- Prefer standard Button sizes plus touch minimums; `h-12` (48px) is a contextual hero CTA override
 - Card hit areas span full card dimensions
 
 ### 7.4 Motion Preferences
+
+Use `motion-reduce:animate-none` and `motion-reduce:transition-none` in new animated compositions. The following is an example override, not a claim that the Skeleton primitive already disables its pulse:
 
 ```css
 @media (prefers-reduced-motion: reduce) {
@@ -1748,8 +1843,14 @@ className = "focus-visible:ring-3 focus-visible:ring-ring/50";
 **Key Custom Values:**
 
 ```css
---radius: 0rem /* Sharp corners by default */ --spacing: 0.25rem /* 4px base unit */ --tracking-normal: -0.01em
-    /* Slight negative tracking for body */;
+--radius: 0rem; /* Square corners */
+--spacing: 0.25rem; /* 4px base unit */
+--tracking-normal: normal;
+
+/* @theme inline editorial tracking */
+--letter-spacing-wide: 0.1em;
+--letter-spacing-wider: 0.2em;
+--letter-spacing-widest: 0.3em;
 ```
 
 ### 8.2 Animation Timing
@@ -1760,9 +1861,10 @@ className = "focus-visible:ring-3 focus-visible:ring-ring/50";
 --animate-collapsible-up: collapsible-up 0.2s ease-out;
 
 /* Standard transitions */
-transition-all duration-300 ease-out
-transition-opacity duration-300
-transition-colors
+/* Utility class recipes (not CSS declarations) */
+/* transition-all duration-300 ease-premium */
+/* transition-opacity duration-300 */
+/* transition-colors duration-200 ease-premium */
 ```
 
 ### 8.3 Z-Index Layering
@@ -1773,7 +1875,7 @@ transition-colors
 | Content  | `z-10`  | Primary content, badges       |
 | Overlay  | `z-20`  | Hover overlays, progress dots |
 | Modal    | `z-50`  | Dialogs, drawers              |
-| Toast    | `z-100` | Notifications                 |
+| Toast    | Sonner-managed | Notifications; `components/ui/sonner.tsx` does not set `z-100` |
 
 ### 8.4 Performance Optimizations
 
@@ -1800,8 +1902,8 @@ export const Component = memo(function Component(props) { ... });
 **Dynamic Imports:**
 
 ```tsx
-const HeavyComponent = dynamic(
-    () => import("@/components/feature/heavy-component").then((m) => ({ default: m.HeavyComponent })),
+const PreviewContent = dynamic(
+    () => import("@/components/preview/preview-content").then((m) => ({ default: m.PreviewContent })),
     { loading: () => <Skeleton className="h-64" /> }
 );
 ```
@@ -1857,10 +1959,10 @@ When creating new components, ensure:
 - [ ] Uses `font-light` for headings, standard weight for body
 - [ ] Labels use `text-xs tracking-widest uppercase text-muted-foreground`
 - [ ] Borders use `border-border/50` for subtle appearance
-- [ ] Uses `rounded-sm` (not `rounded-lg`) for cards and containers
+- [ ] Keeps square radius tokens (all sm/md/lg/xl aliases resolve to 0px); full rounding only for existing avatars/pills
 - [ ] Prefers inline metadata with `·` separators over badge components
 - [ ] Standard shadcn button sizes (sm=`h-8`, default=`h-9`, lg=`h-10`)
-- [ ] Transitions use `duration-300` for standard animations
+- [ ] Preserves primitive timings (Button/Input/Select: `duration-200 ease-premium`; Badge: `duration-300`)
 - [ ] Includes loading skeleton if data-dependent
 - [ ] Memoized if receiving props that rarely change
 - [ ] Responsive at all breakpoints (mobile-first)
@@ -1895,8 +1997,7 @@ lib/
 ├── stores/                     # State management
 └── utils/                      # Utility functions
 
-public/
-└── fonts/                      # Custom font files
+public/                         # Icons, banner and manifest; Styrene B loads from CDN in globals.css
 
 docs/                           # Documentation
 ```
