@@ -59,6 +59,13 @@
     --font-serif: Georgia, "Times New Roman", serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --radius: 0rem;
+    --phone-touch-target: 44px;
+    --tv-text-base: 1.5rem;
+    --tv-text-title: 2.25rem;
+    --tv-text-hero: 3.5rem;
+    --tv-focus-ring-color: var(--primary);
+    --tv-focus-ring-width: 3px;
+    --tv-focus-ring-offset: 4px;
     --shadow-x: 0px;
     --shadow-y: 0px;
     --shadow-blur: 0px;
@@ -163,6 +170,11 @@
 }
 
 @theme inline {
+    --spacing-phone-touch: var(--phone-touch-target);
+    --text-tv-base: var(--tv-text-base);
+    --text-tv-title: var(--tv-text-title);
+    --text-tv-hero: var(--tv-text-hero);
+
     /* Override letter-spacing scale for editorial design */
     --letter-spacing-wide: 0.1em;
     --letter-spacing-wider: 0.2em;
@@ -1414,8 +1426,8 @@ input[type="range"]:hover::-moz-range-thumb {
 
 /* ── Focused card / item — clean halo outline, no glow ── */
 [data-tv-mode] [data-tv-focusable]:focus-visible {
-    outline: 3px solid var(--primary);
-    outline-offset: 4px;
+    outline: var(--tv-focus-ring-width) solid var(--tv-focus-ring-color);
+    outline-offset: var(--tv-focus-ring-offset);
     z-index: 20;
     position: relative;
     border-radius: var(--radius);
@@ -1423,7 +1435,7 @@ input[type="range"]:hover::-moz-range-thumb {
 
 /* ── Nav bar items — pill highlight, no outline-offset ── */
 [data-tv-mode] .tv-nav-bar [data-tv-focusable]:focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--tv-focus-ring-color);
     outline-offset: 0;
     background: color-mix(in oklch, var(--primary) 12%, transparent);
     border-radius: var(--radius);
@@ -1431,7 +1443,7 @@ input[type="range"]:hover::-moz-range-thumb {
 
 /* ── List items (settings rows, account cards, file items) ── */
 [data-tv-mode] [data-tv-focusable="list"]:focus-visible {
-    outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
+    outline: 2px solid color-mix(in oklch, var(--tv-focus-ring-color) 60%, transparent);
     outline-offset: -2px;
     box-shadow:
         inset 4px 0 0 var(--primary),
