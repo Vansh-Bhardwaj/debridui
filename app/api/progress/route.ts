@@ -167,7 +167,8 @@ export async function GET(request: NextRequest) {
 
         const filtered = progress.filter((item) => !hiddenKeys.has(`${item.imdbId}:${item.type}:${item.season ?? "_"}:${item.episode ?? "_"}`));
 
-        return NextResponse.json({ progress: filtered }, {
+        // Hidden keys also let Up Next drop suggestions the user removed.
+        return NextResponse.json({ progress: filtered, hidden: [...hiddenKeys] }, {
             headers: { "Cache-Control": "private, no-store" },
         });
     } catch (error) {

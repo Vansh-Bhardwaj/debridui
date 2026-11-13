@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { X } from "reicon-react";
+import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { useSettingsStore } from "@/lib/stores/settings";
 import { traktClient, type TraktMedia } from "@/lib/trakt";
@@ -38,11 +40,25 @@ function useHomeHistory() {
     return useQuery({ queryKey: ["home-history", activeProfile.id], queryFn: async ({ signal }) => (await homeJson<{ history: HomeHistory[] }>("/api/history?limit=100", signal)).history, ...cache, staleTime: 30000 });
 }
 
+const hiddenKey = (imdbId: string, e: { season: number; episode: number }) => `${imdbId}:show:${e.season}:${e.episode}`;
+
 function EpisodeRow({ kind }: { kind: "next" | "new" }) {
     const { activeProfile } = useProfile();
     const { isTV } = useDevice();
+    const queryClient = useQueryClient();
     const history = useHomeHistory();
-    const progress = useQuery({ queryKey: ["home-progress", activeProfile.id], queryFn: async ({ signal }) => (await homeJson<{ progress: HomeHistory[] }>("/api/progress", signal)).progress, ...cache, staleTime: 30000 });
+    const progressResponse = useQuery({ queryKey: ["home-progress", activeProfile.id], queryFn: ({ signal }) => homeJson<{ progress: HomeHistory[]; hidden?: string[] }>("/api/progress", signal), ...cache, staleTime: 30000 });
+    const progress = { data: progressResponse.data?.progress };
+    const [removed, setRemoved] = useState<Set<string>>(new Set());
+    const hidden = new Set([...(progressResponse.data?.hidden ?? []), ...removed]);
+    // Rewatches and dropped shows shouldn't keep resurfacing: hide this suggestion for the profile, on every device.
+    const remove = (imdbId: string, episode: { season: number; episode: number }) => {
+        setRemoved((prev) => new Set([...prev, hiddenKey(imdbId, episode)]));
+        const params = new URLSearchParams({ imdbId, type: "show", season: String(episode.season), episode: String(episode.episode), mode: "hide" });
+        fetch(`/api/progress?${params}`, { method: "DELETE" })
+            .then(() => queryClient.invalidateQueries({ queryKey: ["home-progress", activeProfile.id] }))
+            .catch(() => toast.error("Couldn't remove it. Try again."));
+    };
     const { data } = useQuery({
         queryKey: ["home-episodes", activeProfile.id, kind, history.data, progress.data], ...cache,
         enabled: !!history.data && !!progress.data,
@@ -59,11 +75,16 @@ function EpisodeRow({ kind }: { kind: "next" | "new" }) {
             return rows.filter((r) => r !== null);
         },
     });
-    if (!data?.length) return null;
+    const visible = data?.filter(({ imdbId, episode }) => !hidden.has(hiddenKey(imdbId, episode)));
+    if (!visible?.length) return null;
     return <section data-tv-section className="space-y-4">
         <h2 className={isTV ? "text-tv-title font-light" : "text-xl font-light"}>{kind === "next" ? "Up Next" : "New Episodes"}</h2>
-        <ScrollCarousel><div className="flex gap-4 py-2">{data.map(({ media, episode, imdbId }) => <div key={imdbId} className="w-44 shrink-0 space-y-2">
+        <ScrollCarousel><div className="flex gap-4 py-2">{visible.map(({ media, episode, imdbId }) => <div key={imdbId} className="group relative w-44 shrink-0 space-y-2">
             <MediaCard media={media} type="show" />
+            <button type="button" data-tv-focusable onClick={() => remove(imdbId, episode)} aria-label={`Remove ${media.title} from ${kind === "next" ? "Up Next" : "New Episodes"}`}
+                className="absolute right-1 top-1 z-20 flex size-8 items-center justify-center bg-black/70 text-white/80 transition-[opacity,background-color] duration-200 hover:bg-destructive hover:text-white focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                <X className="size-4" />
+            </button>
             <WatchButton imdbId={imdbId} mediaType="show" title={media.title} tvParams={episode}><Button data-tv-focusable className="w-full min-h-phone-touch" variant="outline">Play S{episode.season}E{episode.episode}</Button></WatchButton>
             {episode.title && <p className="text-xs text-muted-foreground truncate">{episode.title}</p>}
         </div>)}</div></ScrollCarousel>
