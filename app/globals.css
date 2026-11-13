@@ -1569,6 +1569,11 @@ input[type="range"]:hover::-moz-range-thumb {
     margin-top: 2.5rem;
 }
 
+/* Nav groups sit side by side; the vertical rhythm above is for stacked page sections. */
+[data-tv-mode] .tv-nav-bar [data-tv-section] {
+    margin-top: 0;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    TV MODE TRANSITION — Branded curtain
    ══════════════════════════════════════════════════════════════════════════════ */

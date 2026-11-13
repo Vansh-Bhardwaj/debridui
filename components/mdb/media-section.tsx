@@ -8,8 +8,8 @@ import Link from "next/link";
 import { memo, useMemo, useState } from "react";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { cn } from "@/lib/utils";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { useWatchedIds } from "@/hooks/use-progress";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface MediaSectionProps {
     title: string;
@@ -55,7 +55,7 @@ export const MediaSection = memo(function MediaSection({
     onRetry,
 }: MediaSectionProps) {
     const [page, setPage] = useState(0);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const watchedIds = useWatchedIds();
     const effectiveRows = tvMode ? 1 : rows;
     const PAGE_SIZE = 20;

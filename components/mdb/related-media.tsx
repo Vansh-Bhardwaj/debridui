@@ -5,8 +5,8 @@ import { useTraktRelated } from "@/hooks/use-trakt";
 import { MediaCard } from "@/components/mdb/media-card";
 import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { useWatchedIds } from "@/hooks/use-progress";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface RelatedMediaProps {
     mediaId: string;
@@ -15,7 +15,7 @@ interface RelatedMediaProps {
 
 export const RelatedMedia = memo(function RelatedMedia({ mediaId, type }: RelatedMediaProps) {
     const { data, isLoading } = useTraktRelated(mediaId, type);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const watchedIds = useWatchedIds();
 
     if (!isLoading && (!data || data.length === 0)) return null;

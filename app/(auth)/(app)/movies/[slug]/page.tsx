@@ -7,7 +7,7 @@ import { useParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { memo, useEffect } from "react";
 import { MdbFooter } from "@/components/mdb/mdb-footer";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 // Lazy-loaded with ssr:false: the SSR output is already a loading skeleton (data
 // is fetched client-side), so excluding the heavy component tree from the server
@@ -21,7 +21,7 @@ const MoviePage = memo(function MoviePage() {
     const params = useParams();
     const router = useRouter();
     const slug = params.slug as string;
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     const { data, isLoading, error } = useTraktMedia(slug, "movie");
 

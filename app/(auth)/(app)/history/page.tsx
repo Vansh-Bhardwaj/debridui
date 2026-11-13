@@ -12,11 +12,11 @@ import { ScrollCarousel } from "@/components/common/scroll-carousel";
 import { useTraktMedia } from "@/hooks/use-trakt";
 import { getPosterUrl } from "@/lib/utils/media";
 import { History, Trash2, X, Play, Film, Tv, Clock, ClapperboardPlay as Clapperboard, Calendar, ChevronDown } from "reicon-react";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface HistoryEntry {
     id: string;
@@ -99,7 +99,7 @@ interface HistoryItemProps {
 
 const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, sessionExpanded, onToggleSessions }: HistoryItemProps) {
     const { data: media } = useTraktMedia(entry.imdbId, entry.type);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const progressPercent = entry.durationSeconds > 0
         ? Math.min(Math.round((entry.progressSeconds / entry.durationSeconds) * 100), 100)
         : 0;
@@ -328,7 +328,7 @@ export default function HistoryPage() {
     const [clearing, setClearing] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     const { data, isLoading, error } = useQuery<{ history: HistoryEntry[]; total: number }>({
         queryKey: ["watch-history", profileId, limit],

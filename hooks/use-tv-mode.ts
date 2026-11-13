@@ -12,11 +12,18 @@ import { useDevice } from "@/components/device/device-provider";
  * then the curtain lifts to reveal the new layout. Zero flicker because
  * the black screen is an intentional design element.
  */
+/** Whether Big Picture is on (always on TVs, never on phones). No side effects, so any component can read it. */
+export function useIsTVMode() {
+    const savedTVMode = useSettingsStore((s) => s.settings.tvMode);
+    const { isPhone, isTV } = useDevice();
+    return !isPhone && (isTV || savedTVMode);
+}
+
 export function useTVMode() {
     const savedTVMode = useSettingsStore((s) => s.settings.tvMode);
     const set = useSettingsStore((s) => s.set);
     const { isPhone, isTV } = useDevice();
-    const tvMode = !isPhone && (isTV || savedTVMode);
+    const tvMode = useIsTVMode();
     const prevRef = useRef(tvMode);
     const animatingRef = useRef(false);
 

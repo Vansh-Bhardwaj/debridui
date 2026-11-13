@@ -15,9 +15,9 @@ import { formatSize, downloadLinks, getFileType } from "@/lib/utils";
 import { getDownloadLinkCacheKey } from "@/lib/utils/cache-keys";
 import { DebridFileNode } from "@/lib/types";
 import { type ProgressKey } from "@/hooks/use-progress";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { isProviderTranscodeAvailable, sourceStreamHint } from "@/lib/streaming/stream-info";
 import { getDeviceProfile } from "@/lib/playback/device-profile";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 export function PreviewDialog() {
     const { client, currentAccount } = useAuthGuaranteed();
@@ -242,7 +242,7 @@ export function PreviewDialog() {
     const activeUrl = isSingleMode ? directUrl : linkInfo?.link;
     const activeTitle = isSingleMode ? directTitle : currentFile?.name;
     const activeFileType = isSingleMode ? (fileType ?? getFileType(directTitle || "")) : undefined;
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     if (!activeFile) return null;
 

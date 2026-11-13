@@ -2,7 +2,7 @@
 
 import { CommandDialog } from "@/components/ui/command";
 import { SearchContent } from "./search-content";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface SearchDialogProps {
     open: boolean;
@@ -10,7 +10,7 @@ interface SearchDialogProps {
 }
 
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const handleClose = () => {
         onOpenChange(false);
     };

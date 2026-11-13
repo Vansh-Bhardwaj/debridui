@@ -140,7 +140,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
             {/* Drawer */}
             <div data-tv-section="download-actions"
                 className={cn(
-                    "fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border/50 shadow-lg transition-transform duration-300 ease-in-out",
+                    "fixed bottom-(--bottom-nav,0px) left-0 right-0 z-40 bg-background border-t border-border/50 shadow-lg transition-transform duration-300 ease-in-out",
                     isAnimating ? "translate-y-0" : "translate-y-full"
                 )}>
                 <div className="container mx-auto max-w-4xl">

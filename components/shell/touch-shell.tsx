@@ -21,8 +21,9 @@ const tabs = [
 export function TouchShell({ children, tablet = false }: { children: React.ReactNode; tablet?: boolean }) {
     const pathname = usePathname();
     const active = (url: string) => pathname === url || pathname.startsWith(url + "/");
+    // --bottom-nav lets page-level bottom bars (file actions, bulk actions) sit above the tab bar.
     return (
-        <div className={cn("min-h-svh bg-background", tablet && "landscape:pl-[calc(4rem+env(safe-area-inset-left))]")}>
+        <div className={cn("min-h-svh bg-background [--bottom-nav:calc(4rem+env(safe-area-inset-bottom))]", tablet && "landscape:pl-[calc(4rem+env(safe-area-inset-left))] landscape:[--bottom-nav:0px]")}>
             {tablet && (
                 <aside aria-label="Main navigation" className="fixed inset-y-0 left-0 z-40 hidden w-[calc(4rem+env(safe-area-inset-left))] flex-col items-center overflow-y-auto border-r border-border/50 bg-muted/30 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] landscape:flex">
                     <span className="sr-only">Browse · Library &amp; Setup</span>

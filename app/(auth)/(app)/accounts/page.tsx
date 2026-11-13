@@ -9,8 +9,8 @@ import { AccountCard } from "@/components/accounts/account-card";
 import { PageHeader } from "@/components/common/page-header";
 import { useAuth } from "@/components/auth/auth-provider";
 import { EmptyState } from "@/components/common/async-state";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 export default function AccountsPage() {
     const router = useRouter();
@@ -29,7 +29,7 @@ export default function AccountsPage() {
         setIsRefreshing(false);
     }, [refetchAccounts]);
 
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     return (
         <div className={cn(

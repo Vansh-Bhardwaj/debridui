@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface TargetRect {
     left: number;
@@ -20,7 +20,7 @@ interface TVCursorProps {
 }
 
 export function TVCursor({ x, y, visible, hovering, targetRect }: TVCursorProps) {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     if (!tvMode || !visible) return null;
 

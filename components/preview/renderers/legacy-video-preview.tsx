@@ -63,6 +63,7 @@ import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { traktClient } from "@/lib/trakt";
 import { useDeviceSyncStore } from "@/lib/stores/device-sync";
 import { cn } from "@/lib/utils";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 // Static per page load; checked once instead of on every render.
 const deviceSupported = isDeviceTranscodeSupported();
@@ -467,7 +468,7 @@ export function LegacyVideoPreview({ file, downloadUrl, streamingLinks, subtitle
     const autoNextEpisode = useSettingsStore((s) => s.settings.playback.autoNextEpisode);
     const nextEpisodePromptSeconds = useSettingsStore((s) => s.settings.playback.nextEpisodePromptSeconds);
     // TV mode — hide fullscreen button as it's redundant in TV mode where full-screen is the default
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const allFetchedSources = useStreamingStore((s) => s.allFetchedSources);
     const selectedSourceFromStore = useStreamingStore((s) => s.selectedSource);
     const playSourceFromStore = useStreamingStore((s) => s.playSource);

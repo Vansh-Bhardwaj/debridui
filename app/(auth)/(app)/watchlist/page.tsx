@@ -22,10 +22,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
 import { cn } from "@/lib/utils";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { getPosterUrl } from "@/lib/utils/media";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/async-state";
 import { useWatchedIds } from "@/hooks/use-progress";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 // ── Watchlist Filters ──────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ const CalendarSection = memo(function CalendarSection({
     error: Error | null;
     emptyMessage: string;
 }) {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const watchedIds = useWatchedIds();
     const grouped = useMemo(() => (items ? groupByDate(items) : {}), [items]);
     const sortedDates = useMemo(() => Object.keys(grouped).sort(), [grouped]);
@@ -183,7 +183,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
     count: number;
 }) {
     const [expanded, setExpanded] = useState(true);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     const sorted = useMemo(
         () =>
@@ -297,7 +297,7 @@ let lastWatchlistFilter: WatchlistFilter = "all";
 const WatchlistPage = memo(function WatchlistPage() {
     const { data: settings } = useUserSettings();
     const isTraktConnected = !!settings?.trakt_access_token;
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const [filter, setFilter] = useState<WatchlistFilter>(lastWatchlistFilter);
 
     const watchlistMovies = useTraktWatchlistMovies();

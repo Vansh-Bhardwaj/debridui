@@ -2,15 +2,15 @@ import type { DeviceClass } from "@/lib/device/detect";
 import type { PlaybackSettings, StreamingSettings } from "@/lib/stores/settings";
 
 export const settingsSections = [
-    { id: "profile", label: "Profile" },
-    { id: "playback", label: "Playback" },
-    { id: "subtitles", label: "Subtitles" },
-    { id: "streaming", label: "Streaming" },
-    { id: "appearance", label: "Appearance" },
-    { id: "accounts", label: "Accounts" },
-    { id: "devices", label: "Devices" },
-    { id: "data", label: "Data" },
-    { id: "about", label: "About" },
+    { id: "profile", label: "Profile", description: "Who's watching, Trakt and TMDB" },
+    { id: "playback", label: "Playback", description: "Resume, autoplay, intros and speed" },
+    { id: "subtitles", label: "Subtitles", description: "Language, size, position and sync" },
+    { id: "streaming", label: "Streaming", description: "Quality, sources and compatibility" },
+    { id: "appearance", label: "Appearance", description: "Theme and external player" },
+    { id: "accounts", label: "Accounts", description: "Debrid services and TorBox" },
+    { id: "devices", label: "Devices", description: "Device sync, Big Picture and this device" },
+    { id: "data", label: "Data", description: "Cache, history and stored data" },
+    { id: "about", label: "About", description: "Version and build" },
 ] as const;
 export type SettingsSection = (typeof settingsSections)[number]["id"];
 export type SettingKey =

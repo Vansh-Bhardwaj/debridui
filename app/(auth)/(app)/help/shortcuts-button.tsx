@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
 import { Keyboard } from "reicon-react";
 import { useDevice } from "@/components/device/device-provider";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 export function ShortcutsHelpButton() {
     const { open } = useKeyboardShortcuts();
     const { isTV } = useDevice();
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     if (isTV || tvMode) return (
         <Dialog>
             <DialogTrigger asChild>

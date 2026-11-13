@@ -33,7 +33,7 @@ import { DISCORD_URL } from "@/lib/constants";
 import { HeroCarouselSkeleton } from "@/components/mdb/hero-carousel-skeleton";
 import { MediaSection } from "@/components/mdb/media-section";
 import { SectionErrorBoundary } from "@/components/common/error-boundary";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 const ContinueWatching = nextDynamic(
     () => import("@/components/mdb/continue-watching").then((m) => ({ default: m.ContinueWatching })),
@@ -384,7 +384,7 @@ const DashboardPage = memo(function DashboardPage() {
     const router = useRouter();
     const [searchOpen, setSearchOpen] = useState(false);
     const handleSearchClick = useCallback(() => setSearchOpen(true), []);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     useEffect(() => {
         router.prefetch("/watchlist");

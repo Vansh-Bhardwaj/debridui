@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { SectionDivider } from "@/components/common/section-divider";
 import { Refresh as RefreshCw, Link2 } from "reicon-react";
 import { WebDownloadsProvider, useWebDownloads } from "@/components/web-downloads/web-downloads-provider";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
 import { AddLinksForm } from "@/components/web-downloads/add-links-form";
 import { DownloadList } from "@/components/web-downloads/download-list";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 function LinksContent() {
     const { refetch, isRefetching, isLoading } = useWebDownloads();
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     return (
         <div className={cn(

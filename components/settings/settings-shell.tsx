@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings } from "reicon-react";
+import { ChevronLeft, ChevronRight, Database, Devices, InfoCircle, Palette, PlayCircle, Settings, Subtitles, UserCircle, Users, Wifi, type IconComponent } from "reicon-react";
 import { useDevice } from "@/components/device/device-provider";
 import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { useUserSettings } from "@/hooks/use-user-settings";
@@ -14,6 +14,11 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { OAuthFeedback } from "./integrations";
 import { RegistrySetting } from "./registry-setting";
+
+const sectionIcons: Record<SettingsSection, IconComponent> = {
+    profile: UserCircle, playback: PlayCircle, subtitles: Subtitles, streaming: Wifi, appearance: Palette,
+    accounts: Users, devices: Devices, data: Database, about: InfoCircle,
+};
 
 export function SettingsShell({ children }: { children: React.ReactNode }) {
     const { device, isDesktop, isTablet } = useDevice();
@@ -78,19 +83,30 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
                         className={cn("space-y-1", !isDesktop && "grid gap-2 sm:grid-cols-2")}>
                         {settingsSections
                             .filter((section) => entries.some((entry) => entry.section === section.id))
-                            .map((section) => (
-                                <Link
-                                    key={section.id}
-                                    href={`/settings/${section.id}`}
-                                    data-tv-focusable
-                                    aria-current={activeSection === section.id ? "page" : undefined}
-                                    className={cn(
-                                        "flex min-h-phone-touch items-center border border-border/50 px-4 py-3 text-sm hover:bg-muted/50 focus-visible:outline focus-visible:outline-primary",
-                                        activeSection === section.id && "border-primary bg-muted/30"
-                                    )}>
-                                    {section.label}
-                                </Link>
-                            ))}
+                            .map((section) => {
+                                const Icon = sectionIcons[section.id];
+                                const current = isDesktop && activeSection === section.id;
+                                return (
+                                    <Link
+                                        key={section.id}
+                                        href={`/settings/${section.id}`}
+                                        data-tv-focusable
+                                        aria-current={current ? "page" : undefined}
+                                        className={cn(
+                                            "group flex min-h-phone-touch items-center gap-3 text-sm transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-primary",
+                                            // Desktop: compact rail with a gold edge on the open section. Touch/TV: cards with a description.
+                                            isDesktop ? "border-l-2 border-transparent px-3 py-2" : "border border-border/50 bg-muted/30 p-4",
+                                            current && "border-primary bg-muted/50 text-foreground"
+                                        )}>
+                                        <Icon weight={current ? "Filled" : "Outline"} className={cn("size-5 shrink-0", current ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block">{section.label}</span>
+                                            {!isDesktop && <span className="block truncate text-xs text-muted-foreground">{section.description}</span>}
+                                        </span>
+                                        {!isDesktop && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+                                    </Link>
+                                );
+                            })}
                     </nav>
                 )}
                 <div className="min-w-0 space-y-6">
@@ -99,7 +115,8 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
                             href="/settings"
                             data-tv-focusable
                             data-tv-section="settings-back"
-                            className="inline-flex min-h-phone-touch items-center text-sm text-primary">
+                            className="inline-flex min-h-phone-touch items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                            <ChevronLeft className="size-4" />
                             All settings
                         </Link>
                     )}

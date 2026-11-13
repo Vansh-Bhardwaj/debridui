@@ -13,7 +13,7 @@ import { useTraktRecommendations } from "@/hooks/use-trakt";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { WheelGesturesPlugin } from "embla-carousel-wheel-gestures";
 import { HeroCarouselSkeleton } from "./hero-carousel-skeleton";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 interface HeroSlideProps {
     item: TraktMediaItem;
@@ -96,15 +96,15 @@ const HeroSlide = memo(function HeroSlide({ item, index, total, isActive, isPers
                             style={{ transitionDelay: isActive ? "200ms" : "0ms" }}>
                             {/* Type & Index */}
                             <div className="flex items-center gap-4">
-                                <span className="text-xs tracking-widest uppercase text-primary font-medium">
+                                <span className="whitespace-nowrap text-xs tracking-widest uppercase text-primary font-medium">
                                     {isPersonalized ? "Recommended for you" : "Trending on Trakt"}
                                 </span>
                                 <div className="h-px w-8 bg-border/50" />
-                                <span className="text-xs tracking-wider text-muted-foreground">
+                                <span className="whitespace-nowrap text-xs tracking-wider text-muted-foreground">
                                     {type === "movie" ? "Film" : "Series"}
                                 </span>
                                 <div className="h-px w-8 bg-border/50" />
-                                <span className="text-xs tracking-wider text-muted-foreground tabular-nums">
+                                <span className="whitespace-nowrap text-xs tracking-wider text-muted-foreground tabular-nums">
                                     {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
                                 </span>
                             </div>
@@ -321,7 +321,7 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
     const [api, setApi] = useState<CarouselApi>();
     const [current, setCurrent] = useState(0);
     const [count, setCount] = useState(0);
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     const autoplay = useMemo(
         () =>
@@ -434,7 +434,9 @@ export const HeroCarousel = memo(function HeroCarousel({ autoFocus = false }: He
                             key={index}
                             onClick={() => scrollTo(index)}
                             aria-label={`Go to slide ${index + 1}`}
-                            data-tv-focusable
+                            // On TV, left/right changes slides; tiny dots as focus targets get blown up by TV sizing.
+                            data-tv-focusable={tvMode ? undefined : true}
+                            tabIndex={tvMode ? -1 : undefined}
                             className={cn(
                                 "h-1 rounded-full transition-[width,background-color] duration-500 ease-premium cursor-pointer motion-reduce:transition-none",
                                 index === current ? "w-6 bg-primary" : "w-1.5 bg-foreground/30 hover:bg-foreground/50"

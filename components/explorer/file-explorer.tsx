@@ -19,7 +19,7 @@ import { useAuthGuaranteed } from "@/components/auth/auth-provider";
 import { DebridFile } from "@/lib/types";
 import { PAGE_SIZE } from "@/lib/constants";
 import { useDelayedFlag } from "@/hooks/use-delayed-flag";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 import { cn } from "@/lib/utils";
 
 export const FileExplorer = memo(function FileExplorer() {
@@ -30,7 +30,7 @@ export const FileExplorer = memo(function FileExplorer() {
     const searchParams = useSearchParams();
     const queryParam = searchParams.get("q") || "";
     const isIdSearch = queryParam.trim().startsWith("id:");
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
 
     const [searchResults, setSearchResults] = useState<DebridFile[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);

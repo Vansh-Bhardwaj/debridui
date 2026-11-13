@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useSettingsStore } from "@/lib/stores/settings";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 const IDLE_TIMEOUT = 5000; // Hide after 5s of inactivity
 const INPUT_POLL_INTERVAL = 120;
@@ -29,7 +29,7 @@ const VIDEO_HINTS: HintItem[] = [
 ];
 
 export function GamepadHints() {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const [gamepadConnected, setGamepadConnected] = useState(() => {
         if (typeof navigator === "undefined") return false;
         const gps = navigator.getGamepads?.();

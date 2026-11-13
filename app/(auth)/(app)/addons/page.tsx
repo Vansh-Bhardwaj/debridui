@@ -17,8 +17,8 @@ import { CachedBadge } from "@/components/common/display";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { SectionDivider } from "@/components/common/section-divider";
 import { EmptyState } from "@/components/common/async-state";
-import { useSettingsStore } from "@/lib/stores/settings";
 import { cn } from "@/lib/utils";
+import { useIsTVMode } from "@/hooks/use-tv-mode";
 
 const ADDON_PRESETS = [
     {
@@ -56,7 +56,7 @@ const CONFIGURABLE_ADDONS = [
 
 export default function AddonsPage() {
     const { data: serverAddons = [], isLoading, refetch } = useUserAddons();
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const tvMode = useIsTVMode();
     const addAddonMutation = useAddAddon();
     const removeAddonMutation = useRemoveAddon();
     const toggleAddonMutation = useToggleAddon();
