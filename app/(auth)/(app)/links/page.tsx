@@ -25,7 +25,7 @@ function LinksContent() {
                 title="Links"
                 description="Unlock and download files from supported hosters"
                 action={
-                    <Button onClick={() => refetch()} disabled={isRefetching || isLoading} variant="outline">
+                    <Button data-tv-focusable onClick={() => refetch()} disabled={isRefetching || isLoading} variant="outline">
                         <RefreshCw className={`size-4 ${isRefetching ? "animate-spin" : ""}`} />
                         Refresh
                     </Button>

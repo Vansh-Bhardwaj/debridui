@@ -103,11 +103,10 @@ export const DownloadItem = memo(function DownloadItem({
                 "group flex items-start gap-2.5 px-3 py-2 border-b border-border/50 last:border-b-0 transition-colors",
                 isSelected ? "bg-primary/5" : "hover:bg-muted/20"
             )}
-            data-tv-focusable="list"
-            tabIndex={0}>
+            data-tv-section>
             {/* Checkbox */}
             {onToggleSelect && (
-                <Checkbox
+                <Checkbox data-tv-focusable
                     checked={isSelected}
                     onCheckedChange={() => onToggleSelect(download.id)}
                     aria-label={`Select ${download.name}`}
@@ -154,7 +153,7 @@ export const DownloadItem = memo(function DownloadItem({
                         {isReady && (
                             <>
                                 {isPreviewable && (
-                                    <Button
+                                    <Button data-tv-focusable
                                         variant="ghost"
                                         size="icon"
                                         className="size-7 md:size-8 text-muted-foreground hover:text-foreground"
@@ -170,7 +169,7 @@ export const DownloadItem = memo(function DownloadItem({
                                         )}
                                     </Button>
                                 )}
-                                <Button
+                                <Button data-tv-focusable
                                     variant="ghost"
                                     size="icon"
                                     className="size-7 md:size-8 text-muted-foreground hover:text-foreground"
@@ -183,7 +182,7 @@ export const DownloadItem = memo(function DownloadItem({
                                         <Copy className="size-3.5 md:size-4" />
                                     )}
                                 </Button>
-                                <Button
+                                <Button data-tv-focusable
                                     variant="ghost"
                                     size="icon"
                                     className="size-7 md:size-8 text-muted-foreground hover:text-foreground"
@@ -198,7 +197,7 @@ export const DownloadItem = memo(function DownloadItem({
                                 </Button>
                             </>
                         )}
-                        <Button
+                        <Button data-tv-focusable
                             variant="ghost"
                             size="icon"
                             className="size-7 md:size-8 text-muted-foreground hover:text-destructive"

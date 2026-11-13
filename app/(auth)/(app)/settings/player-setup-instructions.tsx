@@ -8,10 +8,11 @@ const PLAYER_SETUP_INSTRUCTIONS: Partial<Record<MediaPlayer, (platform: Platform
                 <>
                     If VLC isn&apos;t opening videos, you need to set up the protocol handler first.{" "}
                     <a
+                        data-tv-focusable
                         href="https://github.com/stefansundin/vlc-protocol/tree/main/windows"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium underline underline-offset-4 hover:text-primary">
+                        className="inline-flex min-h-phone-touch items-center font-medium underline underline-offset-4 hover:text-primary">
                         Read the instructions
                     </a>
                 </>
@@ -30,10 +31,11 @@ const PLAYER_SETUP_INSTRUCTIONS: Partial<Record<MediaPlayer, (platform: Platform
                 {adminNote} and run: <code className="rounded bg-muted px-1.5 py-0.5">mpv --register</code>
                 <br />
                 <a
+                    data-tv-focusable
                     href="https://mpv.io/manual/stable/#options-register"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium underline underline-offset-4 hover:text-primary">
+                    className="inline-flex min-h-phone-touch items-center font-medium underline underline-offset-4 hover:text-primary">
                     View documentation
                 </a>
             </>

@@ -148,7 +148,9 @@ export const FileListItem = memo(function FileListItem({
                     canExpand && "cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                     className
                 )}
-                data-tv-focusable="list"
+                data-tv-section
+                data-tv-focusable={canExpand ? "list" : undefined}
+                data-tv-focus-key={`file:${file.id}`}
                 aria-label={`${file.name}${file.status !== "completed" ? `, ${file.status}` : ""}${showProgress ? `, ${file.progress?.toFixed(0)}% complete` : ""}`}
                 {...(canExpand
                     ? {
@@ -166,7 +168,7 @@ export const FileListItem = memo(function FileListItem({
                     : {})}
             >
                 <div className="shrink-0 px-1">
-                    <Checkbox
+                    <Checkbox data-tv-focusable
                         checked={isSelected}
                         onCheckedChange={onToggleSelect}
                         onClick={(e) => e.stopPropagation()}

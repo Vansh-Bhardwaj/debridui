@@ -20,7 +20,7 @@ export function FileListHeader({ isAllSelected, onSelectAll, selectedCount = 0, 
                 className
             )}>
             <div className="shrink-0 px-1">
-                <Checkbox
+                <Checkbox data-tv-focusable
                     checked={isAllSelected}
                     aria-label="Select all files"
                     onCheckedChange={(checked) => {

@@ -15,7 +15,7 @@ export function SearchBar({ value, onChange, placeholder = "Search files...", on
     return (
         <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
+            <Input data-tv-focusable
                 placeholder={placeholder}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
@@ -27,7 +27,7 @@ export function SearchBar({ value, onChange, placeholder = "Search files...", on
                 }}
             />
             {value && (
-                <Button
+                <Button data-tv-focusable
                     variant="ghost"
                     size="sm"
                     className="absolute right-1 top-1/2 -translate-y-1/2 size-6 p-0"

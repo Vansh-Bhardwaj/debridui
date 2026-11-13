@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSearch } from "@/components/mdb/search-provider";
 import { cn } from "@/lib/utils";
+import { useDevice } from "@/components/device/device-provider";
 
 interface SearchButtonProps {
     className?: string;
@@ -12,11 +13,13 @@ interface SearchButtonProps {
 
 export const SearchButton = memo(function SearchButton({ className }: SearchButtonProps) {
     const { setOpen } = useSearch();
+    const { isDesktop } = useDevice();
 
     return (
         <Button
             variant="ghost"
             size="sm"
+            aria-label="Search"
             onClick={() => setOpen(true)}
             className={cn(
                 "text-muted-foreground hover:text-foreground transition-transform duration-200 ease-premium hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:translate-y-0",
@@ -24,9 +27,9 @@ export const SearchButton = memo(function SearchButton({ className }: SearchButt
             )}>
             <Search className="size-4" />
             <span className="hidden sm:inline ml-2">Search</span>
-            <kbd className="hidden md:inline-flex ml-2 px-1.5 py-0.5 text-[10px] font-medium tracking-wide bg-muted/50 rounded">
+            {isDesktop && <kbd className="inline-flex ml-2 px-1.5 py-0.5 text-[10px] font-medium tracking-wide bg-muted/50 rounded">
                 ⌘K
-            </kbd>
+            </kbd>}
         </Button>
     );
 });

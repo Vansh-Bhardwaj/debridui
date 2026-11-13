@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronsUpDown, Plus, Check } from "lucide-react";
 import Link from "next/link";
+import { useDevice } from "@/components/device/device-provider";
 
 import {
     DropdownMenu,
@@ -21,7 +22,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 
 export const AccountSwitcher = React.memo(function AccountSwitcher() {
     const { userAccounts, currentAccount, switchAccount } = useAuth();
-    const { isMobile, setOpenMobile } = useSidebar();
+    const { setOpenMobile } = useSidebar();
+    const { isPhone } = useDevice();
     const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
     if (!currentAccount) {
@@ -30,7 +32,7 @@ export const AccountSwitcher = React.memo(function AccountSwitcher() {
 
     const handleNavigation = () => {
         setDropdownOpen(false);
-        if (isMobile) {
+        if (isPhone) {
             setTimeout(() => setOpenMobile(false), 150);
         }
     };
@@ -60,7 +62,7 @@ export const AccountSwitcher = React.memo(function AccountSwitcher() {
                             <DropdownMenuContent
                                 className="w-(--radix-dropdown-menu-trigger-width) min-w-64 p-2"
                                 align="start"
-                                side={isMobile ? "bottom" : "right"}
+                                side={isPhone ? "bottom" : "right"}
                                 sideOffset={8}>
                                 <DropdownMenuLabel className="text-xs tracking-widest uppercase text-muted-foreground px-2 py-1.5">
                                     Accounts

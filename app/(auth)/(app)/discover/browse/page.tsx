@@ -272,7 +272,7 @@ const BrowseGrid = memo(function BrowseGrid({
 
     if (isLoading) {
         return (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-4 gap-3 px-4 lg:px-6 pt-2">
+            <div data-tv-section className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-4 gap-3 px-4 lg:px-6 pt-2">
                 {Array.from({ length: 20 }, (_, i) => (
                     <div key={i} className="animate-pulse" style={{ animationDelay: `${i * 40}ms` }}>
                         <Skeleton className="aspect-[2/3] rounded-sm" />
@@ -292,7 +292,7 @@ const BrowseGrid = memo(function BrowseGrid({
 
     return (
         <>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-4 gap-3 px-4 lg:px-6 pt-2">
+            <div data-tv-section className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-3 2xl:grid-cols-4 gap-3 px-4 lg:px-6 pt-2">
                 {items.map((item, index) => {
                     const media = item.movie || item.show;
                     if (!media) return null;
@@ -330,7 +330,7 @@ function FilterPill({
     label: string; active: boolean; hue: number; onClick: () => void;
 }) {
     return (
-        <button
+        <button data-tv-focusable
             onClick={onClick}
             className={cn(
                 "shrink-0 h-8 px-3.5 rounded-sm text-xs font-medium transition-all duration-200",
@@ -348,12 +348,16 @@ function FilterPill({
 
 // ── Page ─────────────────────────────────────────────────────────
 
+let browseMemory: { genre: Genre | null; country: Country | null; catalog: "movie" | "series" } = { genre: null, country: null, catalog: "movie" };
+
 export default function BrowsePage() {
-    const [genre, setGenre] = useState<Genre | null>(null);
-    const [country, setCountry] = useState<Country | null>(null);
+    const [genre, setGenre] = useState<Genre | null>(browseMemory.genre);
+    const [country, setCountry] = useState<Country | null>(browseMemory.country);
     /** On small screens show one catalog at a time so series is reachable without infinite movie scroll */
-    const [mobileCatalog, setMobileCatalog] = useState<"movie" | "series">("movie");
+    const [mobileCatalog, setMobileCatalog] = useState<"movie" | "series">(browseMemory.catalog);
     const tmdbKey = useSettingsStore((s) => s.settings.tmdbApiKey);
+
+    useEffect(() => { browseMemory = { genre, country, catalog: mobileCatalog }; }, [genre, country, mobileCatalog]);
 
     const movies = useBrowseInfinite("movie", genre, country, tmdbKey);
     const series = useBrowseInfinite("series", genre, country, tmdbKey);
@@ -391,7 +395,7 @@ export default function BrowsePage() {
             />
 
             {/* ── Filters ──────────────────────────────────────────── */}
-            <div className="sticky top-0 z-30 border-b border-border/50 bg-background py-5 px-4 lg:px-6 space-y-5">
+            <div data-tv-browse-filters className="sticky top-0 z-30 border-b border-border/50 bg-background py-5 px-4 lg:px-6 space-y-5">
                 <div className="flex items-center gap-3">
                     <Compass
                         className="size-5 transition-colors duration-500"
@@ -399,13 +403,13 @@ export default function BrowsePage() {
                     />
                     <h1 className="text-lg sm:text-xl font-light">{label ?? "Browse"}</h1>
                     {hasFilter && (
-                        <button onClick={clear} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
+                        <button data-tv-focusable onClick={clear} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
                             Clear
                         </button>
                     )}
                 </div>
 
-                <div className="space-y-1.5">
+                <div data-tv-section className="space-y-1.5">
                     <span className="text-[10px] tracking-widest uppercase text-muted-foreground/70">Genres</span>
                     <div className="flex flex-wrap gap-1.5">
                         {GENRES.map((g) => (
@@ -415,10 +419,10 @@ export default function BrowsePage() {
                 </div>
 
                 {/* Mobile: jump between movies and series (wide layout still shows both columns) */}
-                <div className="flex xl:hidden items-center gap-2 pt-1">
+                <div data-tv-section className="flex xl:hidden items-center gap-2 pt-1">
                     <span className="text-[10px] tracking-widest uppercase text-muted-foreground/70 shrink-0">Catalog</span>
                     <div className="flex rounded-sm border border-border/50 p-0.5 bg-muted/20">
-                        <button
+                        <button data-tv-focusable
                             type="button"
                             onClick={() => setMobileCatalog("movie")}
                             className={cn(
@@ -431,7 +435,7 @@ export default function BrowsePage() {
                             <Film className="size-3.5 shrink-0 opacity-70" />
                             Movies
                         </button>
-                        <button
+                        <button data-tv-focusable
                             type="button"
                             onClick={() => setMobileCatalog("series")}
                             className={cn(
@@ -447,7 +451,7 @@ export default function BrowsePage() {
                     </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div data-tv-section className="space-y-1.5">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] tracking-widest uppercase text-muted-foreground/70">Countries</span>
                         {!tmdbKey && <span className="text-[9px] text-muted-foreground/50">(requires TMDB key)</span>}
@@ -475,15 +479,15 @@ export default function BrowsePage() {
                             Country browsing needs a TMDB API key. Add one in{" "}
                             <span className="text-foreground font-medium">Settings → TMDB API Key</span>.
                         </p>
-                        <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer"
+                        <a data-tv-focusable href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer"
                             className="text-xs text-primary hover:text-primary/80 underline underline-offset-2">
                             Get a free TMDB API key →
                         </a>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-4 items-start">
+                    <div data-tv-section className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-4 items-start">
                         {/* Movies */}
-                        <section className={cn("min-w-0", mobileCatalog !== "movie" && "hidden xl:block")}>
+                        <section data-tv-section className={cn("min-w-0", mobileCatalog !== "movie" && "hidden xl:block")}>
                             <div className="flex items-center gap-3 px-4 lg:px-6 pb-2">
                                 <div className="h-px w-6 transition-colors duration-500"
                                     style={{ backgroundColor: hue !== null ? `hsl(${hue} 55% 45%)` : "hsl(var(--primary))" }} />
@@ -504,7 +508,7 @@ export default function BrowsePage() {
                         </section>
 
                         {/* Series */}
-                        <section className={cn("min-w-0", mobileCatalog !== "series" && "hidden xl:block")}>
+                        <section data-tv-section className={cn("min-w-0", mobileCatalog !== "series" && "hidden xl:block")}>
                             <div className="flex items-center gap-3 px-4 lg:px-6 pb-2 xl:pt-0 pt-4">
                                 <div className="h-px w-6 transition-colors duration-500"
                                     style={{ backgroundColor: hue !== null ? `hsl(${hue} 55% 45%)` : "hsl(var(--primary))" }} />

@@ -31,7 +31,7 @@ function SearchItemWrapperComponent<T>({
 
     if (variant === "modal") {
         return (
-            <CommandItem
+            <CommandItem data-tv-focusable
                 value={commandValue}
                 keywords={commandKeywords}
                 onSelect={onSelect ? handleSelect : undefined}
@@ -48,8 +48,10 @@ function SearchItemWrapperComponent<T>({
     return (
         <div
             onClick={onSelect ? handleSelect : undefined}
-            data-tv-focusable="list"
-            tabIndex={0}
+            data-tv-section
+            data-tv-focusable={onSelect ? "list" : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+            data-tv-focus-key={commandValue}
             className={cn(
                 "flex items-center gap-3 px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors",
                 onSelect && "cursor-pointer",

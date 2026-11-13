@@ -1,17 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
-import { AppSidebar } from "@/components/sidebar/app-sidebar";
-import { Breadcrumbs } from "@/components/common/breadcrumbs";
-import { SearchButton } from "@/components/common/search-button";
+import { useEffect, useSyncExternalStore } from "react";
 import { SearchProvider } from "@/components/mdb/search-provider";
 import { PreviewDialog } from "@/components/preview/preview-dialog";
 import { SourcePickerSheet } from "@/components/mdb/source-picker";
-import { VLCMiniPlayer } from "@/components/vlc/vlc-mini-player";
-import { DevicePicker } from "@/components/device-sync/device-picker";
-import { RemoteControlBanner } from "@/components/device-sync/remote-banner";
 import { DeviceSyncReporter } from "@/components/device-sync/device-sync-reporter";
 import { ControlledIndicator } from "@/components/device-sync/controlled-indicator";
 import { BrowseHandler } from "@/components/device-sync/browse-handler";
@@ -19,78 +11,20 @@ import { initDeviceSync } from "@/lib/stores/device-sync";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SplashScreen } from "@/components/auth/splash-screen";
 import { PreviewRegistryLoader } from "@/components/preview/registry-loader";
-import { KeyboardShortcutsDialog, useKeyboardShortcuts } from "@/components/common/keyboard-shortcuts-dialog";
+import { KeyboardShortcutsDialog } from "@/components/common/keyboard-shortcuts-dialog";
 import { RouteTransition } from "@/components/common/route-transition";
-import { AmbientHeaderSpark } from "@/components/motion/ambient-header-spark";
-import { Keyboard, Tv } from "lucide-react";
 import { TVNavigationBar } from "@/components/tv/tv-navigation";
 import { GamepadHints } from "@/components/tv/gamepad-hints";
 import { BigPictureSession } from "@/components/tv/big-picture-session";
 import { TVCursor } from "@/components/tv/tv-cursor";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import { useTVFocus } from "@/hooks/use-tv-focus";
+import { useDevice } from "@/components/device/device-provider";
+import { TouchShell } from "@/components/shell/touch-shell";
+import { DesktopShell } from "@/components/shell/desktop-shell";
+import { FloatingPanels } from "@/components/shell/floating-panels";
 import { useUserSettings } from "@/hooks/use-user-settings";
 
-
-// Header keyboard shortcuts button
-function ShortcutsButton() {
-    const { open } = useKeyboardShortcuts();
-    return (
-        <button
-            onClick={open}
-            className="size-8 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-[color,background-color,transform] duration-200 ease-premium hover:scale-105 active:scale-95 motion-reduce:transition-colors motion-reduce:hover:scale-100 motion-reduce:active:scale-100 shrink-0"
-            aria-label="Keyboard shortcuts">
-            <Keyboard className="size-4" />
-        </button>
-    );
-}
-
-// Header entry into Big Picture (hidden on small screens, where it's unavailable)
-function BigPictureButton() {
-    const { toggle } = useTVMode();
-    return (
-        <button
-            onClick={toggle}
-            className="hidden md:flex size-8 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-[color,background-color,transform] duration-200 ease-premium hover:scale-105 active:scale-95 motion-reduce:transition-colors motion-reduce:hover:scale-100 motion-reduce:active:scale-100 shrink-0"
-            aria-label="Enter Big Picture mode"
-            title="Big Picture (⇧T)">
-            <Tv className="size-4" />
-        </button>
-    );
-}
-
-// Standard layout with sidebar
-function StandardLayout({ children }: { children: React.ReactNode }) {
-    return (
-        <SidebarProvider>
-            <AppSidebar />
-            {/* overflow-x-clip (not hidden): hidden makes this a scroll container and breaks the sticky header. */}
-            <SidebarInset className="overflow-x-clip">
-                <ControlledIndicator />
-                {/* Home-screen app: the page draws under the status bar, so the bar sits below it and stays reachable. */}
-                <header className="sticky top-0 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 z-50 items-center justify-between gap-4 border-b border-border/30 bg-background/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(3rem+env(safe-area-inset-top))]">
-                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-                        <SidebarTrigger className="-ml-1 shrink-0" />
-                        <Separator orientation="vertical" className="h-4" />
-                        <AmbientHeaderSpark />
-                        <Breadcrumbs />
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <DevicePicker />
-                        <BigPictureButton />
-                        <ShortcutsButton />
-                        <SearchButton className="shrink-0" />
-                    </div>
-                </header>
-                <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
-                    <RouteTransition>
-                        <div className="flex flex-1 flex-col gap-4 p-4 pt-6">{children}</div>
-                    </RouteTransition>
-                </main>
-            </SidebarInset>
-        </SidebarProvider>
-    );
-}
 
 // TV mode layout — no sidebar, top nav bar
 function TVLayout({ children }: { children: React.ReactNode }) {
@@ -114,6 +48,16 @@ function TVLayout({ children }: { children: React.ReactNode }) {
     );
 }
 
+function DeviceFrame({ children, tvMode }: { children: React.ReactNode; tvMode: boolean }) {
+    const { device } = useDevice();
+    if (tvMode) return <TVLayout>{children}</TVLayout>;
+    if (device === "phone") return <TouchShell>{children}</TouchShell>;
+    if (device === "tablet") return <TouchShell tablet>{children}</TouchShell>;
+    return <DesktopShell>{children}</DesktopShell>;
+}
+
+const subscribeHydration = () => () => {};
+
 // Visually-hidden until focused — lets keyboard users jump past nav to content.
 function SkipToContent() {
     return (
@@ -130,6 +74,7 @@ function SkipToContent() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const { userAccounts, currentAccount, currentUser, client } = useAuth();
     const { tvMode } = useTVMode();
+    const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
     useUserSettings();
 
     // Initialize device sync once on mount (reads setting from Zustand)
@@ -138,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // Single check for all required data to prevent flicker
     // AuthProvider handles redirect to /onboarding if no accounts
     const isReady = userAccounts.length > 0 && currentAccount && currentUser && client;
-    if (!isReady) {
+    if (!hydrated || !isReady) {
         return <SplashScreen stage="Starting up…" />;
     }
 
@@ -147,20 +92,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <SearchProvider>
                 <SkipToContent />
                 <div id="tv-mode-root" {...(tvMode ? { "data-tv-mode": "" } : {})}>
-                    {tvMode ? (
-                        <TVLayout>{children}</TVLayout>
-                    ) : (
-                        <StandardLayout>{children}</StandardLayout>
-                    )}
+                    <DeviceFrame tvMode={tvMode}>{children}</DeviceFrame>
                 </div>
                 <PreviewDialog />
                 <SourcePickerSheet />
                 <PreviewRegistryLoader />
-                {/* Bottom floating panels — stacked vertically to avoid overlap */}
-                <div className="fixed bottom-0 inset-x-0 z-50 pointer-events-none flex flex-col items-stretch pb-[env(safe-area-inset-bottom)]">
-                    <VLCMiniPlayer />
-                    <RemoteControlBanner />
-                </div>
+                <FloatingPanels tvMode={tvMode} />
                 <DeviceSyncReporter />
                 <BrowseHandler />
             </SearchProvider>

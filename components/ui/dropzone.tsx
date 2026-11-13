@@ -58,7 +58,7 @@ export const Dropzone = ({
 
     return (
         <DropzoneContext.Provider key={JSON.stringify(src)} value={{ src, accept, maxSize, minSize, maxFiles }}>
-            <button
+            <button data-tv-focusable
                 type="button"
                 disabled={disabled}
                 className={cn(

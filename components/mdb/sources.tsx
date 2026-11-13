@@ -382,7 +382,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                             <SelectTrigger className="w-32 sm:w-40 h-8 text-xs sm:text-sm" data-tv-focusable>
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent data-tv-section>
                                 <SelectItem value="all">All addons</SelectItem>
                                 {addonNames.map((a) => (
                                     <SelectItem key={a.id} value={a.id}>
@@ -393,7 +393,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                         </Select>
                     )}
                     {process.env.NODE_ENV === "development" && (
-                        <Button
+                        <Button data-tv-focusable
                             variant="ghost"
                             size="icon-sm"
                             onClick={retry}
@@ -422,7 +422,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                                 <p className="text-xs text-muted-foreground/70">
                                     {filtered.length} source{filtered.length !== 1 ? "s" : ""} available when uncached is included
                                 </p>
-                                <Button variant="outline" size="sm" onClick={() => setCachedOnly(false)}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={() => setCachedOnly(false)}>
                                     Show all sources
                                 </Button>
                             </>
@@ -434,7 +434,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                                 <p className="text-xs text-muted-foreground/70">
                                     {totalSourceCount} source{totalSourceCount !== 1 ? "s" : ""} available in other qualities
                                 </p>
-                                <Button variant="outline" size="sm" onClick={() => setResolutionFilter("all")}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={() => setResolutionFilter("all")}>
                                     Show all sources
                                 </Button>
                             </>
@@ -442,7 +442,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                             <>
                                 <p className="text-sm text-muted-foreground">No sources available</p>
                                 <p className="text-xs text-muted-foreground/70">Configure addons to fetch sources</p>
-                                <Button variant="outline" size="sm" onClick={retry}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={retry}>
                                     <RefreshCw className="size-4" />
                                     Retry
                                 </Button>
@@ -481,7 +481,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     <div className="flex items-center justify-center px-4 py-3 border-t border-border/50 bg-muted/20">
                         <div className="flex w-full sm:w-auto items-center gap-2">
                             {visibleCount > INITIAL_VISIBLE_SOURCES && (
-                                <Button
+                                <Button data-tv-focusable
                                     variant="ghost"
                                     size="sm"
                                     onClick={() =>
@@ -496,7 +496,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                                 </Button>
                             )}
                             {hasMoreSources && (
-                                <Button
+                                <Button data-tv-focusable
                                     variant="outline"
                                     size="sm"
                                     onClick={() =>
@@ -519,7 +519,7 @@ export function Sources({ imdbId, mediaType = "movie", tvParams, className, medi
                     <div className="flex items-center justify-center gap-2 px-4 py-3 bg-yellow-500/10 border-t border-border/50">
                         <AlertTriangle className="size-4.5 text-yellow-600" />
                         <span className="text-xs text-yellow-600">Failed: {failedAddons.join(", ")}</span>
-                        <Button variant="outline" size="sm" className="h-6 text-xs ml-1" onClick={retry}>
+                        <Button data-tv-focusable variant="outline" size="sm" className="h-6 text-xs ml-1" onClick={retry}>
                             <RefreshCw className="size-3" />
                             Retry
                         </Button>
@@ -536,7 +536,7 @@ export function SourcesDialog({ imdbId, mediaType = "movie", tvParams, mediaTitl
     return (
         <Dialog>
             <DialogTrigger asChild>{children}</DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col gap-0">
+            <DialogContent data-tv-section className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col gap-0">
                 <div className="flex-none px-6 pt-6 pb-4 border-b border-border/50">
                     <DialogTitle>
                         Sources
@@ -563,7 +563,7 @@ export function SourcesDialog({ imdbId, mediaType = "movie", tvParams, mediaTitl
                 </div>
                 <div className="flex-none px-6 py-4 border-t border-border/50 bg-muted/20">
                     <DialogClose asChild>
-                        <Button variant="outline" className="w-full sm:w-auto sm:ml-auto sm:flex">
+                        <Button data-tv-focusable variant="outline" className="w-full sm:w-auto sm:ml-auto sm:flex">
                             Close
                         </Button>
                     </DialogClose>

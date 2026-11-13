@@ -40,14 +40,14 @@ export function ConfirmDialog({
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent size={isMobile ? "sm" : "default"}>
+            <AlertDialogContent data-tv-section size={isMobile ? "sm" : "default"}>
                 <AlertDialogHeader>
                     <AlertDialogTitle>{title}</AlertDialogTitle>
                     <AlertDialogDescription>{description}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isConfirming}>{cancelText}</AlertDialogCancel>
-                    <AlertDialogAction
+                    <AlertDialogCancel data-tv-focusable disabled={isConfirming}>{cancelText}</AlertDialogCancel>
+                    <AlertDialogAction data-tv-focusable
                         onClick={onConfirm}
                         disabled={isConfirming}
                         variant={variant === "destructive" ? "destructive" : "default"}>

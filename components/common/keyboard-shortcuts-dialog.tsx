@@ -15,6 +15,7 @@ interface ShortcutGroup {
 }
 
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useDevice } from "@/components/device/device-provider";
 
 function isApplePlatform() {
     if (typeof navigator === "undefined") return false;
@@ -81,6 +82,7 @@ const ShortcutsContext = createContext<{ open: () => void }>({ open: () => {} })
 export const useKeyboardShortcuts = () => useContext(ShortcutsContext);
 
 export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNode }) {
+    const { isDesktop } = useDevice();
     const [isOpen, setIsOpen] = useState(false);
     // Default Ctrl for SSR + first paint; align to ⌘ on Apple after mount (avoids hydration mismatch).
     const [modKey, setModKey] = useState("Ctrl");
@@ -92,6 +94,7 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
     const shortcutGroups = useMemo(() => buildShortcutGroups(modKey), [modKey]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isDesktop) return;
         const target = e.target as HTMLElement;
         if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -106,7 +109,7 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
             const store = useSettingsStore.getState();
             store.set("tvMode", !store.settings.tvMode);
         }
-    }, []);
+    }, [isDesktop]);
 
     useEffect(() => {
         document.addEventListener("keydown", handleKeyDown);
@@ -116,8 +119,8 @@ export function KeyboardShortcutsDialog({ children }: { children?: React.ReactNo
     return (
         <ShortcutsContext.Provider value={{ open: () => setIsOpen(true) }}>
             {children}
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="max-w-md">
+            <Dialog open={isOpen && isDesktop} onOpenChange={setIsOpen}>
+                <DialogContent data-tv-section className="max-w-md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Keyboard className="size-4" />

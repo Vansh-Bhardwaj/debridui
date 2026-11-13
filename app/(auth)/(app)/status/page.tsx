@@ -384,7 +384,7 @@ const VLCBridgeCard = memo(function VLCBridgeCard() {
                         )}
                         {!extensionDetected && isVLC && !detecting && (
                             <div className="pt-2">
-                                <Button variant="outline" size="sm" onClick={() => detect()}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={() => detect()}>
                                     <RefreshCw className="size-3 mr-1.5" />
                                     Retry Detection
                                 </Button>
@@ -589,14 +589,14 @@ export default function StatusPage() {
                 title="System Status"
                 description="Live status of services, integrations, and device compatibility"
                 action={
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div data-tv-section="status-actions" className="flex flex-wrap items-center gap-2">
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground hidden sm:inline">Auto refresh</span>
                             <Select value={refreshInterval} onValueChange={setRefreshInterval}>
-                                <SelectTrigger className="min-w-[110px]" size="sm">
+                                <SelectTrigger data-tv-focusable className="min-w-[110px]" size="sm">
                                     <SelectValue placeholder="Auto refresh" />
                                 </SelectTrigger>
-                                <SelectContent align="end">
+                                <SelectContent data-tv-section align="end">
                                     {REFRESH_OPTIONS.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
                                             {option.label}
@@ -605,7 +605,7 @@ export default function StatusPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button onClick={fetchHealth} disabled={isLoading} variant="outline">
+                        <Button data-tv-focusable onClick={fetchHealth} disabled={isLoading} variant="outline">
                             <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
                             Refresh
                         </Button>
@@ -614,7 +614,7 @@ export default function StatusPage() {
             />
 
             {/* Overview */}
-            <section className="space-y-4">
+            <section data-tv-section className="space-y-4">
                 <SectionDivider label="Overview" />
                 <Card>
                     <CardHeader>
@@ -647,10 +647,10 @@ export default function StatusPage() {
 
             {/* Tabs: Services + Compatibility */}
             <Tabs defaultValue="services">
-                <TabsList variant="line" className="w-full justify-start">
-                    <TabsTrigger value="services">Services</TabsTrigger>
-                    <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
-                    <TabsTrigger value="integrations">Integrations</TabsTrigger>
+                <TabsList data-tv-section variant="line" className="w-full justify-start">
+                    <TabsTrigger data-tv-focusable value="services">Services</TabsTrigger>
+                    <TabsTrigger data-tv-focusable value="compatibility">Compatibility</TabsTrigger>
+                    <TabsTrigger data-tv-focusable value="integrations">Integrations</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="services" className="space-y-4 pt-4">
@@ -729,7 +729,7 @@ export default function StatusPage() {
 
                     {/* Collapsible raw JSON — developer diagnostics */}
                     <div>
-                        <button
+                        <button data-tv-focusable
                             onClick={() => setRawExpanded(!rawExpanded)}
                             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
                         >

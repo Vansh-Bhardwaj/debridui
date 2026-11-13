@@ -63,9 +63,9 @@ export function ListPagination({
 
     return (
         <Pagination className={cn("mt-6", className)}>
-            <PaginationContent>
+            <PaginationContent data-tv-section>
                 <PaginationItem>
-                    <Button
+                    <Button data-tv-focusable
                         variant="ghost"
                         size="icon"
                         onClick={() => onPageChange(1)}
@@ -77,7 +77,7 @@ export function ListPagination({
                 </PaginationItem>
 
                 <PaginationItem>
-                    <Button
+                    <Button data-tv-focusable
                         variant="ghost"
                         size="icon"
                         onClick={() => onPageChange(currentPage - 1)}
@@ -93,7 +93,7 @@ export function ListPagination({
                         {page === "ellipsis" ? (
                             <PaginationEllipsis />
                         ) : (
-                            <PaginationLink
+                            <PaginationLink data-tv-focusable tabIndex={disabled ? -1 : 0} aria-disabled={disabled}
                                 onClick={() => !disabled && onPageChange(page as number)}
                                 isActive={currentPage === page}
                                 className={disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}>
@@ -104,7 +104,7 @@ export function ListPagination({
                 ))}
 
                 <PaginationItem>
-                    <Button
+                    <Button data-tv-focusable
                         variant="ghost"
                         size="icon"
                         onClick={() => onPageChange(currentPage + 1)}
@@ -116,7 +116,7 @@ export function ListPagination({
                 </PaginationItem>
 
                 <PaginationItem>
-                    <Button
+                    <Button data-tv-focusable
                         variant="ghost"
                         size="icon"
                         onClick={() => onPageChange(totalPages)}

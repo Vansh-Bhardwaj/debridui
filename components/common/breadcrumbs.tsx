@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, memo, useMemo } from "react";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useDevice } from "@/components/device/device-provider";
 
 // Routes with dynamic [slug] that should show singular label and hide the slug
 const DETAIL_ROUTES: Record<string, string> = {
@@ -40,7 +40,7 @@ const ROUTE_LABELS: Record<string, string> = {
     help: "Help",
     links: "Links",
     status: "Status",
-    watchlist: "Watchlist",
+    watchlist: "My List",
     history: "History",
 };
 
@@ -55,10 +55,10 @@ const formatSegment = (segment: string): string => {
 const ITEMS_TO_DISPLAY_MOBILE = 2;
 const ITEMS_TO_DISPLAY_DESKTOP = 3;
 
-export const Breadcrumbs = memo(function Breadcrumbs() {
+export const Breadcrumbs = memo(function Breadcrumbs({ compact = false }: { compact?: boolean }) {
     const pathname = usePathname();
-    const isMobile = useIsMobile();
-    const ITEMS_TO_DISPLAY = isMobile ? ITEMS_TO_DISPLAY_MOBILE : ITEMS_TO_DISPLAY_DESKTOP;
+    const { isPhone } = useDevice();
+    const ITEMS_TO_DISPLAY = isPhone ? ITEMS_TO_DISPLAY_MOBILE : ITEMS_TO_DISPLAY_DESKTOP;
 
     const items = useMemo(() => {
         const segments = pathname.split("/").filter(Boolean);
@@ -97,6 +97,8 @@ export const Breadcrumbs = memo(function Breadcrumbs() {
 
         return breadcrumbs;
     }, [pathname]);
+
+    if (compact) return <span className="truncate font-light">{items.at(-1)?.label}</span>;
 
     const showEllipsis = items.length > ITEMS_TO_DISPLAY;
     const hiddenItems = showEllipsis ? items.slice(1, -(ITEMS_TO_DISPLAY - 1)) : [];

@@ -97,7 +97,7 @@ export function AddAccountForm() {
     return (
         <div className="flex flex-col gap-6">
             <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)}>
+                <form data-tv-section="add-account" onSubmit={form.handleSubmit(onSubmit)}>
                     <div className="flex flex-col gap-5">
                         <FormField
                             control={form.control}
@@ -110,7 +110,7 @@ export function AddAccountForm() {
                                             <SelectTrigger data-tv-focusable tabIndex={0}>
                                                 <SelectValue placeholder="Select an account type" />
                                             </SelectTrigger>
-                                            <SelectContent>
+                                            <SelectContent data-tv-section>
                                                 {Object.values(AccountType).map((type) => (
                                                     <SelectItem key={type} value={type}>
                                                         {formatAccountType(type)}

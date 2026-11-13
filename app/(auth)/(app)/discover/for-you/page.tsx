@@ -280,7 +280,7 @@ const ForYouPage = memo(function ForYouPage() {
     return (
         <div className="space-y-10 py-6 lg:px-6">
             <div className="space-y-3">
-                <Link
+                <Link data-tv-focusable
                     href="/dashboard"
                     className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
                 >
@@ -340,7 +340,7 @@ const ForYouPage = memo(function ForYouPage() {
                         )}
                         {hasMoreMovies && (
                             <div className="flex justify-center pt-2">
-                                <Button variant="outline" size="sm" onClick={loadMoreMovies} disabled={moviesFetching}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={loadMoreMovies} disabled={moviesFetching}>
                                     {moviesFetching ? "Loading..." : "Load more movies"}
                                 </Button>
                             </div>
@@ -372,7 +372,7 @@ const ForYouPage = memo(function ForYouPage() {
                         )}
                         {hasMoreShows && (
                             <div className="flex justify-center pt-2">
-                                <Button variant="outline" size="sm" onClick={loadMoreShows} disabled={showsFetching}>
+                                <Button data-tv-focusable variant="outline" size="sm" onClick={loadMoreShows} disabled={showsFetching}>
                                     {showsFetching ? "Loading..." : "Load more shows"}
                                 </Button>
                             </div>

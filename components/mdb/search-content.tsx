@@ -168,7 +168,7 @@ export function SearchContent({
         const showSaved = query.trim().length === 0 && savedSearches.length > 0;
         return (
             <>
-                <CommandInput
+                <CommandInput data-tv-focusable
                     placeholder="Search movies, TV shows, and files..."
                     value={query}
                     onValueChange={setQuery}
@@ -176,13 +176,13 @@ export function SearchContent({
                     className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-11 sm:h-12 text-sm sm:text-base"
                 />
                 {showSaved && (
-                    <div className="border-t border-border/50 px-4 py-3">
+                    <div data-tv-section className="border-t border-border/50 px-4 py-3">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
                                 <Bookmark className="size-3" />
                                 Saved
                             </span>
-                            <button
+                            <button data-tv-focusable
                                 onClick={clearSavedSearches}
                                 className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
                                 Clear all
@@ -191,12 +191,12 @@ export function SearchContent({
                         <div className="flex flex-wrap gap-1.5">
                             {savedSearches.map((term) => (
                                 <div key={term} className="flex items-center gap-0 border border-primary/30 rounded-sm bg-primary/5 hover:bg-primary/10 transition-colors text-xs">
-                                    <button
+                                    <button data-tv-focusable
                                         className="px-2.5 py-1 text-foreground/80"
                                         onClick={() => setQuery(term)}>
                                         {term}
                                     </button>
-                                    <button
+                                    <button data-tv-focusable
                                         className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors"
                                         onClick={() => removeSavedSearch(term)}
                                         aria-label={`Remove saved search ${term}`}>
@@ -208,13 +208,13 @@ export function SearchContent({
                     </div>
                 )}
                 {showRecent && (
-                    <div className="border-t border-border/50 px-4 py-3">
+                    <div data-tv-section className="border-t border-border/50 px-4 py-3">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
                                 <Clock className="size-3" />
                                 Recent
                             </span>
-                            <button
+                            <button data-tv-focusable
                                 onClick={clearRecentSearches}
                                 className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
                                 Clear all
@@ -223,12 +223,12 @@ export function SearchContent({
                         <div className="flex flex-wrap gap-1.5">
                             {recentSearches.map((term) => (
                                 <div key={term} className="flex items-center gap-0 border border-border/50 rounded-sm bg-muted/20 hover:bg-muted/40 transition-colors text-xs">
-                                    <button
+                                    <button data-tv-focusable
                                         className="px-2.5 py-1 text-foreground/80"
                                         onClick={() => setQuery(term)}>
                                         {term}
                                     </button>
-                                    <button
+                                    <button data-tv-focusable
                                         className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors"
                                         onClick={() => removeRecentSearch(term)}
                                         aria-label={`Remove ${term}`}>
@@ -261,7 +261,7 @@ export function SearchContent({
     const showPageChips = query.trim().length === 0 && (recentSearches.length > 0 || savedSearches.length > 0);
     return (
         <div className={cn("space-y-8", className)}>
-            <form
+            <form data-tv-section
                 className="relative"
                 onSubmit={(e) => {
                     e.preventDefault();
@@ -279,7 +279,7 @@ export function SearchContent({
                     data-tv-focusable
                 />
                 {query.trim().length >= 2 && (
-                    <button
+                    <button data-tv-focusable
                         type="button"
                         onClick={handleSaveToggle}
                         className={cn(
@@ -299,20 +299,20 @@ export function SearchContent({
             {showPageChips && (
                 <div className="space-y-4">
                     {savedSearches.length > 0 && (
-                        <div className="space-y-2">
+                        <div data-tv-section className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
                                     <Bookmark className="size-3" /> Saved
                                 </span>
-                                <button onClick={clearSavedSearches} className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                                <button data-tv-focusable onClick={clearSavedSearches} className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
                                     Clear all
                                 </button>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                                 {savedSearches.map((term) => (
                                     <div key={term} className="flex items-center gap-0 border border-primary/30 rounded-sm bg-primary/5 hover:bg-primary/10 transition-colors text-xs">
-                                        <button className="px-2.5 py-1 text-foreground/80" onClick={() => setQuery(term)}>{term}</button>
-                                        <button className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={() => removeSavedSearch(term)} aria-label={`Remove saved search ${term}`}>
+                                        <button data-tv-focusable className="px-2.5 py-1 text-foreground/80" onClick={() => setQuery(term)}>{term}</button>
+                                        <button data-tv-focusable className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={() => removeSavedSearch(term)} aria-label={`Remove saved search ${term}`}>
                                             <X className="size-3" />
                                         </button>
                                     </div>
@@ -321,20 +321,20 @@ export function SearchContent({
                         </div>
                     )}
                     {recentSearches.length > 0 && (
-                        <div className="space-y-2">
+                        <div data-tv-section className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
                                     <Clock className="size-3" /> Recent
                                 </span>
-                                <button onClick={clearRecentSearches} className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                                <button data-tv-focusable onClick={clearRecentSearches} className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
                                     Clear all
                                 </button>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                                 {recentSearches.map((term) => (
                                     <div key={term} className="flex items-center gap-0 border border-border/50 rounded-sm bg-muted/20 hover:bg-muted/40 transition-colors text-xs">
-                                        <button className="px-2.5 py-1 text-foreground/80" onClick={() => setQuery(term)}>{term}</button>
-                                        <button className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={() => removeRecentSearch(term)} aria-label={`Remove ${term}`}>
+                                        <button data-tv-focusable className="px-2.5 py-1 text-foreground/80" onClick={() => setQuery(term)}>{term}</button>
+                                        <button data-tv-focusable className="pr-1.5 pl-0.5 py-1 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={() => removeRecentSearch(term)} aria-label={`Remove ${term}`}>
                                             <X className="size-3" />
                                         </button>
                                     </div>

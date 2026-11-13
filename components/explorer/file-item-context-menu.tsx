@@ -36,10 +36,10 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
             <ContextMenuTrigger className={className} asChild>
                 {children}
             </ContextMenuTrigger>
-            <ContextMenuContent className="w-56">
+            <ContextMenuContent data-tv-section className="w-56">
                 {file.status === "completed" && (
                     <Fragment>
-                        <ContextMenuItem
+                        <ContextMenuItem data-tv-focusable
                             className="cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -53,7 +53,7 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                             )}
                             Copy Links
                         </ContextMenuItem>
-                        <ContextMenuItem
+                        <ContextMenuItem data-tv-focusable
                             className="cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -67,7 +67,7 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                             )}
                             Download
                         </ContextMenuItem>
-                        <ContextMenuItem
+                        <ContextMenuItem data-tv-focusable
                             className="cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -85,7 +85,7 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                     </Fragment>
                 )}
                 {file.status === "failed" && (
-                    <ContextMenuItem
+                    <ContextMenuItem data-tv-focusable
                         className="cursor-pointer"
                         onClick={(e) => {
                             e.stopPropagation();
@@ -100,7 +100,7 @@ export function FileItemContextMenu({ file, children, className }: FileItemConte
                         Retry
                     </ContextMenuItem>
                 )}
-                <ContextMenuItem
+                <ContextMenuItem data-tv-focusable
                     onClick={(e) => {
                         e.stopPropagation();
                         setShowDeleteConfirm(true);

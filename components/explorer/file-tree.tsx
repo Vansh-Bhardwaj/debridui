@@ -158,7 +158,7 @@ const FileActionButton = memo(function FileActionButton({
     }, [action, isButtonLoading]);
 
     return (
-        <Button
+        <Button data-tv-focusable
             variant="ghost"
             size="icon"
             className="size-4 sm:size-6 cursor-pointer"
@@ -224,6 +224,10 @@ const VirtualizedNode = memo(function VirtualizedNode({
                 "text-xs sm:text-sm",
                 hasChildren && "cursor-pointer"
             )}
+            data-tv-section="file-tree-node"
+            data-tv-focusable={hasChildren ? "list" : undefined}
+            tabIndex={hasChildren ? 0 : undefined}
+            data-tv-focus-key={`file-node:${fileId}:${path}`}
             style={{ paddingLeft: `${(depth - 1) * 12 + 8}px` }}
             onClick={() => hasChildren && onToggleExpand(path)}>
             {hasChildren && (
@@ -235,7 +239,7 @@ const VirtualizedNode = memo(function VirtualizedNode({
                 />
             )}
 
-            <Checkbox
+            <Checkbox data-tv-focusable
                 checked={isIndeterminate ? "indeterminate" : isSelected}
                 onCheckedChange={(checked) => handleCheckboxChange(checked === true)}
                 onClick={(e) => e.stopPropagation()}

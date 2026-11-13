@@ -40,10 +40,10 @@ export function SortControls() {
         <div className="flex items-center gap-2 self-stretch sm:self-auto">
             <span className="text-xs tracking-widest uppercase text-muted-foreground whitespace-nowrap">Sort</span>
             <Select value={sortBy} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-full sm:w-[180px] border-border/50" id="sort-select" aria-label="Sort files by">
+                <SelectTrigger data-tv-focusable className="w-full sm:w-[180px] border-border/50" id="sort-select" aria-label="Sort files by">
                     <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent data-tv-section>
                     {SORT_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                             {option.label}
@@ -51,7 +51,7 @@ export function SortControls() {
                     ))}
                 </SelectContent>
             </Select>
-            <Button
+            <Button data-tv-focusable
                 variant="outline"
                 size="sm"
                 onClick={handleOrderChange}

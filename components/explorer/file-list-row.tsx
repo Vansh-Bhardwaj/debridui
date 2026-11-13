@@ -91,7 +91,7 @@ export const FileListRow = memo(function FileListRow({ file, autoExpand = false 
 
     return (
         <>
-            <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+            <Collapsible data-tv-section open={isExpanded} onOpenChange={setIsExpanded}>
                 <div className="relative overflow-hidden">
                     {/* Delete action revealed on swipe-left. */}
                     <div

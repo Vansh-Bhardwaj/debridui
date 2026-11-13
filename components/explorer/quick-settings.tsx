@@ -26,10 +26,10 @@ export function QuickSettings() {
 
     return (
         <Dialog>
-            <DialogTrigger asChild>
+            <DialogTrigger data-tv-focusable aria-label="Quick settings">
                 <Settings className="size-4 cursor-pointer text-muted-foreground hover:text-foreground hover:rotate-45 transition-all duration-300" />
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent data-tv-section>
                 <DialogHeader>
                     <DialogTitle className="font-light">Quick Settings</DialogTitle>
                 </DialogHeader>
@@ -39,7 +39,7 @@ export function QuickSettings() {
                             <Label htmlFor="smart-order" className="text-sm text-foreground">
                                 Smart Order
                             </Label>
-                            <Switch
+                            <Switch data-tv-focusable
                                 id="smart-order"
                                 checked={smartOrder}
                                 onCheckedChange={(checked) => set("smartOrder", checked)}
@@ -49,7 +49,7 @@ export function QuickSettings() {
                             <Label htmlFor="hide-trash" className="text-sm text-foreground">
                                 Hide Trash
                             </Label>
-                            <Switch
+                            <Switch data-tv-focusable
                                 id="hide-trash"
                                 checked={hideTrash}
                                 onCheckedChange={(checked) => set("hideTrash", checked)}
@@ -57,11 +57,11 @@ export function QuickSettings() {
                         </div>
                     </div>
                 <DialogFooter className="flex flex-row justify-end gap-2">
-                    <Button variant="outline" onClick={handleReset}>
+                    <Button data-tv-focusable variant="outline" onClick={handleReset}>
                         Reset
                     </Button>
                     <DialogClose asChild>
-                        <Button>Done</Button>
+                        <Button data-tv-focusable>Done</Button>
                     </DialogClose>
                 </DialogFooter>
             </DialogContent>

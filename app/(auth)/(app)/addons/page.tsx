@@ -185,7 +185,7 @@ export default function AddonsPage() {
                 action={
                     <div className="flex items-center gap-2">
                         <Button asChild variant="outline" data-tv-focusable tabIndex={0}>
-                            <Link href="/addons/browse">
+                            <Link data-tv-focusable href="/addons/browse">
                                 <LayoutGrid className="size-4" />
                                 <span className="hidden sm:inline">Browse catalog</span>
                             </Link>

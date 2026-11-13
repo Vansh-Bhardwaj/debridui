@@ -113,7 +113,7 @@ export default function AddonCatalogBrowsePage() {
     return (
         <div className="mx-auto w-full max-w-5xl space-y-8 pb-16">
             <div className="space-y-3">
-                <Link
+                <Link data-tv-focusable
                     href="/addons"
                     className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
                 >
@@ -129,9 +129,9 @@ export default function AddonCatalogBrowsePage() {
 
             {/* Search + category filter */}
             <div className="space-y-3">
-                <div className="relative">
+                <div data-tv-section className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-                    <Input
+                    <Input data-tv-focusable
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Search addons by name, description, or category..."
@@ -139,7 +139,7 @@ export default function AddonCatalogBrowsePage() {
                         aria-label="Search catalog"
                     />
                     {query && (
-                        <button
+                        <button data-tv-focusable
                             type="button"
                             onClick={() => setQuery("")}
                             className="absolute right-2 top-1/2 -translate-y-1/2 size-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
@@ -150,11 +150,11 @@ export default function AddonCatalogBrowsePage() {
                     )}
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
+                <div data-tv-section className="flex flex-wrap gap-1.5">
                     {ADDON_CATALOG_CATEGORIES.map((c) => {
                         const active = category === c.id;
                         return (
-                            <button
+                            <button data-tv-focusable
                                 key={c.id}
                                 type="button"
                                 onClick={() => setCategory(c.id)}
@@ -179,7 +179,7 @@ export default function AddonCatalogBrowsePage() {
                     <p className="text-sm text-muted-foreground">No addons match your filters.</p>
                 </div>
             ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div data-tv-section="addon-catalog" className="grid gap-3 sm:grid-cols-2">
                     {filtered.map((entry) => {
                         const Icon = CATEGORY_ICONS[entry.category];
                         const installed = isInstalled(entry);
@@ -214,7 +214,7 @@ export default function AddonCatalogBrowsePage() {
                                 </p>
 
                                 {entry.resources.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
+                                    <div data-tv-section className="flex flex-wrap gap-1">
                                         {entry.resources.map((r) => (
                                             <span
                                                 key={r}
@@ -235,7 +235,7 @@ export default function AddonCatalogBrowsePage() {
                                 <div className="flex-1" />
 
                                 {entry.installType === "direct" ? (
-                                    <Button
+                                    <Button data-tv-focusable
                                         size="sm"
                                         variant={installed ? "outline" : "default"}
                                         disabled={installing || installed}
@@ -260,8 +260,8 @@ export default function AddonCatalogBrowsePage() {
                                         )}
                                     </Button>
                                 ) : (
-                                    <Button size="sm" variant="outline" asChild className="w-full justify-center">
-                                        <a href={entry.configureUrl} target="_blank" rel="noopener noreferrer">
+                                    <Button data-tv-focusable size="sm" variant="outline" asChild className="w-full justify-center">
+                                        <a data-tv-focusable href={entry.configureUrl} target="_blank" rel="noopener noreferrer">
                                             <ExternalLink className="size-4" />
                                             Configure
                                         </a>
@@ -277,7 +277,7 @@ export default function AddonCatalogBrowsePage() {
                 <p className="text-xs text-muted-foreground leading-relaxed">
                     Configure addons open on the addon&apos;s own site. After selecting your options, copy the
                     manifest URL they give you and paste it into the &ldquo;Add addon&rdquo; input on the{" "}
-                    <Link href="/addons" className="text-foreground underline underline-offset-2">Your Addons</Link>{" "}
+                    <Link data-tv-focusable href="/addons" className="text-foreground underline underline-offset-2">Your Addons</Link>{" "}
                     page.
                 </p>
             </div>

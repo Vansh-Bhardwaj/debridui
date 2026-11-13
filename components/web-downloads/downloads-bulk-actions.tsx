@@ -138,7 +138,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
             <div className={cn("transition-all duration-300 ease-in-out", isAnimating ? "h-20" : "h-0")} />
 
             {/* Drawer */}
-            <div
+            <div data-tv-section="download-actions"
                 className={cn(
                     "fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border/50 shadow-lg transition-transform duration-300 ease-in-out",
                     isAnimating ? "translate-y-0" : "translate-y-full"
@@ -159,7 +159,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
 
                         {/* Actions */}
                         <div className="flex gap-2 flex-wrap justify-center">
-                            <Button
+                            <Button data-tv-focusable
                                 variant="outline"
                                 size="sm"
                                 onClick={handleCopyLinks}
@@ -173,7 +173,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
                                 Copy Links
                             </Button>
 
-                            <Button
+                            <Button data-tv-focusable
                                 variant="outline"
                                 size="sm"
                                 onClick={handleDownloadAll}
@@ -187,7 +187,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
                                 Download
                             </Button>
 
-                            <Button
+                            <Button data-tv-focusable
                                 variant="destructive"
                                 size="sm"
                                 onClick={handleDeleteAll}
@@ -201,7 +201,7 @@ export function DownloadsBulkActions({ selectedDownloads, onClearSelection }: Do
                                 Remove
                             </Button>
 
-                            <Button
+                            <Button data-tv-focusable
                                 variant="ghost"
                                 size="sm"
                                 onClick={onClearSelection}

@@ -151,7 +151,7 @@ export const FileExplorer = memo(function FileExplorer() {
                         <SortControls />
                     </div>
 
-                    <FileList className="max-sm:-mx-4">
+                    <FileList data-tv-section className="max-sm:-mx-4">
                         <FileListHeader
                             isAllSelected={headerCheckboxState}
                             onSelectAll={handleSelectAll}

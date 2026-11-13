@@ -159,7 +159,7 @@ export function SearchResults({
                                     ))}
                                     {hasMoreSourceResults && (
                                         <div className="flex items-center justify-center px-3 py-3 border-t border-border/50 bg-muted/20">
-                                            <button
+                                            <button data-tv-focusable
                                                 type="button"
                                                 onClick={() =>
                                                     setVisibleSourcesByKey((prev) => ({
@@ -218,7 +218,7 @@ export function SearchResults({
 
                     {/* File results section */}
                     {hasFileResults && (
-                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+                        <section data-tv-section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Your Files" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 {fileResults.map((file) => (
@@ -230,7 +230,7 @@ export function SearchResults({
 
                     {/* Trakt results section */}
                     {hasTraktResults && (
-                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+                        <section data-tv-section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Movies & Shows" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 {traktResults.map((result, idx) => {
@@ -256,7 +256,7 @@ export function SearchResults({
 
                     {/* Source results */}
                     {hasSourceResults && (
-                        <section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+                        <section data-tv-section className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
                             <SectionDivider label="Sources" />
                             <div className="border border-border/50 rounded-sm overflow-hidden">
                                 <div className="px-3 py-2 border-b border-border/50 bg-muted/20 text-xs text-muted-foreground">
@@ -267,7 +267,7 @@ export function SearchResults({
                                 ))}
                                 {hasMoreSourceResults && (
                                     <div className="flex items-center justify-center px-3 py-3 border-t border-border/50 bg-muted/20">
-                                        <button
+                                        <button data-tv-focusable
                                             type="button"
                                             onClick={() =>
                                                 setVisibleSourcesByKey((prev) => ({

@@ -21,7 +21,7 @@ export default function HelpPage() {
             <div className="space-y-8">
                 {/* Discord Section */}
                 {DISCORD_URL && (
-                    <section className="space-y-6">
+                    <section data-tv-section className="space-y-6">
                         <div className="flex items-center gap-4">
                             <div className="h-px w-8 bg-[#5865F2]" />
                             <span className="text-xs tracking-widest uppercase text-muted-foreground">Community</span>
@@ -58,8 +58,8 @@ export default function HelpPage() {
                                 </div>
                             </div>
 
-                            <Button className="gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white" asChild>
-                                <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+                            <Button data-tv-focusable className="gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white" asChild>
+                                <a data-tv-focusable href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
                                     Join Discord
                                     <ArrowUpRight className="size-4" />
                                 </a>
@@ -72,7 +72,7 @@ export default function HelpPage() {
                 <div className="h-px bg-border/50" />
 
                 {/* GitHub Section */}
-                <section className="space-y-6">
+                <section data-tv-section className="space-y-6">
                     <div className="flex items-center gap-4">
                         <div className="h-px w-8 bg-primary" />
                         <span className="text-xs tracking-widest uppercase text-muted-foreground">Open Source</span>
@@ -91,8 +91,8 @@ export default function HelpPage() {
                         </div>
 
                         <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
-                            <Button variant="outline" className="gap-2" asChild>
-                                <a
+                            <Button data-tv-focusable variant="outline" className="gap-2" asChild>
+                                <a data-tv-focusable
                                     href="https://github.com/Vansh-Bhardwaj/debridui"
                                     target="_blank"
                                     rel="noopener noreferrer">
@@ -101,8 +101,8 @@ export default function HelpPage() {
                                     <ExternalLink className="size-4 opacity-50" />
                                 </a>
                             </Button>
-                            <Button variant="outline" className="gap-2" asChild>
-                                <a
+                            <Button data-tv-focusable variant="outline" className="gap-2" asChild>
+                                <a data-tv-focusable
                                     href="https://github.com/Vansh-Bhardwaj/debridui/issues"
                                     target="_blank"
                                     rel="noopener noreferrer">
@@ -119,7 +119,7 @@ export default function HelpPage() {
                 <div className="h-px bg-border/50" />
 
                 {/* Keyboard Shortcuts Section */}
-                <section className="space-y-6">
+                <section data-tv-section className="space-y-6">
                     <div className="flex items-center gap-4">
                         <div className="h-px w-8 bg-primary" />
                         <span className="text-xs tracking-widest uppercase text-muted-foreground">Quick Reference</span>

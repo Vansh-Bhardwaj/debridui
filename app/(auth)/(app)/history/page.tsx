@@ -119,11 +119,10 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, s
                 "group flex items-center gap-4 rounded-sm border border-border/50 bg-card/30 hover:bg-card/60 transition-colors",
                 tvMode ? "p-4 gap-5" : "p-3"
             )}
-            data-tv-focusable="list"
-            tabIndex={0}
+            data-tv-section
         >
             {/* Poster */}
-            <Link href={mediaHref} className="shrink-0">
+            <Link data-tv-focusable href={mediaHref} className="shrink-0">
                 <div className={cn(
                     "relative rounded-sm overflow-hidden bg-muted border border-border/50",
                     tvMode ? "w-14 h-[84px]" : "w-10 h-[60px]"
@@ -142,7 +141,7 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, s
             {/* Info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                    <Link href={mediaHref} className={cn(
+                    <Link data-tv-focusable href={mediaHref} className={cn(
                         "truncate font-medium hover:text-primary transition-colors",
                         tvMode ? "text-base" : "text-sm"
                     )}>
@@ -186,7 +185,7 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, s
                 tvMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             )}>
                 {sessionCount && sessionCount > 1 && onToggleSessions && (
-                    <button
+                    <button data-tv-focusable
                         onClick={(e) => { e.stopPropagation(); onToggleSessions(); }}
                         className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground rounded-sm hover:bg-muted/30 transition-colors"
                         aria-expanded={sessionExpanded}
@@ -195,12 +194,12 @@ const HistoryItem = memo(function HistoryItem({ entry, onDelete, sessionCount, s
                         <span className="whitespace-nowrap">{sessionCount} sessions</span>
                     </button>
                 )}
-                <Link href={mediaHref}>
-                    <Button variant="ghost" size="icon" className={tvMode ? "size-9" : "size-7"}>
+                <Button asChild variant="ghost" size="icon" className={tvMode ? "size-9" : "size-7"}>
+                    <Link data-tv-focusable href={mediaHref} aria-label={`Play ${title}`}>
                         <Play className={tvMode ? "size-4" : "size-3.5"} />
-                    </Button>
-                </Link>
-                <Button
+                    </Link>
+                </Button>
+                <Button data-tv-focusable
                     variant="ghost"
                     size="icon"
                     className={cn("text-muted-foreground hover:text-destructive", tvMode ? "size-9" : "size-7")}
@@ -270,7 +269,7 @@ const RecentCard = memo(function RecentCard({ entry }: { entry: HistoryEntry }) 
         : null;
 
     return (
-        <Link href={href} className="block group w-[140px] shrink-0 focus-visible:outline-none" aria-label={`Resume ${title}`}>
+        <Link data-tv-focusable href={href} className="block group w-[140px] shrink-0 focus-visible:outline-none" aria-label={`Resume ${title}`}>
             <div className="aspect-2/3 relative overflow-hidden rounded-sm bg-muted border border-border/50 group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background">
                 <Image src={posterUrl} alt={title} fill sizes="140px" className="object-cover transition-transform duration-300 group-hover:scale-105" unoptimized />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
@@ -404,7 +403,7 @@ export default function HistoryPage() {
                 description="Your previously watched movies and episodes"
                 action={
                     entries.length > 0 ? (
-                        <Button
+                        <Button data-tv-focusable
                             variant="outline"
                             size="sm"
                             onClick={() => setClearOpen(true)}
@@ -503,7 +502,7 @@ export default function HistoryPage() {
 
                     {entries.length < total && (
                         <div className="flex flex-col items-center gap-1 pt-4">
-                            <Button variant="outline" size="sm" onClick={handleLoadMore}>
+                            <Button data-tv-focusable variant="outline" size="sm" onClick={handleLoadMore}>
                                 Load more
                             </Button>
                             <span className="text-xs text-muted-foreground">

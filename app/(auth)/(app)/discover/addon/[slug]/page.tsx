@@ -31,7 +31,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                     title="Invalid catalog link"
                     description="This discover URL appears malformed or incomplete."
                 />
-                <Link href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
+                <Link data-tv-focusable href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
                     Back to Discover
                 </Link>
             </div>
@@ -49,7 +49,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
                     title="Catalog not found"
                     description="The addon may have been removed or no longer exposes this catalog."
                 />
-                <Link href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
+                <Link data-tv-focusable href="/dashboard" className="text-xs underline underline-offset-4 hover:text-foreground">
                     Back to Discover
                 </Link>
             </div>
@@ -60,7 +60,7 @@ const ViewAllPage = memo(function ViewAllPage({ slug }: { slug: string }) {
         <div className="space-y-8 py-6 lg:px-6">
             {/* Header */}
             <div className="space-y-3">
-                <Link
+                <Link data-tv-focusable
                     href="/dashboard"
                     className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
                 >

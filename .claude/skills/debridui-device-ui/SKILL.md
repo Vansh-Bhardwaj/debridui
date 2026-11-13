@@ -41,5 +41,9 @@ Each entry is `{ id, section, label, description?, devices: DeviceClass[], scope
 - Colours: OKLCH neutrals, gold `--primary`, green `--secondary`, red `--destructive`. Tokens live in `app/globals.css`.
 - Flat: `--radius: 0`, no gradients, no heavy shadows. Font: Styrene B (keep it).
 - Patterns: borders `border-border/50`, fills `bg-muted/30` (hover `/50`), labels `text-xs tracking-widest uppercase text-muted-foreground`, headings `font-light`, metadata inline with `·`.
+- **Icons: `reicon-react` only** (MIT, https://reicon.dev/icons). `import { Home } from "reicon-react"`.
+  - Props: `size`, `weight="Outline" | "Filled"`, `className`. Size with Tailwind (`size-4`), and colour with `currentColor`/text classes.
+  - Default to Outline. Use Filled for emphasis: active tab, selected state, avatars.
+  - Don't add new `lucide-react` imports. Profile avatars use `components/profiles/profile-avatar.tsx`.
 - Device tokens (added in Phase 0, in `globals.css`): phone touch-target size, TV type scale, TV focus ring. Use them instead of ad-hoc sizes.
 - Full reference: `docs/ui-minimal.md`, then `docs/ui.md`.

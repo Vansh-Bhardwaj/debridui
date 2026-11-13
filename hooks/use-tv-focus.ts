@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsStore } from "@/lib/stores/settings";
+import { useDevice } from "@/components/device/device-provider";
+import { closestInDirection, restoreFocusIndex } from "@/components/tv/focus-selection";
 
 /**
  * Spatial navigation for TV mode.
@@ -26,19 +28,21 @@ import { useSettingsStore } from "@/lib/stores/settings";
  *   Guide (16) — Toggle Big Picture mode
  */
 export function useTVFocus() {
-    const tvMode = useSettingsStore((s) => s.settings.tvMode);
+    const savedTVMode = useSettingsStore((s) => s.settings.tvMode);
+    const { isTV, isPhone } = useDevice();
+    const tvMode = !isPhone && (isTV || savedTVMode);
     const pathname = usePathname();
     const lastFocusedRef = useRef<HTMLElement | null>(null);
-    const scrollingRef = useRef(false);
+    const pageFocusRef = useRef(new Map<string, { key: string; index: number }>());
     
     // Cursor position and visibility for right stick mode
-    const [cursorX, setCursorX] = useState(window.innerWidth / 2);
-    const [cursorY, setCursorY] = useState(window.innerHeight / 2);
+    const [cursorX, setCursorX] = useState(() => typeof window === "undefined" ? 0 : window.innerWidth / 2);
+    const [cursorY, setCursorY] = useState(() => typeof window === "undefined" ? 0 : window.innerHeight / 2);
     const [cursorVisible, setCursorVisible] = useState(false);
     const [cursorHovering, setCursorHovering] = useState(false);
 
     // Refs for accessing cursor state in gamepad polling without causing re-renders
-    const cursorPosRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    const cursorPosRef = useRef({ x: 0, y: 0 });
     const cursorVisibleRef = useRef(false);
     const cursorHoveringRef = useRef(false);
     const prevHoveredEl = useRef<HTMLElement | null>(null);
@@ -56,110 +60,85 @@ export function useTVFocus() {
     const isVisible = useCallback((el: HTMLElement) => {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return false;
-        // Walk up the tree to detect any ancestor with opacity:0 (e.g. hidden player controls)
+        // A closed trigger/collapsible remains visible; only closed overlay content is excluded.
         let node: HTMLElement | null = el;
         while (node && node !== document.body) {
-            if (getComputedStyle(node).opacity === "0") return false;
+            const style = getComputedStyle(node);
+            if (style.visibility === "hidden" || node.hidden || node.inert || node.getAttribute("aria-hidden") === "true") return false;
+            if (node.getAttribute("data-state") === "closed" && node.matches('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return false;
+            if (style.opacity === "0" && node.closest(".debridui-legacy-player")) return false;
             node = node.parentElement;
         }
         return true;
     }, []);
 
-    const getAllFocusable = useCallback(() => {
-        return Array.from(
-            document.querySelectorAll<HTMLElement>("[data-tv-focusable]:not([disabled]):not([aria-hidden='true'])")
-        ).filter(isVisible);
+    const getScope = useCallback(() => {
+        const layers = Array.from(document.querySelectorAll<HTMLElement>(
+            '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], .debridui-legacy-player'
+        )).filter(isVisible);
+        return layers.at(-1) ?? null;
     }, [isVisible]);
 
+    const getAllFocusable = useCallback(() => {
+        const scope = getScope();
+        // Portalled Radix controls (including built-in close buttons) need to join
+        // spatial navigation without changing the shared primitives for desktop.
+        const root = scope ?? document.getElementById("tv-mode-root") ?? document.body;
+        return Array.from(root.querySelectorAll<HTMLElement>(
+            '[data-tv-focusable], button, a[href], input, textarea, select, [role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"]'
+        )).filter((el) => (el.matches('button, a[href], input, textarea, select, [tabindex]')) && !el.matches('[disabled], [aria-disabled="true"], [data-disabled], input[type="hidden"]') && isVisible(el));
+    }, [getScope, isVisible]);
+
     const getFocusablesInSection = useCallback((section: HTMLElement) => {
-        return Array.from(
-            section.querySelectorAll<HTMLElement>("[data-tv-focusable]:not([disabled])")
-        ).filter(isVisible);
-    }, [isVisible]);
+        return getAllFocusable().filter((el) => section.contains(el));
+    }, [getAllFocusable]);
 
     const focusElement = useCallback((el: HTMLElement | null) => {
         if (!el) return;
         el.focus({ preventScroll: true });
-        
-        // Skip scroll if one is already in progress to prevent jitter from key repeat
-        if (scrollingRef.current) {
-            lastFocusedRef.current = el;
-            return;
-        }
-        
-        // Smooth scroll only when the element is outside the visible viewport.
-        const rect = el.getBoundingClientRect();
-        const navH = 72;
-        const pad = 24;
-        const offTop = rect.top < navH + pad;
-        const offBottom = rect.bottom > window.innerHeight - pad;
-        const offLeft = rect.left < pad;
-        const offRight = rect.right > window.innerWidth - pad;
-        if (offTop || offBottom || offLeft || offRight) {
-            scrollingRef.current = true;
-            el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-            // Reset scroll lock after animation completes (~300ms)
-            setTimeout(() => { scrollingRef.current = false; }, 300);
-        }
+        // Settle every move, including rapid key repeats, in nested horizontal rails.
+        el.scrollIntoView({ behavior: "instant", block: "nearest", inline: "nearest" });
         lastFocusedRef.current = el;
     }, []);
 
     const findClosestInDirection = useCallback(
         (current: HTMLElement, items: HTMLElement[], direction: "left" | "right" | "up" | "down") => {
-            const rect = current.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-
-            let best: HTMLElement | null = null;
-            let bestDist = Infinity;
-
-            for (const item of items) {
-                if (item === current) continue;
-                const r = item.getBoundingClientRect();
-                const ix = r.left + r.width / 2;
-                const iy = r.top + r.height / 2;
-
-                const isValid =
-                    direction === "left" ? ix < cx - 10 :
-                    direction === "right" ? ix > cx + 10 :
-                    direction === "up" ? iy < cy - 10 :
-                    iy > cy + 10;
-
-                if (!isValid) continue;
-
-                const dx = ix - cx;
-                const dy = iy - cy;
-                const isHorizontal = direction === "left" || direction === "right";
-                const dist = isHorizontal
-                    ? Math.abs(dx) + Math.abs(dy) * 3
-                    : Math.abs(dy) + Math.abs(dx) * 3;
-
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = item;
-                }
-            }
-            return best;
-        },
-        []
+            const candidates = items.filter((item) => item !== current);
+            const index = closestInDirection(current.getBoundingClientRect(), candidates.map((item) => item.getBoundingClientRect()), direction);
+            return candidates[index] ?? null;
+        }, []
     );
 
-    // Check if an element is inside a fixed-position container (e.g. TV nav bar).
-    const isInFixedLayer = useCallback((el: HTMLElement) => {
-        let node: HTMLElement | null = el;
-        while (node) {
-            if (getComputedStyle(node).position === "fixed") return true;
-            node = node.parentElement;
+    const handleBack = useCallback(() => {
+        const scope = getScope();
+        if (scope?.getAttribute("role") === "alertdialog") {
+            scope.querySelector<HTMLElement>('[data-slot="alert-dialog-cancel"]')?.click();
+        } else if (scope) {
+            // Let Radix close the top layer and run its own restore-focus handler.
+            document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        } else {
+            window.history.back();
         }
-        return false;
+    }, [getScope]);
+
+    const activate = useCallback((el: HTMLElement) => {
+        if (el.matches('[data-slot="select-trigger"], [data-slot="dropdown-menu-trigger"], [role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"]')) {
+            const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+            el.dispatchEvent(event);
+            if (!event.defaultPrevented) el.click();
+        } else {
+            el.click();
+        }
     }, []);
+
+    const isInNavigation = useCallback((el: HTMLElement) => !!el.closest(".tv-nav-bar"), []);
 
     const handleNavigation = useCallback(
         (direction: "left" | "right" | "up" | "down") => {
             const current = document.activeElement as HTMLElement;
             const all = getAllFocusable();
 
-            if (!current?.hasAttribute("data-tv-focusable")) {
+            if (!all.includes(current)) {
                 // Auto-focus: if the player is active (fullscreen fixed container), prefer its buttons first.
                 const playerContainer = document.querySelector(".debridui-legacy-player");
                 if (playerContainer) {
@@ -169,9 +148,15 @@ export function useTVFocus() {
                         return;
                     }
                 }
-                // Fallback: pick the first non-fixed element (content), not nav.
-                const firstContent = all.find((el) => !isInFixedLayer(el));
+                // Fallback: pick primary content before the top navigation.
+                const firstContent = all.find((el) => !isInNavigation(el));
                 focusElement(firstContent ?? all[0] ?? null);
+                return;
+            }
+
+            if (getScope()) {
+                const next = findClosestInDirection(current, all, direction);
+                if (next) focusElement(next);
                 return;
             }
 
@@ -180,25 +165,23 @@ export function useTVFocus() {
                 const currentInPlayer = !!playerContainer && playerContainer.contains(current);
                 if (currentInPlayer) {
                     const playerItems = all.filter((el) => playerContainer!.contains(el));
-                    const next = findClosestInDirection(current, playerItems, direction)
-                        ?? findClosestInDirection(current, playerItems, direction);
+                    const next = findClosestInDirection(current, playerItems, direction);
                     if (next) focusElement(next);
                 } else {
                     const section = current.closest("[data-tv-section]") as HTMLElement | null;
-                    const pool = section ? getFocusablesInSection(section) : all;
-                    const next =
-                        findClosestInDirection(current, pool, direction) ??
-                        findClosestInDirection(current, all, direction);
+                    const nav = current.closest(".tv-nav-bar");
+                    const pool = nav ? all.filter((el) => nav.contains(el)) : section ? getFocusablesInSection(section) : all;
+                    const next = findClosestInDirection(current, pool, direction);
                     if (next) focusElement(next);
                 }
             } else {
-                const currentIsFixed = isInFixedLayer(current);
+                const currentIsFixed = isInNavigation(current);
                 const playerContainer = document.querySelector(".debridui-legacy-player");
                 const currentInPlayer = !!playerContainer && playerContainer.contains(current);
 
-                // Separate content items from fixed-layer items (nav bar).
-                const contentItems = all.filter((el) => !isInFixedLayer(el));
-                const fixedItems = all.filter((el) => isInFixedLayer(el));
+                // Only the top navigation is a separate layer; bottom action bars are content.
+                const contentItems = all.filter((el) => !isInNavigation(el));
+                const fixedItems = all.filter((el) => isInNavigation(el));
 
                 if (currentInPlayer) {
                     // Inside player: navigate within player items only.
@@ -220,7 +203,7 @@ export function useTVFocus() {
                 }
             }
         },
-        [getAllFocusable, getFocusablesInSection, focusElement, findClosestInDirection, isInFixedLayer]
+        [getAllFocusable, getFocusablesInSection, focusElement, findClosestInDirection, isInNavigation, getScope]
     );
 
     // ── Video control helpers ──
@@ -259,43 +242,65 @@ export function useTVFocus() {
         if (!tvMode) return;
 
         const handler = (e: KeyboardEvent) => {
-            const tag = (e.target as HTMLElement).tagName;
-            if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+            const target = e.target as HTMLElement;
+            const tag = target.tagName;
+            if (e.key === "BrowserBack" || e.key === "GoBack") {
+                e.preventDefault();
+                handleBack();
+                return;
+            }
+            if (tag === "SELECT") return;
+            if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+                // The platform keyboard handles its own arrows. Arrows delivered
+                // to the page must let a remote leave the field for adjacent actions.
+                const direction = { ArrowDown: "down", ArrowUp: "up", ArrowLeft: "left", ArrowRight: "right" } as const;
+                if (!(e.key in direction)) return;
+                e.preventDefault();
+                handleNavigation(direction[e.key as keyof typeof direction]);
+                return;
+            }
+            // Native Radix menus/selects own keyboard activation and dismissal.
+            if (target.closest('[role="menu"], [role="listbox"]')) return;
+            if ((e.key === "Escape" || e.key === "Backspace") && getScope()) {
+                if (e.key === "Backspace" || getScope()?.getAttribute("role") === "alertdialog") { e.preventDefault(); handleBack(); }
+                return;
+            }
 
             switch (e.key) {
                 case "ArrowLeft":
                     e.preventDefault();
-                    if (getActiveVideo()) videoSeek(-5);
+                    if (getActiveVideo() && !getAllFocusable().includes(target)) videoSeek(-5);
                     else handleNavigation("left");
                     break;
                 case "ArrowRight":
                     e.preventDefault();
-                    if (getActiveVideo()) videoSeek(5);
+                    if (getActiveVideo() && !getAllFocusable().includes(target)) videoSeek(5);
                     else handleNavigation("right");
                     break;
                 case "ArrowUp":
                     e.preventDefault();
-                    if (getActiveVideo()) videoVolume(0.05);
+                    if (getActiveVideo() && !getAllFocusable().includes(target)) videoVolume(0.05);
                     else handleNavigation("up");
                     break;
                 case "ArrowDown":
                     e.preventDefault();
-                    if (getActiveVideo()) videoVolume(-0.05);
+                    if (getActiveVideo() && !getAllFocusable().includes(target)) videoVolume(-0.05);
                     else handleNavigation("down");
                     break;
                 case "Enter":
                 case " ": {
                     const focused = document.activeElement as HTMLElement;
-                    if (focused?.hasAttribute("data-tv-focusable")) {
+                    if (focused && getAllFocusable().includes(focused)) {
+                        if (focused.matches('button, a[href], [role="tab"], [role="checkbox"], [role="switch"]')) return;
                         e.preventDefault();
-                        focused.click();
+                        activate(focused);
                     }
                     break;
                 }
                 case "Backspace":
                 case "Escape":
                     e.preventDefault();
-                    window.history.back();
+                    handleBack();
                     break;
                 // ── Media remote / CEC keys ──
                 case "MediaPlayPause":
@@ -344,7 +349,7 @@ export function useTVFocus() {
 
         window.addEventListener("keydown", handler, { capture: true });
         return () => window.removeEventListener("keydown", handler, { capture: true });
-    }, [tvMode, handleNavigation, getActiveVideo, videoTogglePlay, videoSeek, videoVolume, videoNavigate]);
+    }, [tvMode, handleNavigation, getActiveVideo, videoTogglePlay, videoSeek, videoVolume, videoNavigate, getScope, getAllFocusable, handleBack, activate]);
 
     // ── Gamepad polling ──
     useEffect(() => {
@@ -506,7 +511,7 @@ export function useTVFocus() {
                     // so cursor and D-pad always start from the same position
                     if (!cursorVisibleRef.current) {
                         const focused = document.activeElement as HTMLElement;
-                        if (focused?.hasAttribute("data-tv-focusable")) {
+                        if (focused && getAllFocusable().includes(focused)) {
                             const fr = focused.getBoundingClientRect();
                             const sx = fr.left + fr.width / 2;
                             const sy = fr.top + fr.height / 2;
@@ -658,6 +663,8 @@ export function useTVFocus() {
                                 el = el.parentElement;
                             }
                         }
+                        const scope = getScope();
+                        if (target && scope && !scope.contains(target)) target = null;
                         if (target) {
                             // Fire full pointer event sequence at cursor position so seekbar,
                             // Radix dropdowns, and other pointer-driven widgets respond correctly.
@@ -691,8 +698,8 @@ export function useTVFocus() {
                     } else {
                         // No cursor: focused element takes priority over video play/pause
                         const focused = document.activeElement as HTMLElement;
-                        if (focused?.hasAttribute("data-tv-focusable")) {
-                            focused.click();
+                        if (focused && getAllFocusable().includes(focused)) {
+                            activate(focused);
                         } else if (hasVideo) {
                             videoTogglePlay();
                         }
@@ -701,7 +708,7 @@ export function useTVFocus() {
 
                 // B button (1) = Back
                 if (cur[1] && !prev[1]) {
-                    window.history.back();
+                    handleBack();
                 }
 
                 // X button (2) = Play/Pause (video) or click focused
@@ -760,7 +767,7 @@ export function useTVFocus() {
                 }
 
                 // Guide (16) = Toggle TV mode
-                if (cur[16] && !prev[16]) {
+                if (cur[16] && !prev[16] && !isTV) {
                     useSettingsStore.getState().set("tvMode", !useSettingsStore.getState().settings.tvMode);
                 }
 
@@ -782,20 +789,86 @@ export function useTVFocus() {
 
         rafId = requestAnimationFrame(poll);
         return () => cancelAnimationFrame(rafId);
-    }, [tvMode, handleNavigation, videoTogglePlay, videoSeek, videoVolume, videoFullscreen, videoNavigate]);
+    }, [tvMode, handleNavigation, videoTogglePlay, videoSeek, videoVolume, videoFullscreen, videoNavigate, getAllFocusable, getScope, handleBack, isTV, activate]);
 
-    // Auto-focus first focusable element on route changes
+    // Keep route memories independent of DOM instances: Next remounts cards on Back.
     useEffect(() => {
         if (!tvMode) return;
-        const timer = setTimeout(() => {
-            const active = document.activeElement as HTMLElement;
-            if (!active?.hasAttribute("data-tv-focusable")) {
-                const first = getAllFocusable()[0];
-                if (first) focusElement(first);
+        const keyFor = (el: HTMLElement) => el.dataset.tvFocusKey || el.getAttribute("href") || el.id || `${el.closest("[data-tv-section]")?.getAttribute("data-tv-section") ?? ""}:${el.getAttribute("aria-label") ?? ""}:${el.textContent?.trim()}`;
+        const remember = (event: FocusEvent) => {
+            if (window.location.pathname !== pathname) return;
+            const el = event.target as HTMLElement;
+            if (!getScope()) lastFocusedRef.current = el;
+            if (getScope() || el.closest(".tv-nav-bar")) return;
+            const items = getAllFocusable().filter((item) => !item.closest(".tv-nav-bar"));
+            const index = items.indexOf(el);
+            if (index >= 0) pageFocusRef.current.set(pathname, { key: keyFor(el), index });
+        };
+        let pending = true;
+        const saved = pageFocusRef.current.get(pathname);
+        const restoreDeadline = Date.now() + 2000;
+        let previousScope: HTMLElement | null = null;
+        let lastActive = document.activeElement as HTMLElement | null;
+        const openers = new Map<HTMLElement, HTMLElement | null>();
+        let frame = 0;
+        const sync = () => {
+            const scope = getScope();
+            if (scope !== previousScope) {
+                if (scope && !openers.has(scope)) openers.set(scope, lastFocusedRef.current);
+                const opener = previousScope && openers.get(previousScope);
+                if (previousScope && opener?.isConnected && (!scope || scope.contains(opener))) focusElement(opener);
+                previousScope = scope;
+                if (scope && !scope.contains(document.activeElement)) focusElement(getAllFocusable()[0] ?? null);
             }
-        }, 600);
-        return () => clearTimeout(timer);
-    }, [tvMode, pathname, getAllFocusable, focusElement]);
+            const items = getAllFocusable();
+            for (const el of items) {
+                if (!el.hasAttribute("data-tv-focusable")) el.setAttribute("data-tv-focusable", "");
+            }
+            if (scope && !scope.hasAttribute("data-tv-mode")) scope.setAttribute("data-tv-mode", "");
+            if (pending && !scope) {
+                const content = items.filter((el) => !el.closest(".tv-nav-bar"));
+                if (content.length) {
+                    const keys = content.map((el) => ({ key: keyFor(el) }));
+                    if (!saved || keys.some((item) => item.key === saved.key) || Date.now() >= restoreDeadline) {
+                        focusElement(content[restoreFocusIndex(keys, saved)]);
+                        pending = false;
+                    }
+                }
+            }
+        };
+        const observer = new MutationObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(sync);
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "aria-hidden", "disabled"] });
+        const containFocus = (event: FocusEvent) => {
+            const scope = getScope();
+            if (scope && scope !== previousScope && !openers.has(scope)) openers.set(scope, lastActive);
+            if (scope && !scope.contains(event.target as Node)) focusElement(getAllFocusable()[0] ?? null);
+            remember(event);
+            lastActive = event.target as HTMLElement;
+        };
+        const trapTab = (event: KeyboardEvent) => {
+            if (event.key !== "Tab" || !getScope()) return;
+            const items = getAllFocusable();
+            if (!items.length) return;
+            event.preventDefault();
+            const index = items.indexOf(document.activeElement as HTMLElement);
+            focusElement(items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]);
+        };
+        document.addEventListener("focusin", containFocus);
+        document.addEventListener("keydown", trapTab, true);
+        frame = requestAnimationFrame(sync);
+        const fallback = setTimeout(sync, 2100);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+            clearTimeout(fallback);
+            document.removeEventListener("focusin", containFocus);
+            document.removeEventListener("keydown", trapTab, true);
+            for (const layer of openers.keys()) layer.removeAttribute("data-tv-mode");
+        };
+    }, [tvMode, pathname, getAllFocusable, getScope, focusElement]);
 
     return {
         handleNavigation,

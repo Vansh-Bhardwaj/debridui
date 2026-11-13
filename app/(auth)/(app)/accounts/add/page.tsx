@@ -15,7 +15,7 @@ export default function AddAccountPage() {
                 divider
             />
 
-            <div className="max-w-md mx-auto">
+            <div data-tv-section className="max-w-md mx-auto">
                 <AddAccountForm />
             </div>
         </div>

@@ -3,9 +3,9 @@
 import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import { useState } from "react";
-import { ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, User as UserIcon, Settings, HelpCircle, Activity, Tv } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,32 +21,22 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useTVMode } from "@/hooks/use-tv-mode";
 import Link from "next/link";
+import { useDevice } from "@/components/device/device-provider";
 
 export function NavUser() {
     const { profiles, activeProfile, switchProfile } = useProfile();
-    const { isMobile, setOpenMobile } = useSidebar();
+    const { setOpenMobile } = useSidebar();
+    const { isPhone, isDesktop } = useDevice();
     const { session, logout, isLoggingOut } = useAuth();
     const [showLogoutDialog, setShowLogoutDialog] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const { toggle: toggleTV } = useTVMode();
 
-    const user = {
-        name: activeProfile.name,
-        email: session?.user?.email || "",
-        avatar: "",
-    };
-
-    const userInitials =
-        user.name
-            ?.split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2) || "U";
+    const user = { name: activeProfile.name, email: session?.user?.email || "" };
 
     const handleNavigation = () => {
         setDropdownOpen(false);
-        if (isMobile) {
+        if (isPhone) {
             setTimeout(() => setOpenMobile(false), 150);
         }
     };
@@ -59,10 +49,7 @@ export function NavUser() {
                         <SidebarMenuButton
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                            <Avatar className="h-8 w-8 rounded-sm border border-border/50">
-                                <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback style={{ backgroundColor: activeProfile.color ?? "#596869" }} className="text-xs text-white">{userInitials}</AvatarFallback>
-                            </Avatar>
+                            <ProfileAvatar profile={activeProfile} className="size-8" />
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-light">{user.name}</span>
                                 <span className="truncate text-xs text-muted-foreground">{user.email}</span>
@@ -73,15 +60,12 @@ export function NavUser() {
                     <DropdownMenuPortal>
                         <DropdownMenuContent
                             className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
-                            side={isMobile ? "bottom" : "right"}
+                            side={isPhone ? "bottom" : "right"}
                             align="end"
                             sideOffset={4}>
                             <DropdownMenuLabel className="p-0 font-normal">
                                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                    <Avatar className="h-8 w-8 rounded-sm border border-border/50">
-                                        <AvatarImage src={user.avatar} alt={user.name} />
-                                        <AvatarFallback style={{ backgroundColor: activeProfile.color ?? "#596869" }} className="text-xs text-white">{userInitials}</AvatarFallback>
-                                    </Avatar>
+                                    <ProfileAvatar profile={activeProfile} className="size-8" />
                                     <div className="grid flex-1 text-left text-sm leading-tight">
                                         <span className="truncate font-light">{user.name}</span>
                                         <span className="truncate text-xs text-muted-foreground">{user.email}</span>
@@ -90,11 +74,13 @@ export function NavUser() {
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuLabel>Profiles</DropdownMenuLabel>
-                            {profiles.map((profile) => <DropdownMenuItem key={profile.id} className="min-h-phone-touch" onSelect={() => {
+                            {profiles.map((profile) => <DropdownMenuItem key={profile.id} className="min-h-phone-touch gap-3" onSelect={() => {
                                 handleNavigation();
                                 void switchProfile(profile.id).catch(() => toast.error("Could not switch profile"));
                             }}>
-                                <span className={profile.id === activeProfile.id ? "text-primary" : ""}>{profile.name}</span>
+                                <ProfileAvatar profile={profile} className="size-6" />
+                                <span className="flex-1 truncate">{profile.name}</span>
+                                {profile.id === activeProfile.id && <Check className="size-4 text-primary" />}
                             </DropdownMenuItem>)}
                             <DropdownMenuItem asChild><Link href="/profiles?manage=1" onClick={handleNavigation} className="min-h-phone-touch">Manage profiles</Link></DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -123,7 +109,7 @@ export function NavUser() {
                                         Status
                                     </Link>
                                 </DropdownMenuItem>
-                                {!isMobile && (
+                                {isDesktop && (
                                     <DropdownMenuItem onClick={() => { setDropdownOpen(false); toggleTV(); }}>
                                         <Tv />
                                         Big Picture

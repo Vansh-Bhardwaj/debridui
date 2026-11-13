@@ -106,7 +106,7 @@ export function AddContent() {
     };
 
     return (
-        <Card className="max-sm:-mx-4 max-sm:rounded-none max-sm:border-none">
+        <Card data-tv-section="add-files" className="max-sm:-mx-4 max-sm:rounded-none max-sm:border-none">
             <CardContent className="space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
                     <div className="flex flex-col space-y-1 md:space-y-2">
@@ -130,7 +130,7 @@ export function AddContent() {
                     <div className="flex flex-col space-y-2">
                         <label htmlFor="add-links-input" className="text-xs tracking-widest uppercase text-muted-foreground">Add Links</label>
                         <div className="relative flex-1">
-                            <Textarea
+                            <Textarea data-tv-focusable
                                 id="add-links-input"
                                 placeholder="Enter links (one per line)"
                                 value={links}
@@ -140,7 +140,7 @@ export function AddContent() {
                             />
                             <div className="absolute top-2 right-2 flex gap-0.5">
                                 {links.trim() && (
-                                    <Button
+                                    <Button data-tv-focusable
                                         variant="ghost"
                                         size="icon-xs"
                                         onClick={() => setLinks("")}
@@ -150,7 +150,7 @@ export function AddContent() {
                                         <X className="size-3.5" />
                                     </Button>
                                 )}
-                                <Button
+                                <Button data-tv-focusable
                                     variant="ghost"
                                     size="icon-xs"
                                     onClick={handlePaste}
@@ -161,7 +161,7 @@ export function AddContent() {
                                 </Button>
                             </div>
                         </div>
-                        <Button onClick={handleAddLinks} disabled={isAddingLinks || !links.trim()} className="w-full">
+                        <Button data-tv-focusable onClick={handleAddLinks} disabled={isAddingLinks || !links.trim()} className="w-full">
                             {isAddingLinks ? (
                                 <>
                                     <Loader2 className="size-4 animate-spin" />

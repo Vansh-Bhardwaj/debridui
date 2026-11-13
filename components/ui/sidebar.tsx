@@ -5,7 +5,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, VariantProps } from "class-variance-authority";
 import { MenuIcon, PanelLeftIcon } from "lucide-react";
 
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useDevice } from "@/components/device/device-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ function SidebarProvider({
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
 }) {
-    const isMobile = useIsMobile();
+    const { isPhone: isMobile } = useDevice();
     const [openMobile, setOpenMobile] = React.useState(false);
 
     // Get initial state from localStorage
@@ -207,7 +207,7 @@ function Sidebar({
 
     return (
         <div
-            className="group peer text-sidebar-foreground hidden md:block"
+            className="group peer text-sidebar-foreground block"
             data-state={state}
             data-collapsible={state === "collapsed" ? collapsible : ""}
             data-variant={variant}
@@ -228,7 +228,7 @@ function Sidebar({
             <div
                 data-slot="sidebar-container"
                 className={cn(
-                    "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-300 ease-in-out md:flex",
+                    "fixed inset-y-0 z-10 flex h-svh w-(--sidebar-width) transition-[left,right,width] duration-300 ease-in-out",
                     side === "left"
                         ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
                         : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",

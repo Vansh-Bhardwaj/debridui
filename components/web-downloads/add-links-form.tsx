@@ -113,7 +113,7 @@ export function AddLinksForm() {
                         />
                         <div className="absolute top-2 right-2 flex gap-0.5">
                             {linksText.trim() && (
-                                <Button
+                                <Button data-tv-focusable
                                     variant="ghost"
                                     size="icon-xs"
                                     onClick={() => setLinksText("")}
@@ -123,7 +123,7 @@ export function AddLinksForm() {
                                     <X className="size-3.5" />
                                 </Button>
                             )}
-                            <Button
+                            <Button data-tv-focusable
                                 variant="ghost"
                                 size="icon-xs"
                                 onClick={handlePaste}

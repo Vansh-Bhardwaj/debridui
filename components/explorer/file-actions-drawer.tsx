@@ -68,7 +68,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
             <div className={cn("transition-all duration-300 ease-in-out", hasAnySelection ? "h-32 sm:h-20" : "h-0")} />
 
             {/* Bottom Drawer */}
-            <div
+            <div data-tv-section="file-actions"
                 className={cn(
                     "fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border/50 shadow-lg transition-transform duration-300 ease-in-out",
                     hasAnySelection ? "translate-y-0" : "translate-y-full pointer-events-none"
@@ -79,7 +79,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                         {/* Row 1: Copy / Download / Playlist */}
                         {hasNodes && (
                             <div className="grid grid-cols-3 gap-2 w-full sm:w-auto sm:flex">
-                                <Button
+                                <Button data-tv-focusable
                                     variant="outline"
                                     size="sm"
                                     disabled={copyMutation.isPending}
@@ -92,7 +92,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                                     )}
                                     <span className="hidden sm:inline">Copy</span> ({selectedNodeIds.size})
                                 </Button>
-                                <Button
+                                <Button data-tv-focusable
                                     variant="outline"
                                     size="sm"
                                     disabled={downloadMutation.isPending}
@@ -105,7 +105,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                                     )}
                                     <span className="hidden sm:inline">Download</span> ({selectedNodeIds.size})
                                 </Button>
-                                <Button
+                                <Button data-tv-focusable
                                     variant="outline"
                                     size="sm"
                                     disabled={playlistMutation.isPending}
@@ -124,7 +124,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                         {/* Row 2: Retry / Delete / Clear - flex to handle variable button count */}
                         <div className="flex gap-2 w-full sm:w-auto sm:flex">
                             {canRetry.length > 0 && (
-                                <Button
+                                <Button data-tv-focusable
                                     variant="outline"
                                     size="sm"
                                     onClick={() => retryMutation.mutate(canRetry.map((f) => f.id))}
@@ -135,7 +135,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                                 </Button>
                             )}
                             {fullySelectedFiles.length > 0 && (
-                                <Button
+                                <Button data-tv-focusable
                                     variant="destructive"
                                     size="sm"
                                     onClick={() => setShowDeleteConfirm(true)}
@@ -145,7 +145,7 @@ export function FileActionsDrawer({ files }: FileActionsDrawerProps) {
                                     <span className="hidden sm:inline">Delete</span> ({fullySelectedFiles.length})
                                 </Button>
                             )}
-                            <Button
+                            <Button data-tv-focusable
                                 variant="ghost"
                                 size="sm"
                                 onClick={clearAll}

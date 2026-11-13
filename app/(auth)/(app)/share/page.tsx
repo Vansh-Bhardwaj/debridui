@@ -75,7 +75,7 @@ function SharePageInner() {
     }, [candidate, client, currentAccount.id, router]);
 
     return (
-        <div className="mx-auto w-full max-w-2xl space-y-6 pb-16">
+        <div data-tv-section className="mx-auto w-full max-w-2xl space-y-6 pb-16">
             <PageHeader
                 icon={Share2}
                 title="Adding shared link"
@@ -91,8 +91,8 @@ function SharePageInner() {
             {status === "error" && (
                 <>
                     <ErrorState title="Couldn't add shared link" description={errorMsg ?? undefined} />
-                    <div className="flex justify-center">
-                        <Button variant="outline" onClick={() => router.replace("/files")}>Go to Files</Button>
+                    <div data-tv-section className="flex justify-center">
+                        <Button data-tv-focusable variant="outline" onClick={() => router.replace("/files")}>Go to Files</Button>
                     </div>
                 </>
             )}

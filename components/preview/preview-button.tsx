@@ -39,7 +39,7 @@ export const PreviewButton = memo(function PreviewButton({ node, allNodes, fileI
     );
 
     return (
-        <Button
+        <Button data-tv-focusable
             variant="ghost"
             size="icon"
             className="size-4 sm:size-6 cursor-pointer"

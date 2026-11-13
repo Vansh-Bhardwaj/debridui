@@ -46,7 +46,7 @@ export function ShareAccountDialog({ user, open, onOpenChange }: ShareAccountDia
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent data-tv-section className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>Share Account</DialogTitle>
                     <DialogDescription>
@@ -66,14 +66,14 @@ export function ShareAccountDialog({ user, open, onOpenChange }: ShareAccountDia
                 <div className="space-y-2">
                     <Label htmlFor="share-url">Share URL</Label>
                     <div className="flex gap-2">
-                        <Input
+                        <Input data-tv-focusable
                             id="share-url"
                             value={shareUrl}
                             readOnly
                             className="font-mono text-xs"
                             onClick={(e) => e.currentTarget.select()}
                         />
-                        <Button size="icon" variant="outline" onClick={handleCopy}>
+                        <Button data-tv-focusable size="icon" variant="outline" onClick={handleCopy}>
                             <Copy className="h-4 w-4" />
                         </Button>
                     </div>
@@ -83,7 +83,7 @@ export function ShareAccountDialog({ user, open, onOpenChange }: ShareAccountDia
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button data-tv-focusable variant="outline" onClick={() => onOpenChange(false)}>
                         Close
                     </Button>
                 </DialogFooter>

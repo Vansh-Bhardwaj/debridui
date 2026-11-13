@@ -240,7 +240,7 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
                             : "";
 
                         return (
-                            <Link
+                            <Link data-tv-focusable
                                 key={`${show.ids?.trakt}-${ep.season}-${ep.number}`}
                                 href={`/shows/${slug}?season=${ep.season}`}
                                 className="group/item flex items-center gap-3.5 px-3 py-2.5 rounded-sm hover:bg-muted/30 transition-colors duration-300 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none"
@@ -291,11 +291,14 @@ const RecentlyAiredSection = memo(function RecentlyAiredSection({
     );
 });
 
+let lastWatchlistTab = "watchlist";
+let lastWatchlistFilter: WatchlistFilter = "all";
+
 const WatchlistPage = memo(function WatchlistPage() {
     const { data: settings } = useUserSettings();
     const isTraktConnected = !!settings?.trakt_access_token;
     const tvMode = useSettingsStore((s) => s.settings.tvMode);
-    const [filter, setFilter] = useState<WatchlistFilter>("all");
+    const [filter, setFilter] = useState<WatchlistFilter>(lastWatchlistFilter);
 
     const watchlistMovies = useTraktWatchlistMovies();
     const watchlistShows = useTraktWatchlistShows();
@@ -384,12 +387,12 @@ const WatchlistPage = memo(function WatchlistPage() {
                         catalog anytime.
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-3">
-                        <Link
+                        <Link data-tv-focusable
                             href="/discover/browse"
                             className="inline-flex items-center gap-2 text-sm text-foreground border border-border/50 px-3 py-1.5 rounded-sm hover:bg-muted/40 transition-colors">
                             Browse catalog
                         </Link>
-                        <Link
+                        <Link data-tv-focusable
                             href="/settings"
                             className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
                             <LinkIcon className="size-3.5" />
@@ -416,8 +419,8 @@ const WatchlistPage = memo(function WatchlistPage() {
                 <RecentlyAiredSection items={recentEpisodes.data} count={recentCount} />
             )}
 
-            <Tabs defaultValue="watchlist">
-                <TabsList variant="line">
+            <Tabs defaultValue={lastWatchlistTab} onValueChange={(value) => { lastWatchlistTab = value; }}>
+                <TabsList data-tv-section variant="line">
                     <TabsTrigger value="watchlist" className="gap-1.5" data-tv-focusable>
                         <Bookmark className="size-3.5" />
                         Watchlist
@@ -442,7 +445,7 @@ const WatchlistPage = memo(function WatchlistPage() {
                             return (
                                 <button
                                     key={f.id}
-                                    onClick={() => setFilter(f.id)}
+                                    onClick={() => { lastWatchlistFilter = f.id; setFilter(f.id); }}
                                     data-tv-focusable
                                     className={cn(
                                         "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-sm border transition-colors duration-200",

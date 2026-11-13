@@ -42,7 +42,7 @@ export default function AccountsPage() {
                 description="Manage your debrid service accounts"
                 divider
                 action={
-                    <div className="flex gap-2 w-full sm:w-auto">
+                    <div data-tv-section="account-actions" className="flex gap-2 w-full sm:w-auto">
                         <Button onClick={handleRefresh} disabled={isRefreshing} variant="outline" data-tv-focusable>
                             <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
                             Refresh

@@ -7,7 +7,7 @@ import { NavMain } from "@/components/sidebar/nav-main";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { AccountSwitcher } from "./account-switcher";
-import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, HelpCircle, Activity, Bookmark, History, Compass } from "lucide-react";
+import { FolderOpen, SearchIcon, HomeIcon, SettingsIcon, UsersIcon, Puzzle, Link2, Bookmark, History, Compass } from "lucide-react";
 import { useSearch } from "@/components/mdb/search-provider";
 import { useTraktRecentEpisodes } from "@/hooks/use-trakt";
 
@@ -29,7 +29,7 @@ function WatchlistBadge() {
     );
 }
 
-const browseNav = [
+export const browseNav = [
         {
             title: "Home",
             url: "/dashboard",
@@ -46,7 +46,7 @@ const browseNav = [
             icon: Compass,
         },
         {
-            title: "Watchlist",
+            title: "My List",
             url: "/watchlist",
             icon: Bookmark,
         },
@@ -62,7 +62,7 @@ const browseNav = [
         },
     ];
 
-const manageNav = [
+export const manageNav = [
         {
             title: "Links",
             url: "/links",
@@ -79,24 +79,11 @@ const manageNav = [
             icon: UsersIcon,
         },
         {
-            title: "Status",
-            url: "/status",
-            icon: Activity,
-        },
-        {
             title: "Settings",
             url: "/settings",
             icon: SettingsIcon,
         },
     ];
-
-const navSecondary = [
-    {
-        title: "Help",
-        url: "/help",
-        icon: HelpCircle,
-    },
-];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { toggle: toggleSearch } = useSearch();
@@ -104,7 +91,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     // Inject live badge into the Watchlist nav item
     const navBrowse = useMemo(() =>
         browseNav.map((item) =>
-            item.title === "Watchlist"
+            item.title === "My List"
                 ? { ...item, badge: <WatchlistBadge /> }
                 : item
         ), []);
@@ -122,8 +109,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarHeader>
             <SidebarContent>
                 <NavMain items={navBrowse} onAction={handleNavAction} label="Browse" />
-                <NavMain items={manageNav} onAction={handleNavAction} label="Manage" className="pt-1" />
-                <NavMain items={navSecondary} className="mt-auto" variant="subtle" label="Support" />
+                <NavMain items={manageNav} onAction={handleNavAction} label="Library & Setup" className="pt-1" />
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border/50">
                 <NavUser />
